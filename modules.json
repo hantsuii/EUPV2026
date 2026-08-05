@@ -5,7 +5,7 @@
     {
       "name": "销售数据分析",
       "desc": "PV / ESS / HP 多维筛选、月度订单量金额与地区占比",
-      "url": "https://REPLACE-WITH-YOUR-STREAMLIT-URL.streamlit.app",
+      "url": "https://eu-sales-dashboard.streamlit.app/",
       "badge": "Interactive"
     },
     {
