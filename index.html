@@ -1,0 +1,33 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Business Analytics Portal</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1 id="portal-title">Business Analytics Portal</h1>
+      <p id="portal-subtitle">选择功能模块进入分析页面</p>
+    </header>
+
+    <section>
+      <h2>功能模块</h2>
+      <div id="module-grid" class="grid"></div>
+    </section>
+
+    <section class="note">
+      <h3>使用说明</h3>
+      <ul>
+        <li>点击“销售数据分析”会跳转到 Streamlit 交互页面。</li>
+        <li>静态模块直接由 Cloudflare Pages 托管。</li>
+        <li>新增模块时，只需更新 <code>modules.json</code>。</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="./script.js"></script>
+</body>
+</html>
