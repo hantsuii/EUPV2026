@@ -1,30 +1,30 @@
 {
-    "portal_title":  "Business Analytics Portal",
-    "portal_subtitle":  "选择功能模块进入分析页面",
-    "modules":  [
-                    {
-                        "name":  "销售数据分析",
-                        "desc":  "PV / ESS / HP 多维筛选、月度订单量金额与地区占比",
-                        "url":  "https://eu-sales-dashboard.streamlit.app/",
-                        "badge":  "Interactive"
-                    },
-                    {
-                        "name":  "可用库存分析",
-                        "desc":  "上传 Inventory Step1 / Stock 模板，在线生成可下载 stock 文件",
-                        "url":  "./available-stock-analysis.html",
-                        "badge":  "Interactive"
-                    },
-                    {
-                        "name":  "静态周报",
-                        "desc":  "无需交互，固定报表下载和浏览",
-                        "url":  "./static-weekly-report.html",
-                        "badge":  "Static"
-                    },
-                    {
-                        "name":  "更多模块（预留）",
-                        "desc":  "后续新增模块可以直接挂在门户中",
-                        "url":  "#",
-                        "badge":  "Coming Soon"
-                    }
-                ]
+  "portal_title": "Business Analytics Portal",
+  "portal_subtitle": "Choose a module to open the analysis page.",
+  "modules": [
+    {
+      "name": "Sales Dashboard",
+      "desc": "Multi-dimensional filters for PV / ESS / HP, plus monthly order and region analysis.",
+      "url": "https://eu-sales-dashboard.streamlit.app/",
+      "badge": "Interactive"
+    },
+    {
+      "name": "Available Stock Analysis",
+      "desc": "Upload source files and generate a downloadable stock workbook.",
+      "url": "./available-stock-analysis.html",
+      "badge": "Interactive"
+    },
+    {
+      "name": "Static Weekly Report",
+      "desc": "Static report page hosted directly on Cloudflare Pages.",
+      "url": "./static-weekly-report.html",
+      "badge": "Static"
+    },
+    {
+      "name": "More Modules",
+      "desc": "Reserved placeholder for future modules.",
+      "url": "#",
+      "badge": "Coming Soon"
+    }
+  ]
 }

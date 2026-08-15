@@ -5,7 +5,6 @@ const runBtn = document.getElementById("runBtn");
 const resetBtn = document.getElementById("resetBtn");
 
 const inventoryInput = document.getElementById("inventoryFile");
-const stockTemplateInput = document.getElementById("stockTemplateFile");
 const dailySupplyInput = document.getElementById("dailySupplyFile");
 const odpMasterInput = document.getElementById("odpMasterFile");
 const orderInput = document.getElementById("orderFile");
@@ -28,7 +27,7 @@ function resetDownloadLink() {
 async function loadPyodideRuntime() {
   if (pyReady) return;
 
-  setStatus("正在加载 Python 运行环境（首次约需 20-60 秒）...");
+  setStatus("Loading Python runtime (first run may take 20-60 seconds)...");
   const script = document.createElement("script");
   script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
   script.async = true;
@@ -41,14 +40,14 @@ async function loadPyodideRuntime() {
 
   pyodide = await globalThis.loadPyodide();
 
-  setStatus("正在安装依赖（openpyxl）...");
+  setStatus("Installing dependency: openpyxl...");
   await pyodide.loadPackage("micropip");
   await pyodide.runPythonAsync(`
 import micropip
 await micropip.install("openpyxl")
 `);
 
-  setStatus("正在加载库存分析脚本...");
+  setStatus("Loading stock analysis script...");
   const pyCode = await fetch("./py/inventory_step1_to_stock.py", { cache: "no-store" }).then((r) => r.text());
   pyodide.FS.mkdirTree("/work");
   pyodide.FS.writeFile("/work/inventory_step1_to_stock.py", pyCode);
@@ -60,12 +59,21 @@ if "/work" not in sys.path:
 `);
 
   pyReady = true;
-  setStatus("环境准备完成，请上传文件并点击“生成 Stock 文件”。");
+  setStatus("Environment ready. Upload files and click Generate Stock File.");
 }
 
 async function readFileAsBytes(file) {
   const arrayBuffer = await file.arrayBuffer();
   return new Uint8Array(arrayBuffer);
+}
+
+async function fetchTemplateBytes() {
+  const resp = await fetch("./templates/stock_template.xlsx", { cache: "no-store" });
+  if (!resp.ok) {
+    throw new Error(`Template file not found: ./templates/stock_template.xlsx (HTTP ${resp.status})`);
+  }
+  const buffer = await resp.arrayBuffer();
+  return new Uint8Array(buffer);
 }
 
 async function writeOptionalFile(fileInput, targetPath) {
@@ -80,10 +88,8 @@ async function runAnalysis() {
   resetDownloadLink();
 
   const inventoryFile = inventoryInput.files?.[0];
-  const stockTemplateFile = stockTemplateInput.files?.[0];
-
-  if (!inventoryFile || !stockTemplateFile) {
-    setStatus("请先上传必填文件：Inventory Step1 + Stock 模板。");
+  if (!inventoryFile) {
+    setStatus("Please upload required file: Inventory Step1.");
     return;
   }
 
@@ -91,16 +97,14 @@ async function runAnalysis() {
   try {
     await loadPyodideRuntime();
 
-    setStatus("正在写入上传文件...");
+    setStatus("Writing uploaded files...");
     const inventoryBytes = await readFileAsBytes(inventoryFile);
-    const stockTemplateBytes = await readFileAsBytes(stockTemplateFile);
+    const stockTemplateBytes = await fetchTemplateBytes();
 
     const inventoryPath = "/work/inventory_input.xlsx";
-    const templatePath = "/work/stock_template_input.xlsx";
     const outputPath = "/work/stock_output.xlsx";
 
     pyodide.FS.writeFile(inventoryPath, inventoryBytes);
-    pyodide.FS.writeFile(templatePath, stockTemplateBytes);
     pyodide.FS.writeFile(outputPath, stockTemplateBytes);
 
     const dailySupplyPath = await writeOptionalFile(dailySupplyInput, "/work/daily_supply_plan.xlsx");
@@ -114,7 +118,7 @@ async function runAnalysis() {
     const odpMasterPy = odpMasterPath ? `'${odpMasterPath}'` : "None";
     const orderPy = orderPath ? `'${orderPath}'` : "None";
 
-    setStatus("正在执行库存分析，请稍候...");
+    setStatus("Running available stock analysis...");
 
     await pyodide.runPythonAsync(`
 from pathlib import Path
@@ -143,12 +147,12 @@ run(
 
     downloadLinkEl.href = objectUrl;
     downloadLinkEl.download = fileName;
-    downloadLinkEl.textContent = `下载 ${fileName}`;
+    downloadLinkEl.textContent = `Download ${fileName}`;
     downloadLinkEl.style.display = "inline-block";
 
-    setStatus("处理完成：已生成 stock 文件，请点击下方下载。\n提示：可重复上传不同文件再次处理。");
+    setStatus("Done: stock file generated. Click the download link below.");
   } catch (err) {
-    setStatus(`处理失败：${err?.message || err}`);
+    setStatus(`Failed: ${err?.message || err}`);
     console.error(err);
   } finally {
     runBtn.disabled = false;
@@ -157,14 +161,13 @@ run(
 
 function resetForm() {
   inventoryInput.value = "";
-  stockTemplateInput.value = "";
   dailySupplyInput.value = "";
   odpMasterInput.value = "";
   orderInput.value = "";
   transitStartInput.value = "2026-08-01";
   transitEndInput.value = "2026-12-31";
   resetDownloadLink();
-  setStatus("已重置。请重新上传文件并执行。");
+  setStatus("Reset complete. Upload files and run again.");
 }
 
 runBtn.addEventListener("click", runAnalysis);
