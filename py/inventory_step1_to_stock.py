@@ -434,7 +434,7 @@ def write_output_sheet(
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = TRANSIT_START_DATE,
     end_date: date = TRANSIT_END_DATE,
-) -> None:
+) -> dict[str, Any]:
     wb = load_workbook(stock_wb_path)
 
     if OUTPUT_SHEET_NAME in wb.sheetnames:
@@ -556,6 +556,38 @@ def write_output_sheet(
         ws.cell(r, header_col["MW"]).value = round(mw, 3)
         ws.cell(r, header_col["Total MW"]).value = round(total_mw, 3)
 
+    before_cleanup_rows = ws.max_row - 1
+    deleted_rows_info: list[tuple[int, str, str, list[str]]] = []
+    for r in range(2, ws.max_row + 1):
+        sku_val = normalize_text(ws.cell(r, header_col["SKU"]).value)
+        wh_val = normalize_text(ws.cell(r, header_col["WH"]).value)
+        model_val = normalize_text(ws.cell(r, header_col["Model"]).value)
+
+        reasons: list[str] = []
+        if not model_val:
+            reasons.append("Model empty")
+        if sku_val and sku_val not in sku_lookup:
+            reasons.append("SKU not matched")
+
+        if reasons:
+            deleted_rows_info.append((r, sku_val, wh_val, reasons))
+
+    for r, _, _, _ in reversed(deleted_rows_info):
+        ws.delete_rows(r, 1)
+
+    deleted_model_empty_count = sum(1 for _, _, _, reasons in deleted_rows_info if "Model empty" in reasons)
+    deleted_unmatched_sku_count = sum(1 for _, _, _, reasons in deleted_rows_info if "SKU not matched" in reasons)
+
+    deleted_row_samples: list[dict[str, Any]] = []
+    for _, sku_val, wh_val, reasons in deleted_rows_info[:20]:
+        deleted_row_samples.append(
+            {
+                "SKU": sku_val,
+                "WH": wh_val,
+                "Reason": "; ".join(reasons),
+            }
+        )
+
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
     ws_alloc.append(["SKU", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
     for order in allocated_orders:
@@ -575,6 +607,15 @@ def write_output_sheet(
 
     wb.save(stock_wb_path)
     wb.close()
+
+    return {
+        "before_cleanup_rows": before_cleanup_rows,
+        "after_cleanup_rows": ws.max_row - 1,
+        "deleted_rows": len(deleted_rows_info),
+        "deleted_model_empty_rows": deleted_model_empty_count,
+        "deleted_unmatched_sku_rows": deleted_unmatched_sku_count,
+        "deleted_row_samples": deleted_row_samples,
+    }
 
 
 def run(
@@ -619,7 +660,7 @@ def run(
     if order_file_path:
         allocated_orders, allocated_need = extract_to_be_allocated_orders(order_file_path)
 
-    write_output_sheet(
+    run_summary = write_output_sheet(
         stock_path,
         inventory_rows,
         sku_lookup,
@@ -642,6 +683,51 @@ def run(
         print(f"Order source (To be allocated): {order_file_path}")
     if daily_supply_plan_path or odp_master_path:
         print(f"Transit date columns: {date_header(transit_start_date)} ~ {date_header(transit_end_date)}")
+
+    print(
+        "Rows removed from stock sheet: "
+        f"total={run_summary['deleted_rows']}, "
+        f"model_empty={run_summary['deleted_model_empty_rows']}, "
+        f"sku_unmatched={run_summary['deleted_unmatched_sku_rows']}"
+    )
+
+    log_lines: list[str] = [
+        f"Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Output workbook: {stock_path}",
+        f"Output sheet: {OUTPUT_SHEET_NAME}",
+        f"Inventory grouped rows: {len(inventory_rows)}",
+        f"SKU mapping sheet: {resolved_sku_sheet}",
+        f"Rows before cleanup: {run_summary['before_cleanup_rows']}",
+        f"Rows after cleanup: {run_summary['after_cleanup_rows']}",
+        f"Rows removed (total): {run_summary['deleted_rows']}",
+        f"Rows removed (Model empty): {run_summary['deleted_model_empty_rows']}",
+        f"Rows removed (SKU unmatched): {run_summary['deleted_unmatched_sku_rows']}",
+    ]
+
+    if daily_supply_plan_path:
+        log_lines.append(f"Transit source (DailySupplyPlan): {daily_supply_plan_path}")
+    if odp_master_path:
+        log_lines.append(f"Transit source (ODP Total Stock): {odp_master_path}")
+    if order_file_path:
+        log_lines.append(f"Order source (To be allocated): {order_file_path}")
+    if daily_supply_plan_path or odp_master_path:
+        log_lines.append(f"Transit date columns: {date_header(transit_start_date)} ~ {date_header(transit_end_date)}")
+
+    samples = run_summary.get("deleted_row_samples", [])
+    if samples:
+        log_lines.append("Deleted row samples (max 20):")
+        for idx, sample in enumerate(samples, start=1):
+            log_lines.append(
+                f"  {idx}. SKU={sample.get('SKU', '')}, WH={sample.get('WH', '')}, Reason={sample.get('Reason', '')}"
+            )
+    else:
+        log_lines.append("Deleted row samples: none")
+
+    log_path = stock_path.with_name(
+        f"{stock_path.stem}_run_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    )
+    log_path.write_text("\n".join(log_lines), encoding="utf-8")
+    print(f"Run log written: {log_path}")
 
 
 def parse_args() -> argparse.Namespace:
