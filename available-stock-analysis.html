@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>可用库存分析</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    .tool-wrap { max-width: 960px; margin: 0 auto; padding: 24px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .form-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    label { display: block; font-size: 14px; margin-bottom: 6px; color: #374151; }
+    input[type="file"], input[type="date"] { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; background: #fff; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+    button { border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+    .status { padding: 12px; border-radius: 8px; background: #f3f4f6; min-height: 48px; white-space: pre-wrap; }
+    .tip { color: #6b7280; font-size: 13px; }
+    .download-link { display: inline-block; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <main class="tool-wrap">
+    <header class="hero">
+      <h1>可用库存分析</h1>
+      <p>上传 Inventory、Stock 模板及可选补充文件，在线生成并下载 Stock 结果。</p>
+    </header>
+
+    <section class="panel">
+      <h2>文件上传</h2>
+      <div class="form-grid">
+        <div>
+          <label for="inventoryFile">Inventory Step1 文件（必填）</label>
+          <input id="inventoryFile" type="file" accept=".xlsx,.xlsm,.xls" />
+        </div>
+        <div>
+          <label for="stockTemplateFile">Stock 模板（必填）</label>
+          <input id="stockTemplateFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <p class="tip">仓库内也提供默认模板：<a href="./templates/stock_template.xlsx" download>下载 stock_template.xlsx</a></p>
+        </div>
+        <div>
+          <label for="dailySupplyFile">DailySupplyPlan（可选）</label>
+          <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm,.xls" />
+        </div>
+        <div>
+          <label for="odpMasterFile">EUPV ODP MASTER（可选）</label>
+          <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm,.xls" />
+        </div>
+        <div>
+          <label for="orderFile">Orderfile_Base_Realtime（可选）</label>
+          <input id="orderFile" type="file" accept=".xlsx,.xlsm,.xls" />
+        </div>
+        <div>
+          <label for="transitStart">Transit Start</label>
+          <input id="transitStart" type="date" value="2026-08-01" />
+        </div>
+        <div>
+          <label for="transitEnd">Transit End</label>
+          <input id="transitEnd" type="date" value="2026-12-31" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="runBtn" class="btn-primary">生成 Stock 文件</button>
+        <button id="resetBtn" class="btn-secondary" type="button">重置</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>运行状态</h2>
+      <div id="status" class="status">等待执行...</div>
+      <a id="downloadLink" class="download-link" style="display:none;" download>下载生成结果</a>
+    </section>
+  </main>
+
+  <script type="module" src="./available-stock-analysis.js"></script>
+</body>
+</html>

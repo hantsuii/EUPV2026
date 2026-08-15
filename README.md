@@ -1,0 +1,40 @@
+# Cloudflare Pages 门户站点
+
+这是静态门户，用于统一展示模块入口。
+
+## 本地预览
+
+在本目录下：
+
+```powershell
+cd D:\Project\portal-site
+python -m http.server 8080
+```
+
+浏览器打开：`http://localhost:8080`
+
+## 发布到 Cloudflare Pages
+
+- 连接此仓库
+- Build command: 留空（或 `echo ok`）
+- Build output directory: `/`
+
+## 配置模块
+
+编辑 `modules.json`：
+- 修改模块 `url` 到真实页面地址
+- 新增模块时按相同结构追加对象
+
+## 可用库存分析模块
+
+新增页面：`available-stock-analysis.html`
+
+功能：
+- 上传必填文件：`Inventory Step1`、`Stock 模板`
+- 上传可选文件：`DailySupplyPlan`、`EUPV ODP MASTER`、`Orderfile_Base_Realtime`
+- 浏览器端运行 `py/inventory_step1_to_stock.py`
+- 输出并下载 `stock_output_YYYYMMDD.xlsx`
+
+仓库内附带：
+- 处理代码：`py/inventory_step1_to_stock.py`
+- 模板文件：`templates/stock_template.xlsx`
