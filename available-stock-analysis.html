@@ -5,16 +5,83 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Available Stock Analysis</title>
   <link rel="stylesheet" href="./style.css" />
+  <style>
+    .viz-panel { margin-top: 18px; }
+    .filters-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-bottom: 12px;
+    }
+    .filters-grid select,
+    .filters-grid input,
+    .filters-grid button {
+      width: 100%;
+    }
+    .filters-grid select {
+      min-height: 130px;
+      border: 1px solid var(--line-1);
+      border-radius: 10px;
+      padding: 8px;
+      background: #0b1937;
+      color: var(--text-1);
+    }
+    .filters-grid .compact { min-height: auto; height: 42px; }
+    .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
+    .chart-wrap {
+      border: 1px solid var(--line-1);
+      border-radius: 12px;
+      background: #0a1834;
+      padding: 8px;
+      margin-top: 8px;
+    }
+    #stockChart { width: 100%; height: 460px; }
+    .table-wrap {
+      margin-top: 12px;
+      overflow: auto;
+      border: 1px solid var(--line-1);
+      border-radius: 12px;
+      background: #0a1834;
+      max-height: 460px;
+    }
+    .table-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+    .table-wrap th,
+    .table-wrap td {
+      border-bottom: 1px solid #1f3666;
+      padding: 8px 10px;
+      font-size: 13px;
+      white-space: nowrap;
+      text-align: right;
+    }
+    .table-wrap th {
+      position: sticky;
+      top: 0;
+      background: #12264c;
+      color: #eaf2ff;
+      z-index: 2;
+    }
+    .table-wrap td:first-child,
+    .table-wrap th:first-child,
+    .table-wrap td:nth-child(2),
+    .table-wrap th:nth-child(2) {
+      text-align: left;
+    }
+    .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+  </style>
 </head>
 <body>
   <main class="tool-wrap">
     <header class="hero">
       <h1>Available Stock Analysis</h1>
-      <p>Upload inventory and optional files, then generate and download the stock output workbook.</p>
+      <p>Generate stock output, then explore available stock trends with interactive visualization.</p>
     </header>
 
     <section class="panel">
-      <h2>File Upload</h2>
+      <h2>Step 1: Generate Stock Output</h2>
       <p class="tip">Template is fixed to repository file: <code>./templates/stock_template.xlsx</code>.</p>
       <div class="form-grid">
         <div>
@@ -30,7 +97,7 @@
           <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm,.xls" />
         </div>
         <div>
-          <label for="orderFile">Orderfile_Base_Realtime (Optional)</label>
+          <label for="orderFile">Orderfile_Base_Realtime (Optional, used for CRD allocation markers)</label>
           <input id="orderFile" type="file" accept=".xlsx,.xlsm,.xls" />
         </div>
         <div>
@@ -55,8 +122,66 @@
       <div id="status" class="status">Waiting to run...</div>
       <a id="downloadLink" class="download-link" style="display:none;" download>Download generated file</a>
     </section>
+
+    <section id="vizPanel" class="panel viz-panel" style="display:none;">
+      <h2>Step 2: Available Stock Visualization</h2>
+      <p class="tip">Available Stock formula: <code>Stock + cumulative in-transit arrivals</code>. CRD-based <code>To be allocated</code> is marked on chart by month.</p>
+
+      <div class="filters-grid">
+        <div>
+          <label for="whFilter">WH (multi-select)</label>
+          <select id="whFilter" multiple></select>
+        </div>
+        <div>
+          <label for="categoryFilter">Category (multi-select)</label>
+          <select id="categoryFilter" multiple></select>
+        </div>
+        <div>
+          <label for="productReportFilter">Product TCL Report (multi-select)</label>
+          <select id="productReportFilter" multiple></select>
+        </div>
+        <div>
+          <label for="familyFilter">Family (multi-select)</label>
+          <select id="familyFilter" multiple></select>
+        </div>
+        <div>
+          <label for="productFilter">Product (SKU | Model, multi-select)</label>
+          <select id="productFilter" multiple></select>
+          <div class="small-tip">Tip: select dimensions first, then product list auto-narrows.</div>
+        </div>
+        <div>
+          <label for="vizStart">Start Date</label>
+          <input id="vizStart" class="compact" type="date" />
+          <label for="vizEnd" style="margin-top:10px;">End Date</label>
+          <input id="vizEnd" class="compact" type="date" />
+        </div>
+        <div>
+          <label for="granularity">Granularity</label>
+          <select id="granularity" class="compact">
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+            <option value="month">Monthly</option>
+          </select>
+          <div class="inline-actions" style="margin-top:10px;">
+            <button id="applyVizBtn" class="btn-primary" type="button">Apply Filters</button>
+            <button id="clearFiltersBtn" class="btn-secondary" type="button">Clear Filters</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div id="stockChart"></div>
+      </div>
+
+      <h3 style="margin-top:14px;">In-stock & In-transit Detail (arrival columns only)</h3>
+      <div id="tableSummary" class="small-tip">No data.</div>
+      <div class="table-wrap">
+        <div id="detailTable"></div>
+      </div>
+    </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <script type="module" src="./available-stock-analysis.js"></script>
 </body>
 </html>
