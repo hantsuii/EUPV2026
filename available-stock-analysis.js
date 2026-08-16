@@ -316,31 +316,34 @@ function buildBucketSeries(dailyMap, granularity) {
   return { labels, values: labels.map((label) => bucketMap.get(label) || 0) };
 }
 
-function buildAllocationByMonthAndCategory(filteredRows, start, end) {
-  const skuWhToCategory = new Map();
+function buildAllocationByMonthAndModel(filteredRows, start, end) {
+  const skuWhToModel = new Map();
   for (const row of filteredRows) {
-    skuWhToCategory.set(`${row.SKU}||${row.WH}`, String(row.Category || "PV").toUpperCase());
+    const model = String(row.Model || "").trim();
+    const fallback = String(row.ProductKeyLabel || row.SKU || "").trim();
+    skuWhToModel.set(`${row.SKU}||${row.WH}`, model || fallback || "Unknown Model");
   }
 
-  const byCategory = new Map();
+  const byModel = new Map();
   for (const alloc of vizState.allocations) {
     const key = `${alloc.SKU}||${alloc.WH}`;
-    const category = skuWhToCategory.get(key);
-    if (!category) continue;
+    const mappedModel = skuWhToModel.get(key);
+    if (!mappedModel) continue;
 
     if (!alloc.CRDDate) continue;
     const crd = new Date(`${alloc.CRDDate}T00:00:00`);
     if (Number.isNaN(crd.getTime()) || crd < start || crd > end) continue;
 
+    const model = String(alloc.Model || "").trim() || mappedModel;
     const month = monthLabelFromDate(crd);
-    if (!byCategory.has(category)) {
-      byCategory.set(category, new Map());
+    if (!byModel.has(model)) {
+      byModel.set(model, new Map());
     }
-    const monthMap = byCategory.get(category);
+    const monthMap = byModel.get(model);
     monthMap.set(month, (monthMap.get(month) || 0) + Number(alloc.OrderedQty || 0));
   }
 
-  return byCategory;
+  return byModel;
 }
 
 function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValueMap) {
@@ -449,7 +452,7 @@ function renderChartAndTable() {
     throw new Error("No transit date headers in selected date range.");
   }
 
-  const allocByCategory = buildAllocationByMonthAndCategory(filteredRows, start, end);
+  const allocByModel = buildAllocationByMonthAndModel(filteredRows, start, end);
 
   const allSeries = [];
   let bucketLabels = [];
@@ -522,33 +525,42 @@ function renderChartAndTable() {
 
   const bucketValueMap = new Map(bucketLabels.map((label, idx) => [label, bucketValuesForAllocRef[idx] || 0]));
 
-  const allocColors = {
-    PV: "rgba(255, 142, 52, 0.45)",
-    ESS: "rgba(129, 194, 255, 0.45)",
-    HP: "rgba(150, 230, 150, 0.45)",
-  };
-  const allocBorderColors = {
-    PV: "rgba(255, 186, 127, 0.95)",
-    ESS: "rgba(164, 216, 255, 0.95)",
-    HP: "rgba(192, 255, 192, 0.95)",
-  };
+  const allocPalette = [
+    ["rgba(255, 142, 52, 0.42)", "rgba(255, 186, 127, 0.95)"],
+    ["rgba(129, 194, 255, 0.42)", "rgba(164, 216, 255, 0.95)"],
+    ["rgba(150, 230, 150, 0.42)", "rgba(192, 255, 192, 0.95)"],
+    ["rgba(214, 153, 255, 0.42)", "rgba(228, 196, 255, 0.95)"],
+    ["rgba(255, 214, 102, 0.42)", "rgba(255, 232, 163, 0.95)"],
+    ["rgba(255, 128, 171, 0.42)", "rgba(255, 181, 206, 0.95)"],
+  ];
 
-  for (const category of ["PV", "ESS", "HP"]) {
-    const monthMap = allocByCategory.get(category) || new Map();
-    const allocPlot = mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValueMap);
+  const allocModelEntries = Array.from(allocByModel.entries())
+    .map(([model, monthMap]) => {
+      let total = 0;
+      for (const qty of monthMap.values()) total += Number(qty || 0);
+      return { model, monthMap, total };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+
+  for (let idx = 0; idx < allocModelEntries.length; idx += 1) {
+    const entry = allocModelEntries[idx];
+    const allocPlot = mapAllocationToBuckets(entry.monthMap, granularity, bucketLabels, bucketValueMap);
     const hasData = allocPlot.barData.some((x) => Number(x) !== 0);
     if (!hasData) continue;
 
+    const [fillColor, borderColor] = allocPalette[idx % allocPalette.length];
+
     allSeries.push({
-      name: `To be allocated - ${category}`,
+      name: `To be allocated - ${entry.model}`,
       type: "bar",
       stack: "alloc",
       yAxisIndex: 1,
       data: allocPlot.barData,
       barMaxWidth: 22,
       itemStyle: {
-        color: allocColors[category],
-        borderColor: allocBorderColors[category],
+        color: fillColor,
+        borderColor,
         borderWidth: 1,
         borderRadius: [4, 4, 0, 0],
       },
@@ -812,7 +824,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
 
     model = _text(row[header_to_idx['Model']])
     product_key = f"{sku}||{model}" if model else f"{sku}||"
-    product_label = f"{sku} | {model}" if model else sku
+    product_label = f"{model} | {sku}" if model else sku
 
     item = {
         "WH": wh,
@@ -852,6 +864,7 @@ if 'To be allocated' in wb.sheetnames:
             allocations.append({
                 "SKU": sku,
                 "WH": wh,
+                "Model": _text(row[idx_alloc["Model"]]) if "Model" in idx_alloc else "",
                 "OrderedQty": _num(row[idx_alloc["Ordered Qty"]]),
                 "CRDDate": _date_to_iso(row[idx_alloc["CRD"]]),
             })
