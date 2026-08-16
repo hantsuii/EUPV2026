@@ -20,6 +20,7 @@ const productFilterEl = document.getElementById("productFilter");
 const vizStartEl = document.getElementById("vizStart");
 const vizEndEl = document.getElementById("vizEnd");
 const granularityEl = document.getElementById("granularity");
+const lineModeEl = document.getElementById("lineMode");
 const applyVizBtn = document.getElementById("applyVizBtn");
 const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 const detailTableEl = document.getElementById("detailTable");
@@ -109,20 +110,26 @@ function getRowLabelByLevel(row, def) {
   return row[def.key];
 }
 
-function setSelectOptions(selectEl, options, selectedSetToKeep) {
+function setSelectOptions(selectEl, options, selectedSetToKeep, forceSelectAll = false) {
   const selected = selectedSetToKeep || new Set();
   selectEl.innerHTML = options
     .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
     .join("");
 
   for (const opt of selectEl.options) {
-    if (selected.has(opt.value)) {
+    if (!forceSelectAll && selected.has(opt.value)) {
+      opt.selected = true;
+    }
+  }
+
+  if (forceSelectAll) {
+    for (const opt of selectEl.options) {
       opt.selected = true;
     }
   }
 
   const hasSelected = Array.from(selectEl.options).some((opt) => opt.selected);
-  if (!hasSelected) {
+  if (!hasSelected && selectEl.options.length) {
     for (const opt of selectEl.options) {
       opt.selected = true;
     }
@@ -135,7 +142,16 @@ function enableClickToggleMultiSelect(selectEl) {
     event.preventDefault();
 
     const option = event.target;
-    option.selected = !option.selected;
+    const selectedCount = Array.from(selectEl.options).filter((opt) => opt.selected).length;
+
+    if (selectedCount > 1 && option.selected) {
+      for (const opt of selectEl.options) {
+        opt.selected = false;
+      }
+      option.selected = true;
+    } else {
+      option.selected = !option.selected;
+    }
 
     if (!Array.from(selectEl.options).some((opt) => opt.selected)) {
       option.selected = true;
@@ -235,31 +251,21 @@ function buildOptionsForLevel(levelIndex, baseRows) {
     .map(([value, label]) => ({ value, label }));
 }
 
-function rebuildCascadeFrom(startLevelIndex) {
+function rebuildCascadeFrom(startLevelIndex, resetSelections = true) {
   for (let levelIndex = startLevelIndex; levelIndex < levelDefs.length; levelIndex += 1) {
     const def = levelDefs[levelIndex];
     const before = selectedSet(def.el);
     const baseRows = rowsMatchingPrevLevels(levelIndex);
     const options = buildOptionsForLevel(levelIndex, baseRows);
-    setSelectOptions(def.el, options, before);
+    setSelectOptions(def.el, options, before, resetSelections);
   }
 }
 
 function initializeCascadeFilters() {
   const firstOptions = buildOptionsForLevel(0, vizState.rows);
-  setSelectOptions(levelDefs[0].el, firstOptions, new Set());
+  setSelectOptions(levelDefs[0].el, firstOptions, new Set(), true);
 
-  for (const opt of levelDefs[0].el.options) {
-    opt.selected = true;
-  }
-
-  rebuildCascadeFrom(1);
-
-  for (let i = 1; i < levelDefs.length; i += 1) {
-    for (const opt of levelDefs[i].el.options) {
-      opt.selected = true;
-    }
-  }
+  rebuildCascadeFrom(1, true);
 
   const validDates = vizState.dateHeaders.map(parseDateLabel).filter(Boolean);
   if (validDates.length) {
@@ -267,10 +273,9 @@ function initializeCascadeFilters() {
     vizEndEl.value = normalizeDateLabel(validDates[validDates.length - 1]);
   }
 
-  if (!granularityEl.value) {
-    granularityEl.value = "week";
-  } else if (granularityEl.value === "day") {
-    granularityEl.value = "week";
+  granularityEl.value = "week";
+  if (lineModeEl) {
+    lineModeEl.value = "total";
   }
 }
 
@@ -355,6 +360,28 @@ function buildAllocationByMonth(filteredRows, filters, start, end) {
   return monthMap;
 }
 
+function buildProductAllocationMap(filteredRows, startDate, endDate) {
+  const skuWhToProduct = new Map();
+  for (const row of filteredRows) {
+    skuWhToProduct.set(`${row.SKU}||${row.WH}`, row.ProductKey);
+  }
+
+  const productAlloc = new Map();
+  for (const alloc of vizState.allocations) {
+    const key = `${alloc.SKU}||${alloc.WH}`;
+    const productKey = skuWhToProduct.get(key);
+    if (!productKey) continue;
+
+    if (!alloc.CRDDate) continue;
+    const crd = new Date(`${alloc.CRDDate}T00:00:00`);
+    if (Number.isNaN(crd.getTime()) || crd < startDate || crd > endDate) continue;
+
+    productAlloc.set(productKey, (productAlloc.get(productKey) || 0) + Number(alloc.OrderedQty || 0));
+  }
+
+  return productAlloc;
+}
+
 function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValueMap) {
   const barMap = new Map(bucketLabels.map((label) => [label, 0]));
 
@@ -408,10 +435,36 @@ function dayLabelShort(dayLabel) {
   return dayLabel.slice(5);
 }
 
+function buildDailySeriesForProductRows(rows, inRangeHeaders) {
+  const dailyMap = new Map();
+  const dailyLabels = inRangeHeaders
+    .map((header) => parseDateLabel(header))
+    .filter(Boolean)
+    .map((dateObj) => normalizeDateLabel(dateObj));
+
+  for (const label of dailyLabels) {
+    dailyMap.set(label, 0);
+  }
+
+  for (const row of rows) {
+    let running = Number(row.Stock || 0);
+    for (const header of inRangeHeaders) {
+      const dateObj = parseDateLabel(header);
+      if (!dateObj) continue;
+      const dayLabel = normalizeDateLabel(dateObj);
+      running += Number(row.Transit?.[header] || 0);
+      dailyMap.set(dayLabel, (dailyMap.get(dayLabel) || 0) + running);
+    }
+  }
+
+  return dailyMap;
+}
+
 function renderChartAndTable() {
   const filters = getFilterState();
   const { start, end } = parseVisualizationDateRange();
   const granularity = granularityEl.value;
+  const lineMode = lineModeEl ? lineModeEl.value : "total";
 
   const filteredRows = vizState.rows.filter((row) => matchByFilters(row, filters));
   ensureChart();
@@ -435,36 +488,103 @@ function renderChartAndTable() {
     throw new Error("No transit date headers in selected date range.");
   }
 
-  const dailyMap = new Map();
-  const dailyLabels = inRangeHeaders
-    .map((header) => parseDateLabel(header))
-    .filter(Boolean)
-    .map((dateObj) => normalizeDateLabel(dateObj));
-
-  for (const label of dailyLabels) {
-    dailyMap.set(label, 0);
-  }
-
-  for (const row of filteredRows) {
-    let running = Number(row.Stock || 0);
-    for (const header of inRangeHeaders) {
-      const dateObj = parseDateLabel(header);
-      if (!dateObj) continue;
-      const dayLabel = normalizeDateLabel(dateObj);
-      running += Number(row.Transit?.[header] || 0);
-      dailyMap.set(dayLabel, (dailyMap.get(dayLabel) || 0) + running);
-    }
-  }
-
-  const bucketSeries = buildBucketSeries(dailyMap, granularity);
-  const bucketLabels = bucketSeries.labels;
-  const bucketValues = bucketSeries.values;
-  const bucketValueMap = new Map(bucketLabels.map((label, idx) => [label, bucketValues[idx]]));
-
   const monthAllocMap = buildAllocationByMonth(filteredRows, filters, start, end);
+
+  const allSeries = [];
+  let bucketLabels = [];
+  let bucketValuesForAllocRef = [];
+
+  if (lineMode === "split") {
+    const groups = new Map();
+    for (const row of filteredRows) {
+      const key = row.ProductKey;
+      if (!groups.has(key)) {
+        groups.set(key, { label: row.ProductKeyLabel, rows: [] });
+      }
+      groups.get(key).rows.push(row);
+    }
+
+    const entries = Array.from(groups.entries()).map(([key, g]) => {
+      const daily = buildDailySeriesForProductRows(g.rows, inRangeHeaders);
+      const bucket = buildBucketSeries(daily, granularity);
+      const finalValue = bucket.values[bucket.values.length - 1] || 0;
+      return { key, label: g.label, bucket, finalValue };
+    });
+
+    entries.sort((a, b) => b.finalValue - a.finalValue);
+    const shown = entries.slice(0, 12);
+
+    if (entries.length > shown.length) {
+      setStatus(`Visualization note: ${entries.length} products selected, showing top ${shown.length} lines by ending value.`);
+    }
+
+    if (!shown.length) {
+      throw new Error("No series available for split mode.");
+    }
+
+    bucketLabels = shown[0].bucket.labels;
+    bucketValuesForAllocRef = shown[0].bucket.values;
+
+    for (const item of shown) {
+      allSeries.push({
+        name: item.label,
+        type: "line",
+        smooth: true,
+        symbol: item.bucket.labels.length > 60 ? "none" : "circle",
+        symbolSize: 4,
+        data: item.bucket.values,
+      });
+    }
+  } else {
+    const daily = buildDailySeriesForProductRows(filteredRows, inRangeHeaders);
+    const bucket = buildBucketSeries(daily, granularity);
+    bucketLabels = bucket.labels;
+    bucketValuesForAllocRef = bucket.values;
+
+    allSeries.push({
+      name: "Available Stock",
+      type: "line",
+      smooth: true,
+      symbol: bucket.labels.length > 80 ? "none" : "circle",
+      symbolSize: 5,
+      data: bucket.values,
+      lineStyle: { width: 3, color: "#5ca0ff" },
+      itemStyle: { color: "#7fb4ff" },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: "rgba(92,160,255,0.35)" },
+          { offset: 1, color: "rgba(92,160,255,0.06)" },
+        ]),
+      },
+    });
+  }
+
+  const bucketValueMap = new Map(bucketLabels.map((label, idx) => [label, bucketValuesForAllocRef[idx] || 0]));
   const allocPlot = mapAllocationToBuckets(monthAllocMap, granularity, bucketLabels, bucketValueMap);
 
+  if (lineMode === "total" && allSeries.length) {
+    allSeries[0].markPoint = {
+      symbol: "pin",
+      symbolSize: 34,
+      data: allocPlot.markPoints,
+    };
+  }
+
   const manyPoints = bucketLabels.length > 80;
+
+  allSeries.push({
+    name: "To be allocated (CRD month)",
+    type: "bar",
+    yAxisIndex: 1,
+    data: allocPlot.barData,
+    barMaxWidth: 22,
+    itemStyle: {
+      color: "rgba(255, 142, 52, 0.52)",
+      borderColor: "rgba(255, 186, 127, 0.95)",
+      borderWidth: 1,
+      borderRadius: [4, 4, 0, 0],
+    },
+  });
 
   chart.setOption({
     backgroundColor: "transparent",
@@ -479,17 +599,10 @@ function renderChartAndTable() {
     legend: {
       top: 8,
       textStyle: { color: "#d7e5ff" },
-      data: ["Available Stock", "To be allocated (CRD month)"],
     },
     grid: { left: 62, right: 62, top: 62, bottom: 92 },
     dataZoom: [
-      {
-        type: "inside",
-        xAxisIndex: 0,
-        start: 0,
-        end: 100,
-        filterMode: "none",
-      },
+      { type: "inside", xAxisIndex: 0, start: 0, end: 100, filterMode: "none" },
       {
         type: "slider",
         xAxisIndex: 0,
@@ -532,49 +645,14 @@ function renderChartAndTable() {
         splitLine: { show: false },
       },
     ],
-    series: [
-      {
-        name: "Available Stock",
-        type: "line",
-        smooth: true,
-        symbol: manyPoints ? "none" : "circle",
-        symbolSize: 5,
-        data: bucketValues,
-        lineStyle: { width: 3, color: "#5ca0ff" },
-        itemStyle: { color: "#7fb4ff" },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(92,160,255,0.35)" },
-            { offset: 1, color: "rgba(92,160,255,0.06)" },
-          ]),
-        },
-        markPoint: {
-          symbol: "pin",
-          symbolSize: 34,
-          data: allocPlot.markPoints,
-        },
-      },
-      {
-        name: "To be allocated (CRD month)",
-        type: "bar",
-        yAxisIndex: 1,
-        data: allocPlot.barData,
-        barMaxWidth: 22,
-        itemStyle: {
-          color: "rgba(255, 142, 52, 0.52)",
-          borderColor: "rgba(255, 186, 127, 0.95)",
-          borderWidth: 1,
-          borderRadius: [4, 4, 0, 0],
-        },
-      },
-    ],
+    series: allSeries,
   }, true);
 
   chart.resize();
-  renderDetailTable(filteredRows, inRangeHeaders);
+  renderDetailTable(filteredRows, inRangeHeaders, start, end);
 }
 
-function renderDetailTable(filteredRows, inRangeHeaders) {
+function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   const productMap = new Map();
   for (const row of filteredRows) {
     const key = row.ProductKey;
@@ -583,6 +661,7 @@ function renderDetailTable(filteredRows, inRangeHeaders) {
         Product: row.ProductKeyLabel,
         Stock: 0,
         transitByDate: {},
+        TransitTotal: 0,
       });
     }
 
@@ -593,8 +672,11 @@ function renderDetailTable(filteredRows, inRangeHeaders) {
       const qty = Number(row.Transit?.[dateHeader] || 0);
       if (!qty) continue;
       item.transitByDate[dateHeader] = (item.transitByDate[dateHeader] || 0) + qty;
+      item.TransitTotal += qty;
     }
   }
+
+  const productAllocMap = buildProductAllocationMap(filteredRows, startDate, endDate);
 
   const arrivalDateHeaders = inRangeHeaders.filter((header) => {
     for (const item of productMap.values()) {
@@ -603,7 +685,18 @@ function renderDetailTable(filteredRows, inRangeHeaders) {
     return false;
   });
 
-  const rows = Array.from(productMap.values()).sort((a, b) => a.Product.localeCompare(b.Product));
+  const rows = Array.from(productMap.entries())
+    .map(([productKey, item]) => {
+      const allocated = Number(productAllocMap.get(productKey) || 0);
+      const available = Number(item.Stock || 0) + Number(item.TransitTotal || 0) - allocated;
+      return {
+        ...item,
+        Allocated: allocated,
+        Available: available,
+      };
+    })
+    .sort((a, b) => a.Product.localeCompare(b.Product));
+
   if (!rows.length) {
     detailTableEl.innerHTML = "<div style='padding:10px;color:#cbdcff;'>No detail rows.</div>";
     tableSummaryEl.textContent = "No rows matched current filters.";
@@ -614,6 +707,9 @@ function renderDetailTable(filteredRows, inRangeHeaders) {
     "<tr>",
     "<th>Product (SKU | Model)</th>",
     "<th>In-stock</th>",
+    "<th>In-transit (range)</th>",
+    "<th>To be allocated</th>",
+    "<th>Available Qty</th>",
     ...arrivalDateHeaders.map((dateHeader) => `<th>${escapeHtml(dateHeader)}</th>`),
     "</tr>",
   ].join("");
@@ -622,6 +718,9 @@ function renderDetailTable(filteredRows, inRangeHeaders) {
     const cells = [
       `<td>${escapeHtml(item.Product)}</td>`,
       `<td>${fmtNumber(item.Stock)}</td>`,
+      `<td>${fmtNumber(item.TransitTotal)}</td>`,
+      `<td>${fmtNumber(item.Allocated)}</td>`,
+      `<td>${fmtNumber(item.Available)}</td>`,
       ...arrivalDateHeaders.map((dateHeader) => `<td>${fmtNumber(item.transitByDate[dateHeader] || 0)}</td>`),
     ];
     return `<tr>${cells.join("")}</tr>`;
@@ -630,11 +729,11 @@ function renderDetailTable(filteredRows, inRangeHeaders) {
   detailTableEl.innerHTML = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
 
   const totalStock = rows.reduce((sum, item) => sum + Number(item.Stock || 0), 0);
-  const totalTransit = arrivalDateHeaders.reduce((sum, dateHeader) => {
-    return sum + rows.reduce((inner, item) => inner + Number(item.transitByDate[dateHeader] || 0), 0);
-  }, 0);
+  const totalTransit = rows.reduce((sum, item) => sum + Number(item.TransitTotal || 0), 0);
+  const totalAllocated = rows.reduce((sum, item) => sum + Number(item.Allocated || 0), 0);
+  const totalAvailable = rows.reduce((sum, item) => sum + Number(item.Available || 0), 0);
 
-  tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | Total In-stock: ${fmtNumber(totalStock)} | Total In-transit (shown columns): ${fmtNumber(totalTransit)}`;
+  tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | In-stock: ${fmtNumber(totalStock)} | In-transit: ${fmtNumber(totalTransit)} | To be allocated: ${fmtNumber(totalAllocated)} | Available Qty: ${fmtNumber(totalAvailable)}`;
 }
 
 async function extractVisualizationData() {
@@ -898,7 +997,7 @@ for (let i = 0; i < levelDefs.length; i += 1) {
   enableClickToggleMultiSelect(def.el);
 
   def.el.addEventListener("change", () => {
-    rebuildCascadeFrom(i + 1);
+    rebuildCascadeFrom(i + 1, true);
   });
 }
 
@@ -913,12 +1012,23 @@ applyVizBtn.addEventListener("click", () => {
 clearFiltersBtn.addEventListener("click", () => {
   try {
     clearAllFilterSelections();
-    rebuildCascadeFrom(1);
+    rebuildCascadeFrom(1, true);
     renderChartAndTable();
   } catch (err) {
     setStatus(`Visualization failed: ${err?.message || err}`);
   }
 });
+
+
+if (lineModeEl) {
+  lineModeEl.addEventListener("change", () => {
+    try {
+      renderChartAndTable();
+    } catch (err) {
+      setStatus(`Visualization failed: ${err?.message || err}`);
+    }
+  });
+}
 
 runBtn.addEventListener("click", runAnalysis);
 resetBtn.addEventListener("click", resetForm);
