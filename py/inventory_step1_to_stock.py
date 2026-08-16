@@ -82,7 +82,7 @@ def resolve_output_category(source_category: Any, family: Any) -> str:
 
     # For rows whose category needs to be inferred from SKU-side info
     family_text = normalize_lower(family)
-    if family_text == "reserve":
+    if family_text in {"reserve", "non-pv", "ess - gen2"}:
         return "ESS"
 
     return "PV"
