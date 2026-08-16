@@ -90,12 +90,16 @@ def resolve_output_category(source_category: Any, family: Any) -> str:
 
 def normalize_upper_category(value: Any) -> str:
     text = normalize_text(value).upper()
-    if "HP" in text:
+    normalized = text.replace("_", "-").replace(" ", "")
+
+    # Exact/normalized category recognition only, avoid false-positive from strings like NON-PV
+    if normalized in {"HP", "HEATPUMP", "HEATPUMPS"}:
         return "HP"
-    if "ESS" in text:
+    if normalized in {"ESS", "ESSGEN2", "ESS-GEN2"}:
         return "ESS"
-    if "PV" in text:
+    if normalized == "PV":
         return "PV"
+
     return text
 
 
