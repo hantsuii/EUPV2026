@@ -623,6 +623,28 @@ function renderChartAndTable() {
   renderDetailTable(filteredRows, inRangeHeaders, start, end);
 }
 
+function buildProductAllocationMap(filteredRows, startDate, endDate) {
+  const skuWhToProduct = new Map();
+  for (const row of filteredRows) {
+    skuWhToProduct.set(`${row.SKU}||${row.WH}`, row.ProductKey);
+  }
+
+  const productAlloc = new Map();
+  for (const alloc of vizState.allocations) {
+    const key = `${alloc.SKU}||${alloc.WH}`;
+    const productKey = skuWhToProduct.get(key);
+    if (!productKey) continue;
+
+    if (!alloc.CRDDate) continue;
+    const crd = new Date(`${alloc.CRDDate}T00:00:00`);
+    if (Number.isNaN(crd.getTime()) || crd < startDate || crd > endDate) continue;
+
+    productAlloc.set(productKey, (productAlloc.get(productKey) || 0) + Number(alloc.OrderedQty || 0));
+  }
+
+  return productAlloc;
+}
+
 function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   const productMap = new Map();
   for (const row of filteredRows) {
