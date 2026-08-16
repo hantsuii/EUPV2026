@@ -1,0 +1,104 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>销售变动分析（Web）</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+    .kpi-card { background:#0b1934; border:1px solid #2f4f8a; border-radius:10px; padding:12px; }
+    .kpi-name { color:#a8bfe6; font-size:13px; margin-bottom:6px; }
+    .kpi-value { font-size:24px; font-weight:700; }
+    .tab-wrap { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .tab-btn { background:#1d3566; color:#e9f1ff; border:1px solid #355997; border-radius:9px; padding:8px 12px; cursor:pointer; font-weight:700; }
+    .tab-btn.active { background:#4f8cff; border-color:#4f8cff; color:#fff; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+    .table-wrap { overflow:auto; border:1px solid #2a4376; border-radius:10px; }
+    table { width:100%; border-collapse:collapse; min-width:760px; background:#0a1730; }
+    th, td { border-bottom:1px solid #213d70; padding:8px 10px; font-size:13px; text-align:left; }
+    th { background:#11264d; position:sticky; top:0; }
+    .warn { color:#ffd89b; }
+  </style>
+</head>
+<body>
+  <main class="tool-wrap">
+    <header class="hero">
+      <h1>销售变动分析（非 Streamlit）</h1>
+      <p>基于 <code>Order details</code>，输出 A/B/C/D/E 页面分析。</p>
+    </header>
+
+    <section class="panel">
+      <div class="actions">
+        <a class="btn-link" href="./index.html">← Back to Home</a>
+      </div>
+      <div class="form-grid" style="margin-top:10px;">
+        <div>
+          <label for="salesFile">上传销售文件（.xlsx）</label>
+          <input id="salesFile" type="file" accept=".xlsx,.xls" />
+        </div>
+        <div>
+          <label for="monthSel">分析月份</label>
+          <select id="monthSel"></select>
+        </div>
+        <div>
+          <label for="regionSel">区域筛选（RegionStd）</label>
+          <select id="regionSel"></select>
+        </div>
+      </div>
+      <p class="tip">区域映射规则：Germany & Austria→DACH；Iberia/lberia→Southern Europe；Italy & Adriatics→Italy；Emerging Market→CEE；UPP 保持独立。</p>
+      <div class="actions">
+        <button id="runBtn" class="btn btn-primary">生成分析</button>
+      </div>
+      <div id="status" class="status">请上传文件并点击“生成分析”。</div>
+    </section>
+
+    <section class="panel">
+      <h3>页面A：本月经营总览</h3>
+      <div id="kpiGrid" class="kpi-grid"></div>
+      <div class="table-wrap" style="margin-top:10px;"><table id="overviewTable"></table></div>
+    </section>
+
+    <section class="panel">
+      <div class="tab-wrap">
+        <button class="tab-btn active" data-tab="B">页面B 地区&客户变化</button>
+        <button class="tab-btn" data-tab="C">页面C 产品结构变化</button>
+        <button class="tab-btn" data-tab="D">页面D 订单推进与风险</button>
+        <button class="tab-btn" data-tab="E">页面E 履约与交付</button>
+        <button class="tab-btn" data-tab="MAP">区域-国家映射现状</button>
+      </div>
+
+      <div id="panel-B" class="tab-panel active">
+        <h3 style="margin-top:12px;">地区与客户增减（本月 vs 上月）</h3>
+        <div class="table-wrap"><table id="regionMoverTable"></table></div>
+        <div class="table-wrap" style="margin-top:10px;"><table id="customerMoverTable"></table></div>
+      </div>
+
+      <div id="panel-C" class="tab-panel">
+        <h3 style="margin-top:12px;">地区 × 产品系列（过去/未来）</h3>
+        <div class="table-wrap"><table id="productMixTable"></table></div>
+      </div>
+
+      <div id="panel-D" class="tab-panel">
+        <h3 style="margin-top:12px;">Pipeline 与风险订单</h3>
+        <div class="table-wrap"><table id="pipelineTable"></table></div>
+        <div class="table-wrap" style="margin-top:10px;"><table id="delayRiskTable"></table></div>
+      </div>
+
+      <div id="panel-E" class="tab-panel">
+        <h3 style="margin-top:12px;">履约时效（区域）</h3>
+        <div class="table-wrap"><table id="fulfillTable"></table></div>
+      </div>
+
+      <div id="panel-MAP" class="tab-panel">
+        <h3 style="margin-top:12px;">区域与国家映射（原始+标准化）</h3>
+        <div class="table-wrap"><table id="mappingTable"></table></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./sales-change-analysis.js"></script>
+</body>
+</html>

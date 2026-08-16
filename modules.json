@@ -3,6 +3,12 @@
   "portal_subtitle": "Choose a module to open the analysis page.",
   "modules": [
     {
+      "name": "Sales Change Analysis (Web)",
+      "desc": "Upload Order details and view KPI + A/B/C/D/E sales analysis pages (non-Streamlit).",
+      "url": "./sales-change-analysis.html",
+      "badge": "Interactive"
+    },
+    {
       "name": "Sales Dashboard",
       "desc": "Multi-dimensional filters for PV / ESS / HP, plus monthly order and region analysis.",
       "url": "https://eu-sales-dashboard.streamlit.app/",
