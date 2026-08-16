@@ -248,6 +248,9 @@ function initializeCascadeFilters() {
 
   rebuildCascadeFrom(1, true);
 
+  // Explicitly keep all filters unselected at initial load
+  clearAllFilterSelections();
+
   const validDates = vizState.dateHeaders.map(parseDateLabel).filter(Boolean);
   if (validDates.length) {
     vizStartEl.value = normalizeDateLabel(validDates[0]);

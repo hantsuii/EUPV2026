@@ -75,15 +75,15 @@ def map_country_code(sales_org_name: str) -> str:
 
 def resolve_output_category(source_category: Any, family: Any) -> str:
     category_text = normalize_upper_category(source_category)
-    if category_text == "HP":
-        return "HP"
 
+    # Keep category from source tables when valid
+    if category_text in {"PV", "ESS", "HP"}:
+        return category_text
+
+    # For rows whose category needs to be inferred from SKU-side info
     family_text = normalize_lower(family)
     if family_text == "reserve":
         return "ESS"
-
-    if category_text in {"ESS", "PV"}:
-        return category_text
 
     return "PV"
 
