@@ -73,6 +73,32 @@ def map_country_code(sales_org_name: str) -> str:
     return normalize_text(sales_org_name)[:2].upper()
 
 
+def resolve_output_category(source_category: Any, family: Any) -> str:
+    category_text = normalize_upper_category(source_category)
+    if category_text == "HP":
+        return "HP"
+
+    family_text = normalize_lower(family)
+    if family_text == "reserve":
+        return "ESS"
+
+    if category_text in {"ESS", "PV"}:
+        return category_text
+
+    return "PV"
+
+
+def normalize_upper_category(value: Any) -> str:
+    text = normalize_text(value).upper()
+    if "HP" in text:
+        return "HP"
+    if "ESS" in text:
+        return "ESS"
+    if "PV" in text:
+        return "PV"
+    return text
+
+
 def map_transit_wh_code(in_transit_code: Any) -> str | None:
     text = normalize_text(in_transit_code).upper()
     if not text:
@@ -471,7 +497,7 @@ def write_output_sheet(
         ws.append(
             [
                 item["WH"],
-                item["Category"],
+                resolve_output_category(item.get("Category"), mapped.get("Family")),
                 mapped.get("Product TCL Report"),
                 mapped.get("Family"),
                 mapped.get("Series"),
@@ -509,10 +535,11 @@ def write_output_sheet(
         if key not in row_by_key:
             mapped = sku_lookup.get(sku, {})
             category = transit_category.get(key, "")
+            resolved_category = resolve_output_category(category, mapped.get("Family"))
             ws.append(
                 [
                     wh,
-                    category,
+                    resolved_category,
                     mapped.get("Product TCL Report"),
                     mapped.get("Family"),
                     mapped.get("Series"),

@@ -116,21 +116,15 @@ function setSelectOptions(selectEl, options, selectedSetToKeep, forceSelectAll =
     .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
     .join("");
 
-  for (const opt of selectEl.options) {
-    if (!forceSelectAll && selected.has(opt.value)) {
-      opt.selected = true;
-    }
-  }
-
   if (forceSelectAll) {
     for (const opt of selectEl.options) {
       opt.selected = true;
     }
+    return;
   }
 
-  const hasSelected = Array.from(selectEl.options).some((opt) => opt.selected);
-  if (!hasSelected && selectEl.options.length) {
-    for (const opt of selectEl.options) {
+  for (const opt of selectEl.options) {
+    if (selected.has(opt.value)) {
       opt.selected = true;
     }
   }
@@ -142,20 +136,7 @@ function enableClickToggleMultiSelect(selectEl) {
     event.preventDefault();
 
     const option = event.target;
-    const selectedCount = Array.from(selectEl.options).filter((opt) => opt.selected).length;
-
-    if (selectedCount > 1 && option.selected) {
-      for (const opt of selectEl.options) {
-        opt.selected = false;
-      }
-      option.selected = true;
-    } else {
-      option.selected = !option.selected;
-    }
-
-    if (!Array.from(selectEl.options).some((opt) => opt.selected)) {
-      option.selected = true;
-    }
+    option.selected = !option.selected;
 
     selectEl.focus();
     selectEl.dispatchEvent(new Event("change", { bubbles: true }));
@@ -263,7 +244,7 @@ function rebuildCascadeFrom(startLevelIndex, resetSelections = true) {
 
 function initializeCascadeFilters() {
   const firstOptions = buildOptionsForLevel(0, vizState.rows);
-  setSelectOptions(levelDefs[0].el, firstOptions, new Set(), true);
+  setSelectOptions(levelDefs[0].el, firstOptions, new Set(), false);
 
   rebuildCascadeFrom(1, true);
 
@@ -332,54 +313,31 @@ function buildBucketSeries(dailyMap, granularity) {
   return { labels, values: labels.map((label) => bucketMap.get(label) || 0) };
 }
 
-function buildAllocationByMonth(filteredRows, filters, start, end) {
-  const selectedRowKeys = new Set(filteredRows.map((row) => `${row.SKU}||${row.WH}`));
-  const monthMap = new Map();
+function buildAllocationByMonthAndCategory(filteredRows, start, end) {
+  const skuWhToCategory = new Map();
+  for (const row of filteredRows) {
+    skuWhToCategory.set(`${row.SKU}||${row.WH}`, String(row.Category || "PV").toUpperCase());
+  }
 
+  const byCategory = new Map();
   for (const alloc of vizState.allocations) {
-    const linkKey = `${alloc.SKU}||${alloc.WH}`;
-    if (!selectedRowKeys.has(linkKey)) continue;
-
-    const mappedMeta = vizState.keyMeta.get(linkKey);
-    if (mappedMeta) {
-      if (filters.wh.size && !filters.wh.has(String(mappedMeta.WH))) continue;
-      if (filters.category.size && !filters.category.has(String(mappedMeta.Category))) continue;
-      if (filters.productReport.size && !filters.productReport.has(String(mappedMeta.ProductTCLReport))) continue;
-      if (filters.family.size && !filters.family.has(String(mappedMeta.Family))) continue;
-      if (filters.product.size && !filters.product.has(String(mappedMeta.ProductKey))) continue;
-    }
+    const key = `${alloc.SKU}||${alloc.WH}`;
+    const category = skuWhToCategory.get(key);
+    if (!category) continue;
 
     if (!alloc.CRDDate) continue;
     const crd = new Date(`${alloc.CRDDate}T00:00:00`);
     if (Number.isNaN(crd.getTime()) || crd < start || crd > end) continue;
 
     const month = monthLabelFromDate(crd);
+    if (!byCategory.has(category)) {
+      byCategory.set(category, new Map());
+    }
+    const monthMap = byCategory.get(category);
     monthMap.set(month, (monthMap.get(month) || 0) + Number(alloc.OrderedQty || 0));
   }
 
-  return monthMap;
-}
-
-function buildProductAllocationMap(filteredRows, startDate, endDate) {
-  const skuWhToProduct = new Map();
-  for (const row of filteredRows) {
-    skuWhToProduct.set(`${row.SKU}||${row.WH}`, row.ProductKey);
-  }
-
-  const productAlloc = new Map();
-  for (const alloc of vizState.allocations) {
-    const key = `${alloc.SKU}||${alloc.WH}`;
-    const productKey = skuWhToProduct.get(key);
-    if (!productKey) continue;
-
-    if (!alloc.CRDDate) continue;
-    const crd = new Date(`${alloc.CRDDate}T00:00:00`);
-    if (Number.isNaN(crd.getTime()) || crd < startDate || crd > endDate) continue;
-
-    productAlloc.set(productKey, (productAlloc.get(productKey) || 0) + Number(alloc.OrderedQty || 0));
-  }
-
-  return productAlloc;
+  return byCategory;
 }
 
 function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValueMap) {
@@ -488,7 +446,7 @@ function renderChartAndTable() {
     throw new Error("No transit date headers in selected date range.");
   }
 
-  const monthAllocMap = buildAllocationByMonth(filteredRows, filters, start, end);
+  const allocByCategory = buildAllocationByMonthAndCategory(filteredRows, start, end);
 
   const allSeries = [];
   let bucketLabels = [];
@@ -560,31 +518,41 @@ function renderChartAndTable() {
   }
 
   const bucketValueMap = new Map(bucketLabels.map((label, idx) => [label, bucketValuesForAllocRef[idx] || 0]));
-  const allocPlot = mapAllocationToBuckets(monthAllocMap, granularity, bucketLabels, bucketValueMap);
 
-  if (lineMode === "total" && allSeries.length) {
-    allSeries[0].markPoint = {
-      symbol: "pin",
-      symbolSize: 34,
-      data: allocPlot.markPoints,
-    };
+  const allocColors = {
+    PV: "rgba(255, 142, 52, 0.45)",
+    ESS: "rgba(129, 194, 255, 0.45)",
+    HP: "rgba(150, 230, 150, 0.45)",
+  };
+  const allocBorderColors = {
+    PV: "rgba(255, 186, 127, 0.95)",
+    ESS: "rgba(164, 216, 255, 0.95)",
+    HP: "rgba(192, 255, 192, 0.95)",
+  };
+
+  for (const category of ["PV", "ESS", "HP"]) {
+    const monthMap = allocByCategory.get(category) || new Map();
+    const allocPlot = mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValueMap);
+    const hasData = allocPlot.barData.some((x) => Number(x) !== 0);
+    if (!hasData) continue;
+
+    allSeries.push({
+      name: `To be allocated - ${category}`,
+      type: "bar",
+      stack: "alloc",
+      yAxisIndex: 1,
+      data: allocPlot.barData,
+      barMaxWidth: 22,
+      itemStyle: {
+        color: allocColors[category],
+        borderColor: allocBorderColors[category],
+        borderWidth: 1,
+        borderRadius: [4, 4, 0, 0],
+      },
+    });
   }
 
   const manyPoints = bucketLabels.length > 80;
-
-  allSeries.push({
-    name: "To be allocated (CRD month)",
-    type: "bar",
-    yAxisIndex: 1,
-    data: allocPlot.barData,
-    barMaxWidth: 22,
-    itemStyle: {
-      color: "rgba(255, 142, 52, 0.52)",
-      borderColor: "rgba(255, 186, 127, 0.95)",
-      borderWidth: 1,
-      borderRadius: [4, 4, 0, 0],
-    },
-  });
 
   chart.setOption({
     backgroundColor: "transparent",
@@ -970,7 +938,7 @@ run(
 function clearAllFilterSelections() {
   for (const def of levelDefs) {
     for (const opt of def.el.options) {
-      opt.selected = true;
+      opt.selected = false;
     }
   }
 }
@@ -998,6 +966,9 @@ for (let i = 0; i < levelDefs.length; i += 1) {
 
   def.el.addEventListener("change", () => {
     rebuildCascadeFrom(i + 1, true);
+    if (vizPanelEl.style.display !== "none") {
+      try { renderChartAndTable(); } catch (err) { setStatus(`Visualization failed: ${err?.message || err}`); }
+    }
   });
 }
 
