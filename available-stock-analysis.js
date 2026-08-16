@@ -246,7 +246,7 @@ function initializeCascadeFilters() {
   const firstOptions = buildOptionsForLevel(0, vizState.rows);
   setSelectOptions(levelDefs[0].el, firstOptions, new Set(), false);
 
-  rebuildCascadeFrom(1, true);
+  rebuildCascadeFrom(1, false);
 
   // Explicitly keep all filters unselected at initial load
   clearAllFilterSelections();
@@ -990,7 +990,7 @@ for (let i = 0; i < levelDefs.length; i += 1) {
   enableClickToggleMultiSelect(def.el);
 
   def.el.addEventListener("change", () => {
-    rebuildCascadeFrom(i + 1, true);
+    rebuildCascadeFrom(i + 1, false);
     if (vizPanelEl.style.display !== "none") {
       try { renderChartAndTable(); } catch (err) { setStatus(`Visualization failed: ${err?.message || err}`); }
     }
@@ -1008,7 +1008,7 @@ applyVizBtn.addEventListener("click", () => {
 clearFiltersBtn.addEventListener("click", () => {
   try {
     clearAllFilterSelections();
-    rebuildCascadeFrom(1, true);
+    rebuildCascadeFrom(1, false);
     renderChartAndTable();
   } catch (err) {
     setStatus(`Visualization failed: ${err?.message || err}`);
