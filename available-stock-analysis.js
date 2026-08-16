@@ -36,6 +36,14 @@ const vizState = {
   keyMeta: new Map(),
 };
 
+const levelDefs = [
+  { key: "WH", el: whFilterEl },
+  { key: "Category", el: categoryFilterEl },
+  { key: "ProductTCLReport", el: productReportFilterEl },
+  { key: "Family", el: familyFilterEl },
+  { key: "ProductKey", el: productFilterEl, labelKey: "ProductKeyLabel" },
+];
+
 function setStatus(text) {
   statusEl.textContent = text;
 }
@@ -46,12 +54,21 @@ function resetDownloadLink() {
   downloadLinkEl.removeAttribute("download");
 }
 
+function escapeHtml(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function selectedValues(selectEl) {
   return Array.from(selectEl.selectedOptions).map((opt) => opt.value);
 }
 
-function toSet(arr) {
-  return new Set(arr || []);
+function selectedSet(selectEl) {
+  return new Set(selectedValues(selectEl));
 }
 
 function fmtNumber(value) {
@@ -80,6 +97,53 @@ function weekLabelFromDate(dateObj) {
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+function getRowValueByLevel(row, def) {
+  if (def.key === "ProductKey") return row.ProductKey;
+  return row[def.key];
+}
+
+function getRowLabelByLevel(row, def) {
+  if (def.key === "ProductKey") return row[def.labelKey || "ProductKey"] || row.ProductKey;
+  return row[def.key];
+}
+
+function setSelectOptions(selectEl, options, selectedSetToKeep) {
+  const selected = selectedSetToKeep || new Set();
+  selectEl.innerHTML = options
+    .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
+    .join("");
+
+  for (const opt of selectEl.options) {
+    if (selected.has(opt.value)) {
+      opt.selected = true;
+    }
+  }
+
+  const hasSelected = Array.from(selectEl.options).some((opt) => opt.selected);
+  if (!hasSelected) {
+    for (const opt of selectEl.options) {
+      opt.selected = true;
+    }
+  }
+}
+
+function enableClickToggleMultiSelect(selectEl) {
+  selectEl.addEventListener("mousedown", (event) => {
+    if (!(event.target instanceof HTMLOptionElement)) return;
+    event.preventDefault();
+
+    const option = event.target;
+    option.selected = !option.selected;
+
+    if (!Array.from(selectEl.options).some((opt) => opt.selected)) {
+      option.selected = true;
+    }
+
+    selectEl.focus();
+    selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 async function loadPyodideRuntime() {
@@ -142,70 +206,91 @@ async function writeOptionalFile(fileInput, targetPath) {
   return targetPath;
 }
 
-function setOptions(selectEl, values) {
-  const oldSelected = new Set(selectedValues(selectEl));
-  const safeValues = Array.from(new Set(values.filter((v) => String(v).trim() !== ""))).sort((a, b) => String(a).localeCompare(String(b)));
-  selectEl.innerHTML = safeValues.map((value) => `<option value="${String(value).replace(/"/g, "&quot;")}">${value}</option>`).join("");
-  for (const opt of selectEl.options) {
-    if (oldSelected.has(opt.value)) {
+function rowsMatchingPrevLevels(levelIndex) {
+  let rows = vizState.rows;
+  for (let i = 0; i < levelIndex; i += 1) {
+    const def = levelDefs[i];
+    const set = selectedSet(def.el);
+    if (!set.size) continue;
+    rows = rows.filter((row) => set.has(String(getRowValueByLevel(row, def))));
+  }
+  return rows;
+}
+
+function buildOptionsForLevel(levelIndex, baseRows) {
+  const def = levelDefs[levelIndex];
+  const seen = new Map();
+
+  for (const row of baseRows) {
+    const value = String(getRowValueByLevel(row, def) || "").trim();
+    if (!value) continue;
+    const label = String(getRowLabelByLevel(row, def) || value).trim();
+    if (!seen.has(value)) {
+      seen.set(value, label);
+    }
+  }
+
+  return Array.from(seen.entries())
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([value, label]) => ({ value, label }));
+}
+
+function rebuildCascadeFrom(startLevelIndex) {
+  for (let levelIndex = startLevelIndex; levelIndex < levelDefs.length; levelIndex += 1) {
+    const def = levelDefs[levelIndex];
+    const before = selectedSet(def.el);
+    const baseRows = rowsMatchingPrevLevels(levelIndex);
+    const options = buildOptionsForLevel(levelIndex, baseRows);
+    setSelectOptions(def.el, options, before);
+  }
+}
+
+function initializeCascadeFilters() {
+  const firstOptions = buildOptionsForLevel(0, vizState.rows);
+  setSelectOptions(levelDefs[0].el, firstOptions, new Set());
+
+  for (const opt of levelDefs[0].el.options) {
+    opt.selected = true;
+  }
+
+  rebuildCascadeFrom(1);
+
+  for (let i = 1; i < levelDefs.length; i += 1) {
+    for (const opt of levelDefs[i].el.options) {
       opt.selected = true;
-    }
-  }
-}
-
-function matchByFilters(row, filters) {
-  if (filters.wh.size && !filters.wh.has(row.WH)) return false;
-  if (filters.category.size && !filters.category.has(row.Category)) return false;
-  if (filters.productReport.size && !filters.productReport.has(row.ProductTCLReport)) return false;
-  if (filters.family.size && !filters.family.has(row.Family)) return false;
-  if (filters.product.size && !filters.product.has(row.ProductKey)) return false;
-  return true;
-}
-
-function getDimensionFilterSets(withProduct = true) {
-  return {
-    wh: toSet(selectedValues(whFilterEl)),
-    category: toSet(selectedValues(categoryFilterEl)),
-    productReport: toSet(selectedValues(productReportFilterEl)),
-    family: toSet(selectedValues(familyFilterEl)),
-    product: withProduct ? toSet(selectedValues(productFilterEl)) : new Set(),
-  };
-}
-
-function refreshProductOptions() {
-  const filtersNoProduct = getDimensionFilterSets(false);
-  const candidates = vizState.rows.filter((row) => matchByFilters(row, filtersNoProduct));
-  const productValues = candidates.map((row) => row.ProductKeyLabel);
-
-  const prev = new Set(selectedValues(productFilterEl));
-  setOptions(productFilterEl, productValues);
-  if (prev.size === 0) {
-    for (const option of productFilterEl.options) {
-      option.selected = true;
-    }
-  }
-}
-
-function initFilters() {
-  setOptions(whFilterEl, vizState.rows.map((r) => r.WH));
-  setOptions(categoryFilterEl, vizState.rows.map((r) => r.Category));
-  setOptions(productReportFilterEl, vizState.rows.map((r) => r.ProductTCLReport));
-  setOptions(familyFilterEl, vizState.rows.map((r) => r.Family));
-  setOptions(productFilterEl, vizState.rows.map((r) => r.ProductKeyLabel));
-
-  for (const selectEl of [whFilterEl, categoryFilterEl, productReportFilterEl, familyFilterEl, productFilterEl]) {
-    for (const option of selectEl.options) {
-      option.selected = true;
     }
   }
 
   const validDates = vizState.dateHeaders.map(parseDateLabel).filter(Boolean);
   if (validDates.length) {
-    const min = validDates[0];
-    const max = validDates[validDates.length - 1];
-    vizStartEl.value = normalizeDateLabel(min);
-    vizEndEl.value = normalizeDateLabel(max);
+    vizStartEl.value = normalizeDateLabel(validDates[0]);
+    vizEndEl.value = normalizeDateLabel(validDates[validDates.length - 1]);
   }
+
+  if (!granularityEl.value) {
+    granularityEl.value = "week";
+  } else if (granularityEl.value === "day") {
+    granularityEl.value = "week";
+  }
+}
+
+function getFilterState() {
+  return {
+    wh: selectedSet(whFilterEl),
+    category: selectedSet(categoryFilterEl),
+    productReport: selectedSet(productReportFilterEl),
+    family: selectedSet(familyFilterEl),
+    product: selectedSet(productFilterEl),
+  };
+}
+
+function matchByFilters(row, filters) {
+  if (filters.wh.size && !filters.wh.has(String(row.WH))) return false;
+  if (filters.category.size && !filters.category.has(String(row.Category))) return false;
+  if (filters.productReport.size && !filters.productReport.has(String(row.ProductTCLReport))) return false;
+  if (filters.family.size && !filters.family.has(String(row.Family))) return false;
+  if (filters.product.size && !filters.product.has(String(row.ProductKey))) return false;
+  return true;
 }
 
 function parseVisualizationDateRange() {
@@ -228,7 +313,7 @@ function getDateHeadersInRange(start, end) {
 function buildBucketSeries(dailyMap, granularity) {
   if (granularity === "day") {
     const labels = Array.from(dailyMap.keys());
-    return { labels, values: labels.map((l) => dailyMap.get(l) || 0) };
+    return { labels, values: labels.map((label) => dailyMap.get(label) || 0) };
   }
 
   const bucketMap = new Map();
@@ -239,25 +324,24 @@ function buildBucketSeries(dailyMap, granularity) {
   }
 
   const labels = Array.from(bucketMap.keys());
-  return { labels, values: labels.map((k) => bucketMap.get(k) || 0) };
+  return { labels, values: labels.map((label) => bucketMap.get(label) || 0) };
 }
 
 function buildAllocationByMonth(filteredRows, filters, start, end) {
-  const selectedRowKeys = new Set(filteredRows.map((r) => `${r.SKU}||${r.WH}`));
-  const selectedProductKeys = filters.product;
-
+  const selectedRowKeys = new Set(filteredRows.map((row) => `${row.SKU}||${row.WH}`));
   const monthMap = new Map();
+
   for (const alloc of vizState.allocations) {
     const linkKey = `${alloc.SKU}||${alloc.WH}`;
     if (!selectedRowKeys.has(linkKey)) continue;
 
     const mappedMeta = vizState.keyMeta.get(linkKey);
     if (mappedMeta) {
-      if (filters.wh.size && !filters.wh.has(mappedMeta.WH)) continue;
-      if (filters.category.size && !filters.category.has(mappedMeta.Category)) continue;
-      if (filters.productReport.size && !filters.productReport.has(mappedMeta.ProductTCLReport)) continue;
-      if (filters.family.size && !filters.family.has(mappedMeta.Family)) continue;
-      if (selectedProductKeys.size && !selectedProductKeys.has(mappedMeta.ProductKey)) continue;
+      if (filters.wh.size && !filters.wh.has(String(mappedMeta.WH))) continue;
+      if (filters.category.size && !filters.category.has(String(mappedMeta.Category))) continue;
+      if (filters.productReport.size && !filters.productReport.has(String(mappedMeta.ProductTCLReport))) continue;
+      if (filters.family.size && !filters.family.has(String(mappedMeta.Family))) continue;
+      if (filters.product.size && !filters.product.has(String(mappedMeta.ProductKey))) continue;
     }
 
     if (!alloc.CRDDate) continue;
@@ -273,22 +357,18 @@ function buildAllocationByMonth(filteredRows, filters, start, end) {
 
 function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValueMap) {
   const barMap = new Map(bucketLabels.map((label) => [label, 0]));
-  const monthLabels = Array.from(monthMap.keys()).sort();
 
-  for (const month of monthLabels) {
-    const qty = monthMap.get(month) || 0;
+  for (const [month, qty] of monthMap.entries()) {
     let bucketLabel = null;
 
     if (granularity === "month") {
       bucketLabel = month;
     } else if (granularity === "week") {
       const [year, mon] = month.split("-").map(Number);
-      const monthEnd = new Date(year, mon, 0);
-      bucketLabel = weekLabelFromDate(monthEnd);
+      bucketLabel = weekLabelFromDate(new Date(year, mon, 0));
     } else {
       const [year, mon] = month.split("-").map(Number);
-      const monthEnd = new Date(year, mon, 0);
-      bucketLabel = normalizeDateLabel(monthEnd);
+      bucketLabel = normalizeDateLabel(new Date(year, mon, 0));
     }
 
     if (!barMap.has(bucketLabel)) continue;
@@ -307,14 +387,12 @@ function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValue
         color: "#ffd8b3",
         fontSize: 11,
       },
-      itemStyle: {
-        color: "#ff8b2c",
-      },
+      itemStyle: { color: "#ff8b2c" },
     });
   }
 
   return {
-    barData: bucketLabels.map((label) => Number(barMap.get(label) || 0).toFixed(3) * 1),
+    barData: bucketLabels.map((label) => Number(barMap.get(label) || 0)),
     markPoints,
   };
 }
@@ -326,14 +404,19 @@ function ensureChart() {
   }
 }
 
+function dayLabelShort(dayLabel) {
+  return dayLabel.slice(5);
+}
+
 function renderChartAndTable() {
-  const filters = getDimensionFilterSets(true);
+  const filters = getFilterState();
   const { start, end } = parseVisualizationDateRange();
   const granularity = granularityEl.value;
 
   const filteredRows = vizState.rows.filter((row) => matchByFilters(row, filters));
+  ensureChart();
+
   if (!filteredRows.length) {
-    ensureChart();
     chart.clear();
     chart.setOption({
       title: { text: "No data under current filters", left: "center", top: "middle", textStyle: { color: "#cddcff" } },
@@ -354,9 +437,9 @@ function renderChartAndTable() {
 
   const dailyMap = new Map();
   const dailyLabels = inRangeHeaders
-    .map((h) => parseDateLabel(h))
+    .map((header) => parseDateLabel(header))
     .filter(Boolean)
-    .map((d) => normalizeDateLabel(d));
+    .map((dateObj) => normalizeDateLabel(dateObj));
 
   for (const label of dailyLabels) {
     dailyMap.set(label, 0);
@@ -376,14 +459,16 @@ function renderChartAndTable() {
   const bucketSeries = buildBucketSeries(dailyMap, granularity);
   const bucketLabels = bucketSeries.labels;
   const bucketValues = bucketSeries.values;
-  const bucketValueMap = new Map(bucketLabels.map((l, idx) => [l, bucketValues[idx]]));
+  const bucketValueMap = new Map(bucketLabels.map((label, idx) => [label, bucketValues[idx]]));
 
   const monthAllocMap = buildAllocationByMonth(filteredRows, filters, start, end);
   const allocPlot = mapAllocationToBuckets(monthAllocMap, granularity, bucketLabels, bucketValueMap);
 
-  ensureChart();
+  const manyPoints = bucketLabels.length > 80;
+
   chart.setOption({
     backgroundColor: "transparent",
+    animation: false,
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "cross" },
@@ -396,12 +481,38 @@ function renderChartAndTable() {
       textStyle: { color: "#d7e5ff" },
       data: ["Available Stock", "To be allocated (CRD month)"],
     },
-    grid: { left: 58, right: 58, top: 56, bottom: 50 },
+    grid: { left: 62, right: 62, top: 62, bottom: 92 },
+    dataZoom: [
+      {
+        type: "inside",
+        xAxisIndex: 0,
+        start: 0,
+        end: 100,
+        filterMode: "none",
+      },
+      {
+        type: "slider",
+        xAxisIndex: 0,
+        bottom: 28,
+        height: 18,
+        start: manyPoints ? 70 : 0,
+        end: 100,
+        borderColor: "#34558f",
+        backgroundColor: "rgba(16,34,70,0.7)",
+        fillerColor: "rgba(92,160,255,0.32)",
+      },
+    ],
     xAxis: {
       type: "category",
+      boundaryGap: false,
       data: bucketLabels,
       axisLine: { lineStyle: { color: "#4e6ea5" } },
-      axisLabel: { color: "#b7cbf3" },
+      axisLabel: {
+        color: "#b7cbf3",
+        hideOverlap: true,
+        rotate: granularity === "day" ? 45 : 0,
+        formatter: (val) => (granularity === "day" ? dayLabelShort(val) : val),
+      },
     },
     yAxis: [
       {
@@ -426,8 +537,8 @@ function renderChartAndTable() {
         name: "Available Stock",
         type: "line",
         smooth: true,
-        symbol: "circle",
-        symbolSize: 6,
+        symbol: manyPoints ? "none" : "circle",
+        symbolSize: 5,
         data: bucketValues,
         lineStyle: { width: 3, color: "#5ca0ff" },
         itemStyle: { color: "#7fb4ff" },
@@ -459,10 +570,11 @@ function renderChartAndTable() {
     ],
   }, true);
 
-  renderDetailTable(filteredRows, inRangeHeaders, filters);
+  chart.resize();
+  renderDetailTable(filteredRows, inRangeHeaders);
 }
 
-function renderDetailTable(filteredRows, inRangeHeaders, filters) {
+function renderDetailTable(filteredRows, inRangeHeaders) {
   const productMap = new Map();
   for (const row of filteredRows) {
     const key = row.ProductKey;
@@ -473,8 +585,10 @@ function renderDetailTable(filteredRows, inRangeHeaders, filters) {
         transitByDate: {},
       });
     }
+
     const item = productMap.get(key);
     item.Stock += Number(row.Stock || 0);
+
     for (const dateHeader of inRangeHeaders) {
       const qty = Number(row.Transit?.[dateHeader] || 0);
       if (!qty) continue;
@@ -482,9 +596,9 @@ function renderDetailTable(filteredRows, inRangeHeaders, filters) {
     }
   }
 
-  const arrivalDateHeaders = inRangeHeaders.filter((h) => {
+  const arrivalDateHeaders = inRangeHeaders.filter((header) => {
     for (const item of productMap.values()) {
-      if (Number(item.transitByDate[h] || 0) !== 0) return true;
+      if (Number(item.transitByDate[header] || 0) !== 0) return true;
     }
     return false;
   });
@@ -500,15 +614,15 @@ function renderDetailTable(filteredRows, inRangeHeaders, filters) {
     "<tr>",
     "<th>Product (SKU | Model)</th>",
     "<th>In-stock</th>",
-    ...arrivalDateHeaders.map((d) => `<th>${d}</th>`),
+    ...arrivalDateHeaders.map((dateHeader) => `<th>${escapeHtml(dateHeader)}</th>`),
     "</tr>",
   ].join("");
 
   const bodyHtml = rows.map((item) => {
     const cells = [
-      `<td>${item.Product}</td>`,
+      `<td>${escapeHtml(item.Product)}</td>`,
       `<td>${fmtNumber(item.Stock)}</td>`,
-      ...arrivalDateHeaders.map((d) => `<td>${fmtNumber(item.transitByDate[d] || 0)}</td>`),
+      ...arrivalDateHeaders.map((dateHeader) => `<td>${fmtNumber(item.transitByDate[dateHeader] || 0)}</td>`),
     ];
     return `<tr>${cells.join("")}</tr>`;
   }).join("");
@@ -516,8 +630,8 @@ function renderDetailTable(filteredRows, inRangeHeaders, filters) {
   detailTableEl.innerHTML = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
 
   const totalStock = rows.reduce((sum, item) => sum + Number(item.Stock || 0), 0);
-  const totalTransit = arrivalDateHeaders.reduce((sum, header) => {
-    return sum + rows.reduce((inner, item) => inner + Number(item.transitByDate[header] || 0), 0);
+  const totalTransit = arrivalDateHeaders.reduce((sum, dateHeader) => {
+    return sum + rows.reduce((inner, item) => inner + Number(item.transitByDate[dateHeader] || 0), 0);
   }, 0);
 
   tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | Total In-stock: ${fmtNumber(totalStock)} | Total In-transit (shown columns): ${fmtNumber(totalTransit)}`;
@@ -739,11 +853,12 @@ run(
     setStatus("Done: stock file generated. Building visualization data...");
 
     await extractVisualizationData();
-    initFilters();
-    refreshProductOptions();
-    renderChartAndTable();
+    initializeCascadeFilters();
 
     vizPanelEl.style.display = "block";
+    renderChartAndTable();
+    setTimeout(() => chart && chart.resize(), 30);
+
     setStatus("Done: stock file generated and visualization is ready.");
   } catch (err) {
     setStatus(`Failed: ${err?.message || err}`);
@@ -754,8 +869,8 @@ run(
 }
 
 function clearAllFilterSelections() {
-  for (const el of [whFilterEl, categoryFilterEl, productReportFilterEl, familyFilterEl, productFilterEl]) {
-    for (const opt of el.options) {
+  for (const def of levelDefs) {
+    for (const opt of def.el.options) {
       opt.selected = true;
     }
   }
@@ -778,9 +893,12 @@ function resetForm() {
   setStatus("Reset complete. Upload files and run again.");
 }
 
-for (const el of [whFilterEl, categoryFilterEl, productReportFilterEl, familyFilterEl]) {
-  el.addEventListener("change", () => {
-    refreshProductOptions();
+for (let i = 0; i < levelDefs.length; i += 1) {
+  const def = levelDefs[i];
+  enableClickToggleMultiSelect(def.el);
+
+  def.el.addEventListener("change", () => {
+    rebuildCascadeFrom(i + 1);
   });
 }
 
@@ -793,8 +911,9 @@ applyVizBtn.addEventListener("click", () => {
 });
 
 clearFiltersBtn.addEventListener("click", () => {
-  clearAllFilterSelections();
   try {
+    clearAllFilterSelections();
+    rebuildCascadeFrom(1);
     renderChartAndTable();
   } catch (err) {
     setStatus(`Visualization failed: ${err?.message || err}`);
