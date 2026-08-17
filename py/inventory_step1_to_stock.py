@@ -119,7 +119,12 @@ def excluded_row(brand: Any, sales_org_name: Any, virtual_warehouse_name: Any) -
         return True
 
     sales_org = normalize_lower(sales_org_name)
-    if sales_org in {"china", "business planning department"}:
+    sales_org_compact = " ".join(sales_org.split())
+    if (
+        sales_org_compact == "china"
+        or "business planning departmen" in sales_org_compact
+        or "business planning department" in sales_org_compact
+    ):
         return True
 
     if "arrival plan" in normalize_lower(virtual_warehouse_name):
@@ -793,3 +798,4 @@ if __name__ == "__main__":
         transit_start_date=_parse_cli_date(args.transit_start),
         transit_end_date=_parse_cli_date(args.transit_end),
     )
+
