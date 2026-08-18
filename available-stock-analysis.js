@@ -494,6 +494,55 @@ function buildDailySeriesForProductRows(rows, inRangeHeaders) {
   return dailyMap;
 }
 
+
+function buildDailySeriesByTransitSource(rows, inRangeHeaders) {
+  const dailyLabels = inRangeHeaders
+    .map((header) => parseDateLabel(header))
+    .filter(Boolean)
+    .map((dateObj) => normalizeDateLabel(dateObj));
+
+  const invDsp = new Map();
+  const odp = new Map();
+  const mixed = new Map();
+  for (const label of dailyLabels) {
+    invDsp.set(label, 0);
+    odp.set(label, 0);
+    mixed.set(label, 0);
+  }
+
+  for (const row of rows) {
+    let runningInvDsp = 0;
+    let runningOdp = 0;
+    let runningMixed = 0;
+
+    for (const header of inRangeHeaders) {
+      const dateObj = parseDateLabel(header);
+      if (!dateObj) continue;
+      const dayLabel = normalizeDateLabel(dateObj);
+
+      const qty = Number(row.Transit?.[header] || 0);
+      const sourceTag = row.TransitSource?.[header] || SOURCE_TAG.INV_DSP;
+
+      if (qty) {
+        if (sourceTag === SOURCE_TAG.ODP) {
+          runningOdp += qty;
+        } else if (sourceTag === SOURCE_TAG.MIXED) {
+          runningMixed += qty;
+        } else {
+          runningInvDsp += qty;
+        }
+      }
+
+      invDsp.set(dayLabel, (invDsp.get(dayLabel) || 0) + runningInvDsp);
+      odp.set(dayLabel, (odp.get(dayLabel) || 0) + runningOdp);
+      mixed.set(dayLabel, (mixed.get(dayLabel) || 0) + runningMixed);
+    }
+  }
+
+  return { invDsp, odp, mixed };
+}
+
+
 function renderChartAndTable() {
   const filters = getFilterState();
   const { start, end } = parseVisualizationDateRange();
@@ -591,6 +640,32 @@ function renderChartAndTable() {
         ]),
       },
     });
+
+    const sourceDaily = buildDailySeriesByTransitSource(filteredRows, inRangeHeaders);
+    const sourceBucketInv = buildBucketSeries(sourceDaily.invDsp, granularity);
+    const sourceBucketOdp = buildBucketSeries(sourceDaily.odp, granularity);
+    const sourceBucketMixed = buildBucketSeries(sourceDaily.mixed, granularity);
+
+    const sourceLineDefs = [
+      { name: "Transit Source - Inventory/DSP", bucket: sourceBucketInv, color: "#7fc4ff" },
+      { name: "Transit Source - ODP", bucket: sourceBucketOdp, color: "#ffbb77" },
+      { name: "Transit Source - Mixed", bucket: sourceBucketMixed, color: "#c59dff" },
+    ];
+
+    for (const def of sourceLineDefs) {
+      const hasAny = (def.bucket.values || []).some((v) => Number(v || 0) !== 0);
+      if (!hasAny) continue;
+      allSeries.push({
+        name: def.name,
+        type: "line",
+        smooth: false,
+        symbol: "none",
+        data: def.bucket.values,
+        lineStyle: { width: 1.6, color: def.color, type: "dashed", opacity: 0.95 },
+        itemStyle: { color: def.color },
+        emphasis: { focus: "series" },
+      });
+    }
   }
 
   const bucketValueMap = new Map(bucketLabels.map((label, idx) => [label, bucketValuesForAllocRef[idx] || 0]));

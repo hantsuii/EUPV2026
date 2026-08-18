@@ -58,8 +58,32 @@
     .filters-grid option {
       padding: 2px 4px;
       white-space: nowrap;
+      color: #0a1b3f;
+      background: #f4f8ff;
     }
     .filters-grid .compact { min-height: auto; height: 42px; }
+    .filters-grid select.compact {
+      min-height: auto;
+      height: 42px;
+      font-weight: 700;
+      border-color: #5e83c9;
+      background: linear-gradient(180deg, #11326b 0%, #0c2451 100%);
+      color: #f5f9ff;
+    }
+    .filters-grid select.compact option {
+      color: #0b1d42;
+      background: #f4f8ff;
+    }
+    .filters-grid select.compact option:checked {
+      color: #ffffff;
+      background: #2f5fb8;
+    }
+    .filters-grid select:focus,
+    .filters-grid input:focus {
+      outline: none;
+      border-color: #7fb4ff;
+      box-shadow: 0 0 0 2px rgba(127, 180, 255, 0.25);
+    }
     .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
 
     .source-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
