@@ -9,6 +9,10 @@ const inventoryInput = document.getElementById("inventoryFile");
 const dailySupplyInput = document.getElementById("dailySupplyFile");
 const odpMasterInput = document.getElementById("odpMasterFile");
 const orderInput = document.getElementById("orderFile");
+const useRepoInventoryEl = document.getElementById("useRepoInventory");
+const useRepoDailySupplyEl = document.getElementById("useRepoDailySupply");
+const useRepoOdpMasterEl = document.getElementById("useRepoOdpMaster");
+const useRepoOrderfileEl = document.getElementById("useRepoOrderfile");
 const transitStartInput = document.getElementById("transitStart");
 const transitEndInput = document.getElementById("transitEnd");
 
@@ -35,6 +39,20 @@ const vizState = {
   allocations: [],
   dateHeaders: [],
   keyMeta: new Map(),
+  dateSourceTags: {},
+};
+
+const SOURCE_TAG = {
+  INV_DSP: "INV_DSP",
+  ODP: "ODP",
+  MIXED: "MIXED",
+};
+
+const DEFAULT_REPO_FILE = {
+  inventory: "./templates/default-files/inventory_step1.xlsx",
+  dailySupply: "./templates/default-files/daily_supply_plan.xlsx",
+  odpMaster: "./templates/default-files/eupv_odp_master.xlsx",
+  orderfile: "./templates/default-files/orderfile_base.xlsx",
 };
 
 const levelDefs = [
@@ -195,12 +213,53 @@ async function fetchTemplateBytes() {
   return new Uint8Array(buffer);
 }
 
-async function writeOptionalFile(fileInput, targetPath) {
-  const file = fileInput.files?.[0];
-  if (!file) return null;
-  const bytes = await readFileAsBytes(file);
-  pyodide.FS.writeFile(targetPath, bytes);
-  return targetPath;
+async function fetchRepoFileBytes(repoPath, label) {
+  const resp = await fetch(repoPath, { cache: "no-store" });
+  if (!resp.ok) {
+    throw new Error(`${label} repository default file not found: ${repoPath} (HTTP ${resp.status})`);
+  }
+  const buf = await resp.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+function sourceClassFromTag(tag) {
+  if (tag === SOURCE_TAG.ODP) return "src-odp";
+  if (tag === SOURCE_TAG.MIXED) return "src-mixed";
+  return "src-inv-dsp";
+}
+
+function mergeSourceTag(currentTag, incomingTag) {
+  if (!incomingTag) return currentTag || "";
+  if (!currentTag || currentTag === incomingTag) return incomingTag;
+  return SOURCE_TAG.MIXED;
+}
+
+async function resolveInputWorkbook({
+  fileInput,
+  useRepoDefault,
+  repoPath,
+  targetPath,
+  label,
+  required = false,
+}) {
+  const uploaded = fileInput?.files?.[0];
+  if (uploaded) {
+    const bytes = await readFileAsBytes(uploaded);
+    pyodide.FS.writeFile(targetPath, bytes);
+    return targetPath;
+  }
+
+  if (useRepoDefault) {
+    const bytes = await fetchRepoFileBytes(repoPath, label);
+    pyodide.FS.writeFile(targetPath, bytes);
+    return targetPath;
+  }
+
+  if (required) {
+    throw new Error(`Please upload required file: ${label}, or select repository default file.`);
+  }
+
+  return null;
 }
 
 function rowsMatchingPrevLevels(levelIndex) {
@@ -666,6 +725,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
         Product: row.ProductKeyLabel,
         Stock: 0,
         transitByDate: {},
+        sourceByDate: {},
         TransitTotal: 0,
       });
     }
@@ -677,6 +737,8 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
       const qty = Number(row.Transit?.[dateHeader] || 0);
       if (!qty) continue;
       item.transitByDate[dateHeader] = (item.transitByDate[dateHeader] || 0) + qty;
+      const sourceTag = row.TransitSource?.[dateHeader] || SOURCE_TAG.INV_DSP;
+      item.sourceByDate[dateHeader] = mergeSourceTag(item.sourceByDate[dateHeader], sourceTag);
       item.TransitTotal += qty;
     }
   }
@@ -715,7 +777,11 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
     "<th>In-transit (range)</th>",
     "<th>To be allocated</th>",
     "<th>Available Qty</th>",
-    ...arrivalDateHeaders.map((dateHeader) => `<th>${escapeHtml(dateHeader)}</th>`),
+    ...arrivalDateHeaders.map((dateHeader) => {
+      const sourceTag = vizState.dateSourceTags?.[dateHeader] || SOURCE_TAG.INV_DSP;
+      const className = `th-${sourceClassFromTag(sourceTag)}`;
+      return `<th class="${className}">${escapeHtml(dateHeader)}</th>`;
+    }),
     "</tr>",
   ].join("");
 
@@ -726,7 +792,11 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
       `<td>${fmtNumber(item.TransitTotal)}</td>`,
       `<td>${fmtNumber(item.Allocated)}</td>`,
       `<td>${fmtNumber(item.Available)}</td>`,
-      ...arrivalDateHeaders.map((dateHeader) => `<td>${fmtNumber(item.transitByDate[dateHeader] || 0)}</td>`),
+      ...arrivalDateHeaders.map((dateHeader) => {
+        const sourceTag = item.sourceByDate[dateHeader] || vizState.dateSourceTags?.[dateHeader] || SOURCE_TAG.INV_DSP;
+        const className = `td-${sourceClassFromTag(sourceTag)}`;
+        return `<td class="${className}">${fmtNumber(item.transitByDate[dateHeader] || 0)}</td>`;
+      }),
     ];
     return `<tr>${cells.join("")}</tr>`;
   }).join("");
@@ -738,7 +808,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   const totalAllocated = rows.reduce((sum, item) => sum + Number(item.Allocated || 0), 0);
   const totalAvailable = rows.reduce((sum, item) => sum + Number(item.Available || 0), 0);
 
-  tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | In-stock: ${fmtNumber(totalStock)} | In-transit: ${fmtNumber(totalTransit)} | To be allocated: ${fmtNumber(totalAllocated)} | Available Qty: ${fmtNumber(totalAvailable)}`;
+  tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | In-stock: ${fmtNumber(totalStock)} | In-transit: ${fmtNumber(totalTransit)} | To be allocated: ${fmtNumber(totalAllocated)} | Available Qty: ${fmtNumber(totalAvailable)} | Color tag: Blue=Inventory/Daily Supply, Orange=ODP, Purple=Mixed`;
 }
 
 async function extractVisualizationData() {
@@ -785,10 +855,33 @@ def _date_to_iso(value):
             pass
     return ""
 
+
+def _merge_tag(curr, incoming):
+    if not incoming:
+        return curr or ""
+    if not curr or curr == incoming:
+        return incoming
+    return "MIXED"
+
 wb = load_workbook('/work/stock_output.xlsx', data_only=True)
 ws = wb['stock']
 headers = [cell.value for cell in ws[1]]
 header_to_idx = {str(h).strip(): i for i, h in enumerate(headers) if h is not None}
+
+source_map = {}
+if '_Transit Source Map' in wb.sheetnames:
+    ws_src = wb['_Transit Source Map']
+    src_headers = [cell.value for cell in ws_src[1]]
+    src_idx = {str(h).strip(): i for i, h in enumerate(src_headers) if h is not None}
+    required_src = ["SKU", "WH", "Date", "Source"]
+    if all(c in src_idx for c in required_src):
+        for src_row in ws_src.iter_rows(min_row=2, values_only=True):
+            sku = _text(src_row[src_idx["SKU"]])
+            wh = _text(src_row[src_idx["WH"]])
+            d_header = _text(src_row[src_idx["Date"]])
+            source = _text(src_row[src_idx["Source"]])
+            if sku and wh and d_header and source:
+                source_map[f"{sku}||{wh}||{d_header}"] = source
 
 required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Stock"]
 for col in required:
@@ -810,6 +903,7 @@ for h in headers:
 
 rows = []
 key_meta = {}
+date_source_tags = {}
 for row in ws.iter_rows(min_row=2, values_only=True):
     sku = _text(row[header_to_idx['SKU']])
     wh = _text(row[header_to_idx['WH']])
@@ -817,10 +911,14 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         continue
 
     transit = {}
+    transit_source = {}
     for d in date_headers:
         qty = _num(row[header_to_idx[d]])
         if qty != 0:
             transit[d] = qty
+            src = source_map.get(f"{sku}||{wh}||{d}", "INV_DSP")
+            transit_source[d] = src
+            date_source_tags[d] = _merge_tag(date_source_tags.get(d), src)
 
     model = _text(row[header_to_idx['Model']])
     product_key = f"{sku}||{model}" if model else f"{sku}||"
@@ -837,6 +935,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         "ProductKeyLabel": product_label,
         "Stock": _num(row[header_to_idx['Stock']]),
         "Transit": transit,
+        "TransitSource": transit_source,
     }
     rows.append(item)
     key_meta[f"{sku}||{wh}"] = {
@@ -874,6 +973,7 @@ payload = {
     "rows": rows,
     "allocations": allocations,
     "keyMeta": key_meta,
+    "dateSourceTags": date_source_tags,
 }
 
 with open('/work/stock_vis.json', 'w', encoding='utf-8') as f:
@@ -887,34 +987,56 @@ with open('/work/stock_vis.json', 'w', encoding='utf-8') as f:
   vizState.rows = payload.rows || [];
   vizState.allocations = payload.allocations || [];
   vizState.keyMeta = new Map(Object.entries(payload.keyMeta || {}));
+  vizState.dateSourceTags = payload.dateSourceTags || {};
 }
 
 async function runAnalysis() {
   resetDownloadLink();
 
-  const inventoryFile = inventoryInput.files?.[0];
-  if (!inventoryFile) {
-    setStatus("Please upload required file: Inventory Step1.");
-    return;
-  }
-
   runBtn.disabled = true;
   try {
     await loadPyodideRuntime();
 
-    setStatus("Writing uploaded files...");
-    const inventoryBytes = await readFileAsBytes(inventoryFile);
+    setStatus("Preparing input files...");
     const stockTemplateBytes = await fetchTemplateBytes();
 
-    const inventoryPath = "/work/inventory_input.xlsx";
+    const inventoryPath = await resolveInputWorkbook({
+      fileInput: inventoryInput,
+      useRepoDefault: Boolean(useRepoInventoryEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.inventory,
+      targetPath: "/work/inventory_input.xlsx",
+      label: "Inventory Step1",
+      required: true,
+    });
+
     const outputPath = "/work/stock_output.xlsx";
 
-    pyodide.FS.writeFile(inventoryPath, inventoryBytes);
     pyodide.FS.writeFile(outputPath, stockTemplateBytes);
 
-    const dailySupplyPath = await writeOptionalFile(dailySupplyInput, "/work/daily_supply_plan.xlsx");
-    const odpMasterPath = await writeOptionalFile(odpMasterInput, "/work/odp_master.xlsx");
-    const orderPath = await writeOptionalFile(orderInput, "/work/order_file.xlsx");
+    const dailySupplyPath = await resolveInputWorkbook({
+      fileInput: dailySupplyInput,
+      useRepoDefault: Boolean(useRepoDailySupplyEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.dailySupply,
+      targetPath: "/work/daily_supply_plan.xlsx",
+      label: "DailySupplyPlan",
+      required: false,
+    });
+    const odpMasterPath = await resolveInputWorkbook({
+      fileInput: odpMasterInput,
+      useRepoDefault: Boolean(useRepoOdpMasterEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.odpMaster,
+      targetPath: "/work/odp_master.xlsx",
+      label: "EUPV ODP MASTER",
+      required: false,
+    });
+    const orderPath = await resolveInputWorkbook({
+      fileInput: orderInput,
+      useRepoDefault: Boolean(useRepoOrderfileEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.orderfile,
+      targetPath: "/work/order_file.xlsx",
+      label: "Orderfile Base",
+      required: false,
+    });
 
     const startDate = transitStartInput.value || "2026-08-01";
     const endDate = transitEndInput.value || "2026-12-31";
@@ -986,12 +1108,21 @@ function resetForm() {
   dailySupplyInput.value = "";
   odpMasterInput.value = "";
   orderInput.value = "";
+  if (useRepoInventoryEl) useRepoInventoryEl.checked = false;
+  if (useRepoDailySupplyEl) useRepoDailySupplyEl.checked = false;
+  if (useRepoOdpMasterEl) useRepoOdpMasterEl.checked = false;
+  if (useRepoOrderfileEl) useRepoOrderfileEl.checked = false;
   transitStartInput.value = "2026-08-01";
   transitEndInput.value = "2026-12-31";
   resetDownloadLink();
   vizPanelEl.style.display = "none";
   detailTableEl.innerHTML = "";
   tableSummaryEl.textContent = "No data.";
+  vizState.rows = [];
+  vizState.allocations = [];
+  vizState.dateHeaders = [];
+  vizState.keyMeta = new Map();
+  vizState.dateSourceTags = {};
   if (chart) {
     chart.clear();
   }

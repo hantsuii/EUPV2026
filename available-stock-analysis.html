@@ -41,6 +41,27 @@
     }
     .filters-grid .compact { min-height: auto; height: 42px; }
     .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
+    .source-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line-1);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #dce9ff;
+      background: #0f2246;
+    }
+    .source-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+    .dot-inv-dsp { background: rgba(82, 162, 255, 0.9); }
+    .dot-odp { background: rgba(255, 170, 92, 0.95); }
+    .dot-mixed { background: rgba(191, 149, 255, 0.95); }
+    .repo-opt { margin-top: 6px; font-size: 12px; color: var(--text-2); }
+    .repo-path { margin-top: 2px; font-size: 11px; color: var(--text-3); }
+    .th-src-inv-dsp, .td-src-inv-dsp { background: rgba(82, 162, 255, 0.2); }
+    .th-src-odp, .td-src-odp { background: rgba(255, 170, 92, 0.24); }
+    .th-src-mixed, .td-src-mixed { background: rgba(191, 149, 255, 0.22); }
     .chart-wrap {
       border: 1px solid var(--line-1);
       border-radius: 12px;
@@ -84,6 +105,8 @@
       text-align: left;
     }
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    .usage-list { margin: 0; padding-left: 18px; line-height: 1.55; color: var(--text-2); }
+    .usage-list li { margin: 5px 0; }
     @media (max-width: 1100px) {
       .filters-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
       .product-col, .controls-col { grid-column: span 2; }
@@ -109,18 +132,34 @@
         <div>
           <label for="inventoryFile">Inventory Step1 file (Required)</label>
           <input id="inventoryFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <div class="repo-opt">
+            <label><input id="useRepoInventory" type="checkbox" /> Use repository default file</label>
+            <div class="repo-path">Path: <code>./templates/default-files/inventory_step1.xlsx</code></div>
+          </div>
         </div>
         <div>
           <label for="dailySupplyFile">DailySupplyPlan (Optional)</label>
           <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <div class="repo-opt">
+            <label><input id="useRepoDailySupply" type="checkbox" /> Use repository default file</label>
+            <div class="repo-path">Path: <code>./templates/default-files/daily_supply_plan.xlsx</code></div>
+          </div>
         </div>
         <div>
           <label for="odpMasterFile">EUPV ODP MASTER (Optional)</label>
           <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <div class="repo-opt">
+            <label><input id="useRepoOdpMaster" type="checkbox" /> Use repository default file</label>
+            <div class="repo-path">Path: <code>./templates/default-files/eupv_odp_master.xlsx</code></div>
+          </div>
         </div>
         <div>
           <label for="orderFile">Orderfile_Base_Realtime (Optional, used for CRD allocation markers)</label>
           <input id="orderFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <div class="repo-opt">
+            <label><input id="useRepoOrderfile" type="checkbox" /> Use repository default file</label>
+            <div class="repo-path">Path: <code>./templates/default-files/orderfile_base.xlsx</code></div>
+          </div>
         </div>
         <div>
           <label for="transitStart">Transit Start</label>
@@ -149,6 +188,11 @@
       <h2>Step 2: Available Stock Visualization</h2>
       <p class="tip">Available Stock formula: <code>Stock + cumulative in-transit arrivals</code>. CRD-based <code>To be allocated</code> is marked on chart by month.</p>
       <p class="small-tip">Multi-select tip: click items directly to toggle select/unselect (no Ctrl needed).</p>
+      <div class="source-legend">
+        <span class="source-chip"><span class="source-dot dot-inv-dsp"></span> Inventory / Daily Supply Plan</span>
+        <span class="source-chip"><span class="source-dot dot-odp"></span> ODP file</span>
+        <span class="source-chip"><span class="source-dot dot-mixed"></span> Mixed (both sources)</span>
+      </div>
 
       <div class="filters-grid">
         <div>
@@ -206,6 +250,17 @@
       <div class="table-wrap">
         <div id="detailTable"></div>
       </div>
+    </section>
+
+    <section class="panel">
+      <h2>使用说明</h2>
+      <ul class="usage-list">
+        <li>Inventory 文件来自 NewArk - Inventory 模块 - Inventory List 导出。</li>
+        <li>Daily Supply Plan 文件来自 NewArk - Planning 模块 - Supply Plan - 选择起止月份 - 导出。</li>
+        <li>ODP 文件来自 SharePoint，请联系 Planning 或 PSR team 获取。</li>
+        <li>Orderfile Base 文件来自 NewArk - Report Center PV 模块 - Orderfile Base - 选择月份导出。</li>
+        <li>ODP 和 Orderfile Base 为可选文件。</li>
+      </ul>
     </section>
   </main>
 

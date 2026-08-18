@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 from collections import defaultdict
@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
 
 
 OUTPUT_SHEET_NAME = "stock"
@@ -14,6 +15,17 @@ SKU_SHEET_CANDIDATES = ["SKU", "SKU Mapping", "Legacy Mapping Product"]
 TRANSIT_START_DATE = date(2026, 8, 1)
 TRANSIT_END_DATE = date(2026, 12, 31)
 ALLOC_SHEET_NAME = "To be allocated"
+TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map"
+
+SOURCE_INV_DSP = "INV_DSP"
+SOURCE_ODP = "ODP"
+SOURCE_MIXED = "MIXED"
+
+CELL_FILL_BY_SOURCE = {
+    SOURCE_INV_DSP: PatternFill(fill_type="solid", fgColor="DDEBFF"),
+    SOURCE_ODP: PatternFill(fill_type="solid", fgColor="FFE8CC"),
+    SOURCE_MIXED: PatternFill(fill_type="solid", fgColor="EBDCFF"),
+}
 
 WH_CODE_MAP = {
     "SPNL": "NL",
@@ -197,6 +209,28 @@ def merge_transit_payload(
     for key, category in add_category.items():
         if key not in base_category and category:
             base_category[key] = category
+
+
+def normalize_source_tag(value: str) -> str:
+    text = normalize_text(value).upper()
+    if text == SOURCE_ODP:
+        return SOURCE_ODP
+    if text == SOURCE_MIXED:
+        return SOURCE_MIXED
+    return SOURCE_INV_DSP
+
+
+def merge_source_tag(curr: str, incoming: str) -> str:
+    if not incoming:
+        return normalize_source_tag(curr) if curr else ""
+    if not curr:
+        return normalize_source_tag(incoming)
+
+    curr_norm = normalize_source_tag(curr)
+    incoming_norm = normalize_source_tag(incoming)
+    if curr_norm == incoming_norm:
+        return curr_norm
+    return SOURCE_MIXED
 
 
 def extract_inventory_rows(inventory_path: Path) -> list[dict[str, Any]]:
@@ -465,6 +499,7 @@ def write_output_sheet(
     sku_lookup: dict[str, dict[str, Any]],
     transit_qty: dict[tuple[str, str, str], float] | None = None,
     transit_category: dict[tuple[str, str], str] | None = None,
+    transit_source_tag: dict[tuple[str, str, str], str] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = TRANSIT_START_DATE,
@@ -478,6 +513,9 @@ def write_output_sheet(
     if ALLOC_SHEET_NAME in wb.sheetnames:
         alloc_old = wb[ALLOC_SHEET_NAME]
         wb.remove(alloc_old)
+    if TRANSIT_SOURCE_SHEET_NAME in wb.sheetnames:
+        source_old = wb[TRANSIT_SOURCE_SHEET_NAME]
+        wb.remove(source_old)
     ws = wb.create_sheet(OUTPUT_SHEET_NAME)
 
     base_headers = [
@@ -533,8 +571,23 @@ def write_output_sheet(
 
     transit_qty = transit_qty or {}
     transit_category = transit_category or {}
+    transit_source_tag = transit_source_tag or {}
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
+
+    stock_col = header_col["Stock"]
+    ws.cell(1, stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]
+    for r in range(2, ws.max_row + 1):
+        ws.cell(r, stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]
+
+    date_source_summary: dict[str, str] = {}
+    for (_, _, d_header), src in transit_source_tag.items():
+        if d_header not in header_col:
+            continue
+        date_source_summary[d_header] = merge_source_tag(date_source_summary.get(d_header, ""), src)
+
+    for d_header, src in date_source_summary.items():
+        ws.cell(1, header_col[d_header]).fill = CELL_FILL_BY_SOURCE.get(normalize_source_tag(src), CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
 
     for (sku, wh, d_header), qty in transit_qty.items():
         if d_header not in header_col:
@@ -570,6 +623,8 @@ def write_output_sheet(
         col_num = header_col[d_header]
         current = safe_float(ws.cell(row_num, col_num).value)
         ws.cell(row_num, col_num).value = round(current + qty, 3)
+        source_tag = normalize_source_tag(transit_source_tag.get((sku, wh, d_header), SOURCE_INV_DSP))
+        ws.cell(row_num, col_num).fill = CELL_FILL_BY_SOURCE.get(source_tag, CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
 
     for r in range(2, ws.max_row + 1):
         sku_val = normalize_text(ws.cell(r, header_col["SKU"]).value)
@@ -641,6 +696,13 @@ def write_output_sheet(
             ]
         )
 
+    ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
+    ws_source.append(["SKU", "WH", "Date", "Source"])
+    for (sku, wh, d_header), src in sorted(transit_source_tag.items()):
+        if d_header not in header_col:
+            continue
+        ws_source.append([sku, wh, d_header, normalize_source_tag(src)])
+
     wb.save(stock_wb_path)
     wb.close()
 
@@ -674,6 +736,7 @@ def run(
 
     transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
+    transit_source_tag: dict[tuple[str, str, str], str] = {}
 
     if daily_supply_plan_path:
         d_qty, d_category = extract_transit_data(
@@ -682,6 +745,8 @@ def run(
             end_date=transit_end_date,
         )
         merge_transit_payload(transit_qty, transit_category, d_qty, d_category)
+        for key in d_qty:
+            transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_INV_DSP)
 
     if odp_master_path:
         o_qty, o_category = extract_odp_transit_data(
@@ -690,6 +755,8 @@ def run(
             end_date=transit_end_date,
         )
         merge_transit_payload(transit_qty, transit_category, o_qty, o_category)
+        for key in o_qty:
+            transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_ODP)
 
     allocated_orders: list[dict[str, Any]] = []
     allocated_need: dict[tuple[str, str], float] = defaultdict(float)
@@ -702,6 +769,7 @@ def run(
         sku_lookup,
         transit_qty=transit_qty,
         transit_category=transit_category,
+        transit_source_tag=transit_source_tag,
         allocated_orders=allocated_orders,
         allocated_need=allocated_need,
         start_date=transit_start_date,
