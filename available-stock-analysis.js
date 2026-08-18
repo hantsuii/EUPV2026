@@ -48,11 +48,11 @@ const SOURCE_TAG = {
   MIXED: "MIXED",
 };
 
-const DEFAULT_REPO_FOLDER = {
-  inventory: "./templates/inventory/",
-  dailySupply: "./templates/daily-supply-plan/",
-  odpMaster: "./templates/odp/",
-  orderfile: "./templates/orderfile-base/",
+const DEFAULT_REPO_FILE = {
+  inventory: "./templates/inventory.xlsx",
+  dailySupply: "./templates/daily_supply_plan.xlsx",
+  odpMaster: "./templates/odp.xlsx",
+  orderfile: "./templates/orderfile_base.xlsx",
 };
 
 const levelDefs = [
@@ -231,55 +231,6 @@ function ensureWorkbookIsXlsxZip(bytes, label) {
   }
 }
 
-function extractExcelLinksFromHtml(html, folderPath) {
-  const matches = Array.from(String(html || "").matchAll(/href=["']([^"']+\.(?:xlsx|xlsm))["']/gi));
-  const links = [];
-
-  for (const match of matches) {
-    const href = String(match[1] || "").trim();
-    if (!href) continue;
-
-    if (/^https?:\/\//i.test(href) || href.startsWith("/")) {
-      links.push(href);
-    } else {
-      links.push(`${folderPath}${href.replace(/^\.\//, "")}`);
-    }
-  }
-
-  return Array.from(new Set(links));
-}
-
-async function resolveRepoExcelPath(folderPath, label) {
-  const folderResp = await fetch(folderPath, { cache: "no-store" });
-  if (folderResp.ok) {
-    const contentType = String(folderResp.headers.get("content-type") || "").toLowerCase();
-    if (contentType.includes("text/html")) {
-      const html = await folderResp.text();
-      const candidates = extractExcelLinksFromHtml(html, folderPath);
-      if (candidates.length) return candidates[0];
-    }
-  }
-
-  const manifestPath = `${folderPath}index.json`;
-  const manifestResp = await fetch(manifestPath, { cache: "no-store" });
-  if (manifestResp.ok) {
-    try {
-      const arr = await manifestResp.json();
-      if (Array.isArray(arr)) {
-        const excel = arr.find((name) => /\.(xlsx|xlsm)$/i.test(String(name || "")));
-        if (excel) {
-          return `${folderPath}${String(excel).replace(/^\.\//, "")}`;
-        }
-      }
-    } catch (_) {
-      // ignore and continue
-    }
-  }
-
-  throw new Error(`${label} default file cannot be auto-discovered in ${folderPath}. Put one .xlsx/.xlsm in this folder, or add ${folderPath}index.json with file names.`);
-}
-
-
 function sourceClassFromTag(tag) {
   if (tag === SOURCE_TAG.ODP) return "src-odp";
   if (tag === SOURCE_TAG.MIXED) return "src-mixed";
@@ -295,7 +246,7 @@ function mergeSourceTag(currentTag, incomingTag) {
 async function resolveInputWorkbook({
   fileInput,
   useRepoDefault,
-  repoFolder,
+  repoPath,
   targetPath,
   label,
   required = false,
@@ -309,7 +260,6 @@ async function resolveInputWorkbook({
   }
 
   if (useRepoDefault) {
-    const repoPath = await resolveRepoExcelPath(repoFolder, label);
     const bytes = await fetchRepoFileBytes(repoPath, label);
     ensureWorkbookIsXlsxZip(bytes, label);
     pyodide.FS.writeFile(targetPath, bytes);
@@ -1064,7 +1014,7 @@ async function runAnalysis() {
     const inventoryPath = await resolveInputWorkbook({
       fileInput: inventoryInput,
       useRepoDefault: Boolean(useRepoInventoryEl?.checked),
-      repoFolder: DEFAULT_REPO_FOLDER.inventory,
+      repoPath: DEFAULT_REPO_FILE.inventory,
       targetPath: "/work/inventory_input.xlsx",
       label: "Inventory Step1",
       required: true,
@@ -1077,7 +1027,7 @@ async function runAnalysis() {
     const dailySupplyPath = await resolveInputWorkbook({
       fileInput: dailySupplyInput,
       useRepoDefault: Boolean(useRepoDailySupplyEl?.checked),
-      repoFolder: DEFAULT_REPO_FOLDER.dailySupply,
+      repoPath: DEFAULT_REPO_FILE.dailySupply,
       targetPath: "/work/daily_supply_plan.xlsx",
       label: "DailySupplyPlan",
       required: true,
@@ -1085,7 +1035,7 @@ async function runAnalysis() {
     const odpMasterPath = await resolveInputWorkbook({
       fileInput: odpMasterInput,
       useRepoDefault: Boolean(useRepoOdpMasterEl?.checked),
-      repoFolder: DEFAULT_REPO_FOLDER.odpMaster,
+      repoPath: DEFAULT_REPO_FILE.odpMaster,
       targetPath: "/work/odp_master.xlsx",
       label: "EUPV ODP MASTER",
       required: false,
@@ -1093,7 +1043,7 @@ async function runAnalysis() {
     const orderPath = await resolveInputWorkbook({
       fileInput: orderInput,
       useRepoDefault: Boolean(useRepoOrderfileEl?.checked),
-      repoFolder: DEFAULT_REPO_FOLDER.orderfile,
+      repoPath: DEFAULT_REPO_FILE.orderfile,
       targetPath: "/work/order_file.xlsx",
       label: "Orderfile Base",
       required: false,
