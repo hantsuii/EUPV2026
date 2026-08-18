@@ -153,17 +153,16 @@
 
     <section class="panel">
       <h2>Step 1: Generate Stock Output</h2>
-      <p class="tip">Template uses repository fixed file <code>./templates/stock_template.xlsx</code>.</p>
-      <div class="form-grid">
+            <div class="form-grid">
         <div>
-          <label for="inventoryFile">Inventory Step1 file (Required)</label>
+          <label for="inventoryFile">Inventory file (Required)</label>
           <input id="inventoryFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoInventory" type="checkbox" /> Use repository default file</label>
           </div>
         </div>
         <div>
-          <label for="dailySupplyFile">DailySupplyPlan file (Required)</label>
+          <label for="dailySupplyFile">Daily Supply Plan file (Required)</label>
           <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoDailySupply" type="checkbox" /> Use repository default file</label>
@@ -177,7 +176,7 @@
           </div>
         </div>
         <div>
-          <label for="orderFile">Orderfile_Base_Realtime (Optional, used for CRD allocation markers)</label>
+          <label for="orderFile">Orderfile Base Realtime (Optional)</label>
           <input id="orderFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoOrderfile" type="checkbox" /> Use repository default file</label>
