@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -6,6 +6,26 @@
   <title>Available Stock Analysis</title>
   <link rel="stylesheet" href="./style.css" />
   <style>
+    body {
+      background:
+        radial-gradient(1200px 420px at 50% -10%, rgba(95, 170, 255, 0.24), rgba(9, 20, 42, 0) 70%),
+        linear-gradient(180deg, #08162f 0%, #071227 100%);
+    }
+    .tool-wrap {
+      max-width: 1360px;
+    }
+    .hero {
+      margin-bottom: 14px;
+      border: 1px solid rgba(98, 136, 194, 0.34);
+      background: linear-gradient(180deg, rgba(18, 44, 86, 0.85), rgba(12, 30, 62, 0.85));
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+    }
+    .panel {
+      border: 1px solid rgba(98, 136, 194, 0.34);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+      background: linear-gradient(180deg, rgba(13, 32, 66, 0.86) 0%, rgba(10, 25, 52, 0.88) 100%);
+    }
+
     .viz-panel { margin-top: 18px; }
     .filters-grid {
       display: grid;
@@ -41,6 +61,7 @@
     }
     .filters-grid .compact { min-height: auto; height: 42px; }
     .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
+
     .source-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
     .source-chip {
       display: inline-flex;
@@ -57,11 +78,13 @@
     .dot-inv-dsp { background: rgba(82, 162, 255, 0.9); }
     .dot-odp { background: rgba(255, 170, 92, 0.95); }
     .dot-mixed { background: rgba(191, 149, 255, 0.95); }
+
     .repo-opt { margin-top: 6px; font-size: 12px; color: var(--text-2); }
-    .repo-path { margin-top: 2px; font-size: 11px; color: var(--text-3); }
+
     .th-src-inv-dsp, .td-src-inv-dsp { background: rgba(82, 162, 255, 0.2); }
     .th-src-odp, .td-src-odp { background: rgba(255, 170, 92, 0.24); }
     .th-src-mixed, .td-src-mixed { background: rgba(191, 149, 255, 0.22); }
+
     .chart-wrap {
       border: 1px solid var(--line-1);
       border-radius: 12px;
@@ -70,6 +93,7 @@
       margin-top: 8px;
     }
     #stockChart { width: 100%; height: 460px; }
+
     .table-wrap {
       margin-top: 12px;
       overflow: auto;
@@ -104,9 +128,11 @@
     .table-wrap th:nth-child(2) {
       text-align: left;
     }
+
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
-    .usage-list { margin: 0; padding-left: 18px; line-height: 1.55; color: var(--text-2); }
+    .usage-list { margin: 0; padding-left: 18px; line-height: 1.6; color: var(--text-2); }
     .usage-list li { margin: 5px 0; }
+
     @media (max-width: 1100px) {
       .filters-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
       .product-col, .controls-col { grid-column: span 2; }
@@ -127,38 +153,34 @@
 
     <section class="panel">
       <h2>Step 1: Generate Stock Output</h2>
-      <p class="tip">Template is fixed to repository file: <code>./templates/stock_template.xlsx</code>.</p>
+      <p class="tip">Template uses repository fixed file <code>./templates/stock_template.xlsx</code>.</p>
       <div class="form-grid">
         <div>
           <label for="inventoryFile">Inventory Step1 file (Required)</label>
-          <input id="inventoryFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <input id="inventoryFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoInventory" type="checkbox" /> Use repository default file</label>
-            <div class="repo-path">Path: <code>./templates/default-files/inventory_step1.xlsx</code></div>
           </div>
         </div>
         <div>
-          <label for="dailySupplyFile">DailySupplyPlan (Optional)</label>
-          <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <label for="dailySupplyFile">DailySupplyPlan file (Required)</label>
+          <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoDailySupply" type="checkbox" /> Use repository default file</label>
-            <div class="repo-path">Path: <code>./templates/default-files/daily_supply_plan.xlsx</code></div>
           </div>
         </div>
         <div>
           <label for="odpMasterFile">EUPV ODP MASTER (Optional)</label>
-          <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoOdpMaster" type="checkbox" /> Use repository default file</label>
-            <div class="repo-path">Path: <code>./templates/default-files/eupv_odp_master.xlsx</code></div>
           </div>
         </div>
         <div>
           <label for="orderFile">Orderfile_Base_Realtime (Optional, used for CRD allocation markers)</label>
-          <input id="orderFile" type="file" accept=".xlsx,.xlsm,.xls" />
+          <input id="orderFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
             <label><input id="useRepoOrderfile" type="checkbox" /> Use repository default file</label>
-            <div class="repo-path">Path: <code>./templates/default-files/orderfile_base.xlsx</code></div>
           </div>
         </div>
         <div>
@@ -253,13 +275,24 @@
     </section>
 
     <section class="panel">
-      <h2>使用说明</h2>
+      <h2>使用说明（中文）</h2>
       <ul class="usage-list">
-        <li>Inventory 文件来自 NewArk - Inventory 模块 - Inventory List 导出。</li>
-        <li>Daily Supply Plan 文件来自 NewArk - Planning 模块 - Supply Plan - 选择起止月份 - 导出。</li>
+        <li>Inventory 文件来自 NewArk-Inventory 模块-Inventory List 导出。</li>
+        <li>Daily Supply Plan 文件来自 NewArk-Planning 模块-Supply Plan-选择起止月份-导出。</li>
         <li>ODP 文件来自 SharePoint，请联系 Planning 或 PSR team 获取。</li>
-        <li>Orderfile Base 文件来自 NewArk - Report Center PV 模块 - Orderfile Base - 选择月份导出。</li>
-        <li>ODP 和 Orderfile Base 为可选文件。</li>
+        <li>Orderfile Base 文件来自 NewArk-Report Center PV 模块-Orderfile Base-选择月份导出。</li>
+        <li>Inventory 和 Daily Supply Plan 为必选文件；ODP 和 Orderfile Base 为可选文件。</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Instructions (English)</h2>
+      <ul class="usage-list">
+        <li>Inventory file comes from NewArk-Inventory module-Inventory List export.</li>
+        <li>Daily Supply Plan file comes from NewArk-Planning module-Supply Plan-select start and end months-export.</li>
+        <li>ODP file comes from SharePoint. Please contact the Planning or PSR team.</li>
+        <li>Orderfile Base file comes from NewArk-Report Center PV module-Orderfile Base-select month-export.</li>
+        <li>Inventory and Daily Supply Plan are required; ODP and Orderfile Base are optional.</li>
       </ul>
     </section>
   </main>

@@ -49,10 +49,10 @@ const SOURCE_TAG = {
 };
 
 const DEFAULT_REPO_FILE = {
-  inventory: "./templates/default-files/inventory_step1.xlsx",
-  dailySupply: "./templates/default-files/daily_supply_plan.xlsx",
-  odpMaster: "./templates/default-files/eupv_odp_master.xlsx",
-  orderfile: "./templates/default-files/orderfile_base.xlsx",
+  inventory: "./templates/inventory/inventory_step1.xlsx",
+  dailySupply: "./templates/daily-supply-plan/daily_supply_plan.xlsx",
+  odpMaster: "./templates/odp/eupv_odp_master.xlsx",
+  orderfile: "./templates/orderfile-base/orderfile_base.xlsx",
 };
 
 const levelDefs = [
@@ -222,6 +222,16 @@ async function fetchRepoFileBytes(repoPath, label) {
   return new Uint8Array(buf);
 }
 
+
+function ensureWorkbookIsXlsxZip(bytes, label) {
+  const b0 = Number(bytes?.[0] ?? -1);
+  const b1 = Number(bytes?.[1] ?? -1);
+  if (b0 !== 0x50 || b1 !== 0x4b) {
+    throw new Error(`${label} is not a valid .xlsx/.xlsm workbook (zip format). Please export again and upload .xlsx/.xlsm file.`);
+  }
+}
+
+
 function sourceClassFromTag(tag) {
   if (tag === SOURCE_TAG.ODP) return "src-odp";
   if (tag === SOURCE_TAG.MIXED) return "src-mixed";
@@ -245,12 +255,14 @@ async function resolveInputWorkbook({
   const uploaded = fileInput?.files?.[0];
   if (uploaded) {
     const bytes = await readFileAsBytes(uploaded);
+    ensureWorkbookIsXlsxZip(bytes, label);
     pyodide.FS.writeFile(targetPath, bytes);
     return targetPath;
   }
 
   if (useRepoDefault) {
     const bytes = await fetchRepoFileBytes(repoPath, label);
+    ensureWorkbookIsXlsxZip(bytes, label);
     pyodide.FS.writeFile(targetPath, bytes);
     return targetPath;
   }
@@ -1019,7 +1031,7 @@ async function runAnalysis() {
       repoPath: DEFAULT_REPO_FILE.dailySupply,
       targetPath: "/work/daily_supply_plan.xlsx",
       label: "DailySupplyPlan",
-      required: false,
+      required: true,
     });
     const odpMasterPath = await resolveInputWorkbook({
       fileInput: odpMasterInput,
