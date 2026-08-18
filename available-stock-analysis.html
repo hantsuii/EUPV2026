@@ -51,7 +51,7 @@
       line-height: 1.2;
     }
     #productFilter {
-      min-height: 148px;
+      min-height: 210px;
       font-size: 12px;
       letter-spacing: 0.1px;
     }
@@ -65,24 +65,24 @@
     .filters-grid select.compact {
       min-height: auto;
       height: 42px;
-      font-weight: 700;
-      border-color: #5e83c9;
-      background: linear-gradient(180deg, #11326b 0%, #0c2451 100%);
-      color: #f5f9ff;
+      font-weight: 600;
+      border-color: #4f6ea8;
+      background: linear-gradient(180deg, #0f2a58 0%, #0d244d 100%);
+      color: #e9f1ff;
     }
     .filters-grid select.compact option {
-      color: #0b1d42;
-      background: #f4f8ff;
+      color: #10264f;
+      background: #eef4ff;
     }
     .filters-grid select.compact option:checked {
-      color: #ffffff;
-      background: #2f5fb8;
+      color: #0f2a58;
+      background: #dce9ff;
     }
     .filters-grid select:focus,
     .filters-grid input:focus {
       outline: none;
-      border-color: #7fb4ff;
-      box-shadow: 0 0 0 2px rgba(127, 180, 255, 0.25);
+      border-color: #6f95d3;
+      box-shadow: 0 0 0 2px rgba(111, 149, 211, 0.18);
     }
     .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
 
@@ -241,23 +241,23 @@
 
       <div class="filters-grid">
         <div>
-          <label for="whFilter">WH (multi-select)</label>
+          <label for="whFilter">WH</label>
           <select id="whFilter" multiple></select>
         </div>
         <div>
-          <label for="categoryFilter">Category (multi-select)</label>
+          <label for="categoryFilter">Category</label>
           <select id="categoryFilter" multiple></select>
         </div>
         <div>
-          <label for="productReportFilter">Product TCL Report (multi-select)</label>
+          <label for="productReportFilter">Product TCL Report</label>
           <select id="productReportFilter" multiple></select>
         </div>
         <div>
-          <label for="familyFilter">Family (multi-select)</label>
+          <label for="familyFilter">Family</label>
           <select id="familyFilter" multiple></select>
         </div>
         <div class="product-col">
-          <label for="productFilter">Product (Model | SKU, multi-select)</label>
+          <label for="productFilter">Product (Model | SKU)</label>
           <select id="productFilter" multiple></select>
           <div class="small-tip">Tip: select dimensions first. Product items now show Model first for easier reading.</div>
         </div>
