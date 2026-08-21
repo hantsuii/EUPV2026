@@ -539,6 +539,16 @@ function buildDailySeriesForProductRows(rows, inRangeHeaders) {
 }
 
 
+function hasAnyActivityInRange(row, inRangeHeaders) {
+  if (Number(row.Stock || 0) !== 0) return true;
+  if (Number(row.ToBeAllocated || 0) !== 0) return true;
+  for (const header of inRangeHeaders) {
+    if (Number(row.Transit?.[header] || 0) !== 0) return true;
+  }
+  return false;
+}
+
+
 function buildDailySeriesByTransitSource(rows, inRangeHeaders) {
   const dailyLabels = inRangeHeaders
     .map((header) => parseDateLabel(header))
@@ -593,10 +603,10 @@ function renderChartAndTable() {
   const granularity = granularityEl.value;
   const lineMode = lineModeEl ? lineModeEl.value : "total";
 
-  const filteredRows = vizState.rows.filter((row) => matchByFilters(row, filters));
+  const matchedRows = vizState.rows.filter((row) => matchByFilters(row, filters));
   ensureChart();
 
-  if (!filteredRows.length) {
+  if (!matchedRows.length) {
     chart.clear();
     chart.setOption({
       title: { text: "No data under current filters", left: "center", top: "middle", textStyle: { color: "#cddcff" } },
@@ -615,7 +625,27 @@ function renderChartAndTable() {
     throw new Error("No transit date headers in selected date range.");
   }
 
-  const allocByModel = buildAllocationByMonthAndModel(filteredRows, start, end);
+  const analysisRows = matchedRows.filter((row) => hasAnyActivityInRange(row, inRangeHeaders));
+
+  if (!analysisRows.length) {
+    chart.clear();
+    chart.setOption({
+      title: { text: "No active stock/transit/allocation under current filters", left: "center", top: "middle", textStyle: { color: "#cddcff" } },
+      xAxis: { show: false },
+      yAxis: { show: false },
+      series: [],
+      backgroundColor: "transparent",
+    });
+    detailTableEl.innerHTML = "<div style='padding:10px;color:#cbdcff;'>No active detail rows.</div>";
+    tableSummaryEl.textContent = "All matched rows are zero-activity (Stock/Transit/To be allocated).";
+    return;
+  }
+
+  if (matchedRows.length > analysisRows.length) {
+    setStatus(`Visualization note: excluded ${matchedRows.length - analysisRows.length} zero-activity rows.`);
+  }
+
+  const allocByModel = buildAllocationByMonthAndModel(analysisRows, start, end);
 
   const allSeries = [];
   let bucketLabels = [];
@@ -623,7 +653,7 @@ function renderChartAndTable() {
 
   if (lineMode === "split") {
     const groups = new Map();
-    for (const row of filteredRows) {
+    for (const row of analysisRows) {
       const key = row.ProductKey;
       if (!groups.has(key)) {
         groups.set(key, { label: row.ProductKeyLabel, rows: [] });
@@ -662,8 +692,44 @@ function renderChartAndTable() {
         data: item.bucket.values,
       });
     }
+  } else if (lineMode === "warehouse") {
+    const groups = new Map();
+    for (const row of analysisRows) {
+      const key = row.WH || "Unknown";
+      if (!groups.has(key)) {
+        groups.set(key, { label: `WH ${key}`, rows: [] });
+      }
+      groups.get(key).rows.push(row);
+    }
+
+    const entries = Array.from(groups.entries()).map(([key, g]) => {
+      const daily = buildDailySeriesForProductRows(g.rows, inRangeHeaders);
+      const bucket = buildBucketSeries(daily, granularity);
+      const finalValue = bucket.values[bucket.values.length - 1] || 0;
+      return { key, label: g.label, bucket, finalValue };
+    });
+
+    entries.sort((a, b) => b.finalValue - a.finalValue);
+
+    if (!entries.length) {
+      throw new Error("No series available for warehouse mode.");
+    }
+
+    bucketLabels = entries[0].bucket.labels;
+    bucketValuesForAllocRef = entries[0].bucket.values;
+
+    for (const item of entries) {
+      allSeries.push({
+        name: item.label,
+        type: "line",
+        smooth: true,
+        symbol: item.bucket.labels.length > 70 ? "none" : "circle",
+        symbolSize: 4,
+        data: item.bucket.values,
+      });
+    }
   } else {
-    const daily = buildDailySeriesForProductRows(filteredRows, inRangeHeaders);
+    const daily = buildDailySeriesForProductRows(analysisRows, inRangeHeaders);
     const bucket = buildBucketSeries(daily, granularity);
     bucketLabels = bucket.labels;
     bucketValuesForAllocRef = bucket.values;
@@ -685,7 +751,7 @@ function renderChartAndTable() {
       },
     });
 
-    const sourceDaily = buildDailySeriesByTransitSource(filteredRows, inRangeHeaders);
+    const sourceDaily = buildDailySeriesByTransitSource(analysisRows, inRangeHeaders);
     const sourceBucketInv = buildBucketSeries(sourceDaily.invDsp, granularity);
     const sourceBucketOdp = buildBucketSeries(sourceDaily.odp, granularity);
     const sourceBucketMixed = buildBucketSeries(sourceDaily.mixed, granularity);
@@ -821,7 +887,7 @@ function renderChartAndTable() {
   }, true);
 
   chart.resize();
-  renderDetailTable(filteredRows, inRangeHeaders, start, end);
+  renderDetailTable(analysisRows, inRangeHeaders, start, end);
 }
 
 function buildProductAllocationMap(filteredRows, startDate, endDate) {
@@ -1013,7 +1079,7 @@ if '_Transit Source Map' in wb.sheetnames:
             if sku and wh and d_header and source:
                 source_map[f"{sku}||{wh}||{d_header}"] = source
 
-required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Stock"]
+required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Stock", "To be allocated"]
 for col in required:
     if col not in header_to_idx:
         raise ValueError(f"Missing expected column in stock sheet: {col}")
@@ -1040,6 +1106,15 @@ for row in ws.iter_rows(min_row=2, values_only=True):
     if not sku or not wh:
         continue
 
+    category = _text(row[header_to_idx['Category']])
+    product_report = _text(row[header_to_idx['Product TCL Report']])
+    family = _text(row[header_to_idx['Family']])
+    model = _text(row[header_to_idx['Model']])
+
+    marker = "sku not matched"
+    if any(v.lower() == marker for v in (category, product_report, family, model)):
+        continue
+
     transit = {}
     transit_source = {}
     for d in date_headers:
@@ -1050,20 +1125,20 @@ for row in ws.iter_rows(min_row=2, values_only=True):
             transit_source[d] = src
             date_source_tags[d] = _merge_tag(date_source_tags.get(d), src)
 
-    model = _text(row[header_to_idx['Model']])
     product_key = f"{sku}||{model}" if model else f"{sku}||"
     product_label = f"{model} | {sku}" if model else sku
 
     item = {
         "WH": wh,
-        "Category": _text(row[header_to_idx['Category']]),
-        "ProductTCLReport": _text(row[header_to_idx['Product TCL Report']]),
-        "Family": _text(row[header_to_idx['Family']]),
+        "Category": category,
+        "ProductTCLReport": product_report,
+        "Family": family,
         "SKU": sku,
         "Model": model,
         "ProductKey": product_key,
         "ProductKeyLabel": product_label,
         "Stock": _num(row[header_to_idx['Stock']]),
+        "ToBeAllocated": _num(row[header_to_idx['To be allocated']]),
         "Transit": transit,
         "TransitSource": transit_source,
     }
