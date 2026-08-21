@@ -6,24 +6,71 @@
   <title>Available Stock Analysis</title>
   <link rel="stylesheet" href="./style.css" />
   <style>
-    body {
+    body.light-ui {
+      --line-1: #c8d9f2;
+      --line-2: #aac5ec;
+      --text-1: #16345f;
+      --text-2: #2f4f7d;
+      --text-3: #56739f;
+      --brand: #3f8bff;
+      --brand-strong: #2f74db;
       background:
-        radial-gradient(1200px 420px at 50% -10%, rgba(95, 170, 255, 0.24), rgba(9, 20, 42, 0) 70%),
-        linear-gradient(180deg, #08162f 0%, #071227 100%);
+        radial-gradient(1200px 520px at 50% -12%, rgba(107, 180, 255, 0.28), rgba(232, 242, 255, 0) 72%),
+        linear-gradient(180deg, #f7fbff 0%, #edf5ff 52%, #eaf3ff 100%);
     }
     .tool-wrap {
       max-width: 1360px;
     }
     .hero {
       margin-bottom: 14px;
-      border: 1px solid rgba(98, 136, 194, 0.34);
-      background: linear-gradient(180deg, rgba(18, 44, 86, 0.85), rgba(12, 30, 62, 0.85));
-      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+      border: 1px solid #c9ddf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      box-shadow: 0 10px 24px rgba(52, 97, 161, 0.1);
     }
     .panel {
-      border: 1px solid rgba(98, 136, 194, 0.34);
-      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
-      background: linear-gradient(180deg, rgba(13, 32, 66, 0.86) 0%, rgba(10, 25, 52, 0.88) 100%);
+      border: 1px solid #c9ddf7;
+      box-shadow: 0 8px 20px rgba(52, 97, 161, 0.08);
+      background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+    }
+    .panel h2::before {
+      content: "*";
+      color: #4e8fd8;
+      margin-right: 8px;
+      font-size: 0.85em;
+      vertical-align: middle;
+    }
+    .hero p,
+    .tip,
+    .small-tip { color: #4f6f9d; }
+    input[type="file"],
+    input[type="date"],
+    .status {
+      background: #ffffff;
+      color: #2a4d7a;
+      border-color: #c5d9f4;
+    }
+    input[type="file"]::file-selector-button {
+      background: #dcecff;
+      color: #255488;
+    }
+    .btn-secondary {
+      background: #e2eefc;
+      color: #275384;
+    }
+    .btn-secondary:hover {
+      background: #d4e5fa;
+    }
+    .btn-link {
+      background: #edf4ff;
+      color: #28517f;
+    }
+    .btn-link:hover {
+      background: #dceafa;
+    }
+    code {
+      background: #edf5ff;
+      border-color: #c2d8f3;
+      color: #2a4f7d;
     }
 
     .viz-panel { margin-top: 18px; }
@@ -45,10 +92,11 @@
       border: 1px solid var(--line-1);
       border-radius: 10px;
       padding: 8px;
-      background: linear-gradient(180deg, #0c1d3f 0%, #0a1732 100%);
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
       color: var(--text-1);
       font-size: 13px;
       line-height: 1.2;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
     }
     #productFilter {
       min-height: 210px;
@@ -56,33 +104,72 @@
       letter-spacing: 0.1px;
     }
     .filters-grid option {
-      padding: 2px 4px;
+      padding: 4px 6px;
       white-space: nowrap;
-      color: #0a1b3f;
-      background: #f4f8ff;
+      color: #1d3e68;
+      background: #ffffff;
+    }
+    .filters-grid option:checked,
+    .filters-grid option[selected] {
+      color: #0f3d72;
+      background: linear-gradient(180deg, #cfe4ff 0%, #bad7ff 100%);
+      font-weight: 700;
     }
     .filters-grid .compact { min-height: auto; height: 42px; }
     .filters-grid select.compact {
       min-height: auto;
       height: 42px;
       font-weight: 600;
-      border-color: #4f6ea8;
-      background: linear-gradient(180deg, #0f2a58 0%, #0d244d 100%);
-      color: #e9f1ff;
+      border-color: #b6cfee;
+      background: linear-gradient(180deg, #ffffff 0%, #f2f8ff 100%);
+      color: #1f4674;
     }
     .filters-grid select.compact option {
-      color: #10264f;
-      background: #eef4ff;
+      color: #1f4674;
+      background: #ffffff;
     }
     .filters-grid select.compact option:checked {
-      color: #0f2a58;
-      background: #dce9ff;
+      color: #0f3d72;
+      background: #cee2ff;
+    }
+    .filters-grid select.has-selection {
+      border-color: #4b90ee;
+      background: linear-gradient(180deg, #fbfdff 0%, #ebf4ff 100%);
+      box-shadow: inset 0 0 0 1px rgba(75, 144, 238, 0.16);
     }
     .filters-grid select:focus,
     .filters-grid input:focus {
       outline: none;
-      border-color: #6f95d3;
-      box-shadow: 0 0 0 2px rgba(111, 149, 211, 0.18);
+      border-color: #5e9ef2;
+      box-shadow: 0 0 0 3px rgba(94, 158, 242, 0.22);
+    }
+    .selection-summary {
+      margin-top: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid #c8dcf6;
+      background: #f4f9ff;
+      color: #355783;
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .selection-summary.is-active {
+      border-color: #7eafe9;
+      background: #e8f2ff;
+      color: #1f4e84;
+      font-weight: 600;
+    }
+    .selection-summary::before {
+      content: "+ ";
+      color: #2f79d7;
+      font-weight: 700;
+    }
+    .selection-summary.is-empty::before {
+      content: "i ";
+      color: #7a9bc7;
     }
     .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
 
@@ -95,8 +182,8 @@
       border-radius: 999px;
       padding: 4px 10px;
       font-size: 12px;
-      color: #dce9ff;
-      background: #0f2246;
+      color: #2e4d79;
+      background: #f3f8ff;
     }
     .source-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
     .dot-inv-dsp { background: rgba(82, 162, 255, 0.9); }
@@ -112,7 +199,7 @@
     .chart-wrap {
       border: 1px solid var(--line-1);
       border-radius: 12px;
-      background: #0a1834;
+      background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
       padding: 8px;
       margin-top: 8px;
     }
@@ -123,7 +210,7 @@
       overflow: auto;
       border: 1px solid var(--line-1);
       border-radius: 12px;
-      background: #0a1834;
+      background: #ffffff;
       max-height: 460px;
     }
     .table-wrap table {
@@ -133,17 +220,18 @@
     }
     .table-wrap th,
     .table-wrap td {
-      border-bottom: 1px solid #1f3666;
+      border-bottom: 1px solid #dce8f9;
       padding: 8px 10px;
       font-size: 13px;
       white-space: nowrap;
       text-align: right;
+      color: #264b78;
     }
     .table-wrap th {
       position: sticky;
       top: 0;
-      background: #12264c;
-      color: #eaf2ff;
+      background: #edf4ff;
+      color: #274e7a;
       z-index: 2;
     }
     .table-wrap td:first-child,
@@ -154,6 +242,24 @@
     }
 
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    .label-with-icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #264b78;
+    }
+    .label-with-icon .icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 6px;
+      background: #e7f1ff;
+      color: #3d7fd3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      line-height: 1;
+    }
     .usage-list { margin: 0; padding-left: 18px; line-height: 1.6; color: var(--text-2); }
     .usage-list li { margin: 5px 0; }
 
@@ -168,7 +274,7 @@
     }
   </style>
 </head>
-<body>
+<body class="light-ui">
   <main class="tool-wrap">
     <header class="hero">
       <h1>Available Stock Analysis</h1>
@@ -241,24 +347,29 @@
 
       <div class="filters-grid">
         <div>
-          <label for="whFilter">WH</label>
+          <label for="whFilter" class="label-with-icon"><span class="icon">W</span>WH</label>
           <select id="whFilter" multiple></select>
+          <div id="whSelectionSummary" class="selection-summary is-empty">No condition selected</div>
         </div>
         <div>
-          <label for="categoryFilter">Category</label>
+          <label for="categoryFilter" class="label-with-icon"><span class="icon">C</span>Category</label>
           <select id="categoryFilter" multiple></select>
+          <div id="categorySelectionSummary" class="selection-summary is-empty">No condition selected</div>
         </div>
         <div>
-          <label for="productReportFilter">Product TCL Report</label>
+          <label for="productReportFilter" class="label-with-icon"><span class="icon">R</span>Product TCL Report</label>
           <select id="productReportFilter" multiple></select>
+          <div id="productReportSelectionSummary" class="selection-summary is-empty">No condition selected</div>
         </div>
         <div>
-          <label for="familyFilter">Family</label>
+          <label for="familyFilter" class="label-with-icon"><span class="icon">F</span>Family</label>
           <select id="familyFilter" multiple></select>
+          <div id="familySelectionSummary" class="selection-summary is-empty">No condition selected</div>
         </div>
         <div class="product-col">
-          <label for="productFilter">Product (Model | SKU)</label>
+          <label for="productFilter" class="label-with-icon"><span class="icon">P</span>Product (Model | SKU)</label>
           <select id="productFilter" multiple></select>
+          <div id="productSelectionSummary" class="selection-summary is-empty">No condition selected</div>
           <div class="small-tip">Tip: select dimensions first. Product items now show Model first for easier reading.</div>
         </div>
         <div>

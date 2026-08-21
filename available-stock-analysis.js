@@ -21,6 +21,11 @@ const categoryFilterEl = document.getElementById("categoryFilter");
 const productReportFilterEl = document.getElementById("productReportFilter");
 const familyFilterEl = document.getElementById("familyFilter");
 const productFilterEl = document.getElementById("productFilter");
+const whSelectionSummaryEl = document.getElementById("whSelectionSummary");
+const categorySelectionSummaryEl = document.getElementById("categorySelectionSummary");
+const productReportSelectionSummaryEl = document.getElementById("productReportSelectionSummary");
+const familySelectionSummaryEl = document.getElementById("familySelectionSummary");
+const productSelectionSummaryEl = document.getElementById("productSelectionSummary");
 const vizStartEl = document.getElementById("vizStart");
 const vizEndEl = document.getElementById("vizEnd");
 const granularityEl = document.getElementById("granularity");
@@ -159,6 +164,43 @@ function enableClickToggleMultiSelect(selectEl) {
     selectEl.focus();
     selectEl.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+function applySelectVisualState(selectEl) {
+  const selectedCount = selectEl?.selectedOptions?.length || 0;
+  selectEl.classList.toggle("has-selection", selectedCount > 0);
+}
+
+function updateSelectionSummary(selectEl, summaryEl) {
+  if (!summaryEl || !selectEl) return;
+  const labels = Array.from(selectEl.selectedOptions || []).map((opt) => String(opt.textContent || "").trim()).filter(Boolean);
+  if (!labels.length) {
+    summaryEl.textContent = "No condition selected";
+    summaryEl.classList.add("is-empty");
+    summaryEl.classList.remove("is-active");
+    return;
+  }
+
+  const preview = labels.slice(0, 2).join(" / ");
+  const suffix = labels.length > 2 ? ` +${labels.length - 2}` : "";
+  summaryEl.textContent = `${labels.length} selected: ${preview}${suffix}`;
+  summaryEl.classList.remove("is-empty");
+  summaryEl.classList.add("is-active");
+}
+
+const filterSummaryDefs = [
+  { selectEl: whFilterEl, summaryEl: whSelectionSummaryEl },
+  { selectEl: categoryFilterEl, summaryEl: categorySelectionSummaryEl },
+  { selectEl: productReportFilterEl, summaryEl: productReportSelectionSummaryEl },
+  { selectEl: familyFilterEl, summaryEl: familySelectionSummaryEl },
+  { selectEl: productFilterEl, summaryEl: productSelectionSummaryEl },
+];
+
+function refreshFilterSummaries() {
+  for (const def of filterSummaryDefs) {
+    applySelectVisualState(def.selectEl);
+    updateSelectionSummary(def.selectEl, def.summaryEl);
+  }
 }
 
 async function loadPyodideRuntime() {
@@ -309,6 +351,7 @@ function rebuildCascadeFrom(startLevelIndex, resetSelections = true) {
     const baseRows = rowsMatchingPrevLevels(levelIndex);
     const options = buildOptionsForLevel(levelIndex, baseRows);
     setSelectOptions(def.el, options, before, resetSelections);
+    applySelectVisualState(def.el);
   }
 }
 
@@ -320,6 +363,7 @@ function initializeCascadeFilters() {
 
   // Explicitly keep all filters unselected at initial load
   clearAllFilterSelections();
+  refreshFilterSummaries();
 
   const validDates = vizState.dateHeaders.map(parseDateLabel).filter(Boolean);
   if (validDates.length) {
@@ -720,13 +764,13 @@ function renderChartAndTable() {
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "cross" },
-      backgroundColor: "rgba(9, 18, 38, 0.95)",
-      borderColor: "#36578f",
-      textStyle: { color: "#e8f0ff" },
+      backgroundColor: "rgba(255, 255, 255, 0.96)",
+      borderColor: "#b8d2f0",
+      textStyle: { color: "#274b78" },
     },
     legend: {
       top: 8,
-      textStyle: { color: "#d7e5ff" },
+      textStyle: { color: "#2f527f" },
     },
     grid: { left: 62, right: 62, top: 62, bottom: 92 },
     dataZoom: [
@@ -738,18 +782,18 @@ function renderChartAndTable() {
         height: 18,
         start: manyPoints ? 70 : 0,
         end: 100,
-        borderColor: "#34558f",
-        backgroundColor: "rgba(16,34,70,0.7)",
-        fillerColor: "rgba(92,160,255,0.32)",
+        borderColor: "#b5cdeb",
+        backgroundColor: "rgba(233, 242, 255, 0.9)",
+        fillerColor: "rgba(92, 160, 255, 0.24)",
       },
     ],
     xAxis: {
       type: "category",
       boundaryGap: false,
       data: bucketLabels,
-      axisLine: { lineStyle: { color: "#4e6ea5" } },
+      axisLine: { lineStyle: { color: "#8bb0dd" } },
       axisLabel: {
-        color: "#b7cbf3",
+        color: "#50719f",
         hideOverlap: true,
         rotate: granularity === "day" ? 45 : 0,
         formatter: (val) => (granularity === "day" ? dayLabelShort(val) : val),
@@ -759,17 +803,17 @@ function renderChartAndTable() {
       {
         type: "value",
         name: "Available Stock",
-        nameTextStyle: { color: "#9fc0ff" },
-        axisLine: { lineStyle: { color: "#4e6ea5" } },
-        axisLabel: { color: "#b7cbf3" },
-        splitLine: { lineStyle: { color: "rgba(78,110,165,0.25)" } },
+        nameTextStyle: { color: "#4f79ad" },
+        axisLine: { lineStyle: { color: "#8bb0dd" } },
+        axisLabel: { color: "#50719f" },
+        splitLine: { lineStyle: { color: "rgba(132, 165, 208, 0.28)" } },
       },
       {
         type: "value",
         name: "To be allocated",
-        nameTextStyle: { color: "#ffc38d" },
-        axisLine: { lineStyle: { color: "#8a6238" } },
-        axisLabel: { color: "#ffd3a8" },
+        nameTextStyle: { color: "#c88034" },
+        axisLine: { lineStyle: { color: "#c8a177" } },
+        axisLabel: { color: "#c27c35" },
         splitLine: { show: false },
       },
     ],
@@ -1186,7 +1230,9 @@ function clearAllFilterSelections() {
     for (const opt of def.el.options) {
       opt.selected = false;
     }
+    applySelectVisualState(def.el);
   }
+  refreshFilterSummaries();
 }
 
 function resetForm() {
@@ -1221,6 +1267,7 @@ for (let i = 0; i < levelDefs.length; i += 1) {
 
   def.el.addEventListener("change", () => {
     rebuildCascadeFrom(i + 1, false);
+    refreshFilterSummaries();
     if (vizPanelEl.style.display !== "none") {
       try { renderChartAndTable(); } catch (err) { setStatus(`Visualization failed: ${err?.message || err}`); }
     }
