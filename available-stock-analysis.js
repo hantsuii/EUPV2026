@@ -1018,7 +1018,7 @@ for col in required:
     if col not in header_to_idx:
         raise ValueError(f"Missing expected column in stock sheet: {col}")
 
-base_set = set(required + ["Series", "Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW"])
+base_set = set(required + ["Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW"])
 
 date_headers = []
 for h in headers:

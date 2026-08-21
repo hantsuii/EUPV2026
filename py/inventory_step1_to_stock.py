@@ -20,6 +20,7 @@ TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map"
 SOURCE_INV_DSP = "INV_DSP"
 SOURCE_ODP = "ODP"
 SOURCE_MIXED = "MIXED"
+UNMATCHED_SKU_MARK = "SKU not matched"
 
 CELL_FILL_BY_SOURCE = {
     SOURCE_INV_DSP: PatternFill(fill_type="solid", fgColor="DDEBFF"),
@@ -45,6 +46,10 @@ def normalize_text(value: Any) -> str:
 
 def normalize_lower(value: Any) -> str:
     return normalize_text(value).lower()
+
+
+def normalize_sku_key(value: Any) -> str:
+    return normalize_text(value).upper()
 
 
 def safe_float(value: Any) -> float:
@@ -291,7 +296,15 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict
     headers = [cell.value for cell in ws[1]]
     idx = build_header_index(headers)
 
-    required = ["sku no.", "category", "pv category", "bins", "container loading", "product tcl report", "anaplan pl6"]
+    required = [
+        "sku no",
+        "product model",
+        "category",
+        "level2",
+        "level3",
+        "billable watts(w)",
+        "total pcs per 40hq container",
+    ]
     missing = [h for h in required if h not in idx]
     if missing:
         wb.close()
@@ -299,16 +312,16 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict
 
     lookup: dict[str, dict[str, Any]] = {}
     for row in ws.iter_rows(min_row=2, values_only=True):
-        sku = normalize_text(row[idx["sku no."]])
-        if not sku or sku in lookup:
+        sku_key = normalize_sku_key(row[idx["sku no"]])
+        if not sku_key or sku_key in lookup:
             continue
-        lookup[sku] = {
-            "Family": row[idx["category"]],
-            "Series": row[idx["pv category"]],
-            "Model": row[idx["anaplan pl6"]],
-            "Bin": row[idx["bins"]],
-            "MOQ": row[idx["container loading"]],
-            "Product TCL Report": row[idx["product tcl report"]],
+        lookup[sku_key] = {
+            "Category": normalize_text(row[idx["category"]]),
+            "Product TCL Report": normalize_text(row[idx["level2"]]),
+            "Family": normalize_text(row[idx["level3"]]),
+            "Model": normalize_text(row[idx["product model"]]),
+            "Bin": safe_float(row[idx["billable watts(w)"]]),
+            "MOQ": safe_float(row[idx["total pcs per 40hq container"]]),
         }
 
     wb.close()
@@ -523,7 +536,6 @@ def write_output_sheet(
         "Category",
         "Product TCL Report",
         "Family",
-        "Series",
         "SKU",
         "Model",
         "Bin",
@@ -539,15 +551,31 @@ def write_output_sheet(
     headers = base_headers + transit_headers
     ws.append(headers)
 
+    marked_rows_info: list[dict[str, str]] = []
+
+    def resolve_sku_mapping(sku: str) -> tuple[dict[str, Any], bool]:
+        mapped = sku_lookup.get(normalize_sku_key(sku))
+        if mapped:
+            return mapped, False
+        return {
+            "Category": UNMATCHED_SKU_MARK,
+            "Product TCL Report": UNMATCHED_SKU_MARK,
+            "Family": UNMATCHED_SKU_MARK,
+            "Model": UNMATCHED_SKU_MARK,
+            "Bin": 0,
+            "MOQ": 0,
+        }, True
+
     for item in rows:
-        mapped = sku_lookup.get(item["SKU"], {})
+        mapped, unmatched = resolve_sku_mapping(item["SKU"])
+        if unmatched:
+            marked_rows_info.append({"SKU": item["SKU"], "WH": item["WH"], "Reason": UNMATCHED_SKU_MARK})
         ws.append(
             [
                 item["WH"],
-                resolve_output_category(item.get("Category"), mapped.get("Family")),
+                mapped.get("Category"),
                 mapped.get("Product TCL Report"),
                 mapped.get("Family"),
-                mapped.get("Series"),
                 item["SKU"],
                 mapped.get("Model"),
                 mapped.get("Bin"),
@@ -595,16 +623,15 @@ def write_output_sheet(
 
         key = (sku, wh)
         if key not in row_by_key:
-            mapped = sku_lookup.get(sku, {})
-            category = transit_category.get(key, "")
-            resolved_category = resolve_output_category(category, mapped.get("Family"))
+            mapped, unmatched = resolve_sku_mapping(sku)
+            if unmatched:
+                marked_rows_info.append({"SKU": sku, "WH": wh, "Reason": UNMATCHED_SKU_MARK})
             ws.append(
                 [
                     wh,
-                    resolved_category,
+                    mapped.get("Category"),
                     mapped.get("Product TCL Report"),
                     mapped.get("Family"),
-                    mapped.get("Series"),
                     sku,
                     mapped.get("Model"),
                     mapped.get("Bin"),
@@ -647,37 +674,16 @@ def write_output_sheet(
         ws.cell(r, header_col["MW"]).value = round(mw, 3)
         ws.cell(r, header_col["Total MW"]).value = round(total_mw, 3)
 
-    before_cleanup_rows = ws.max_row - 1
-    deleted_rows_info: list[tuple[int, str, str, list[str]]] = []
-    for r in range(2, ws.max_row + 1):
-        sku_val = normalize_text(ws.cell(r, header_col["SKU"]).value)
-        wh_val = normalize_text(ws.cell(r, header_col["WH"]).value)
-        model_val = normalize_text(ws.cell(r, header_col["Model"]).value)
+    total_rows = ws.max_row - 1
 
-        reasons: list[str] = []
-        if not model_val:
-            reasons.append("Model empty")
-        if sku_val and sku_val not in sku_lookup:
-            reasons.append("SKU not matched")
-
-        if reasons:
-            deleted_rows_info.append((r, sku_val, wh_val, reasons))
-
-    for r, _, _, _ in reversed(deleted_rows_info):
-        ws.delete_rows(r, 1)
-
-    deleted_model_empty_count = sum(1 for _, _, _, reasons in deleted_rows_info if "Model empty" in reasons)
-    deleted_unmatched_sku_count = sum(1 for _, _, _, reasons in deleted_rows_info if "SKU not matched" in reasons)
-
-    deleted_row_samples: list[dict[str, Any]] = []
-    for _, sku_val, wh_val, reasons in deleted_rows_info[:20]:
-        deleted_row_samples.append(
-            {
-                "SKU": sku_val,
-                "WH": wh_val,
-                "Reason": "; ".join(reasons),
-            }
-        )
+    dedup_marked: list[dict[str, str]] = []
+    seen_marked: set[tuple[str, str]] = set()
+    for item in marked_rows_info:
+        key = (item.get("SKU", ""), item.get("WH", ""))
+        if key in seen_marked:
+            continue
+        seen_marked.add(key)
+        dedup_marked.append(item)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
     ws_alloc.append(["SKU", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
@@ -707,12 +713,9 @@ def write_output_sheet(
     wb.close()
 
     return {
-        "before_cleanup_rows": before_cleanup_rows,
-        "after_cleanup_rows": ws.max_row - 1,
-        "deleted_rows": len(deleted_rows_info),
-        "deleted_model_empty_rows": deleted_model_empty_count,
-        "deleted_unmatched_sku_rows": deleted_unmatched_sku_count,
-        "deleted_row_samples": deleted_row_samples,
+        "total_rows": total_rows,
+        "marked_unmatched_sku_rows": len(dedup_marked),
+        "marked_row_samples": dedup_marked[:20],
     }
 
 
@@ -789,10 +792,8 @@ def run(
         print(f"Transit date columns: {date_header(transit_start_date)} ~ {date_header(transit_end_date)}")
 
     print(
-        "Rows removed from stock sheet: "
-        f"total={run_summary['deleted_rows']}, "
-        f"model_empty={run_summary['deleted_model_empty_rows']}, "
-        f"sku_unmatched={run_summary['deleted_unmatched_sku_rows']}"
+        "Rows marked in stock sheet: "
+        f"sku_unmatched={run_summary['marked_unmatched_sku_rows']}"
     )
 
     log_lines: list[str] = [
@@ -801,11 +802,8 @@ def run(
         f"Output sheet: {OUTPUT_SHEET_NAME}",
         f"Inventory grouped rows: {len(inventory_rows)}",
         f"SKU mapping sheet: {resolved_sku_sheet}",
-        f"Rows before cleanup: {run_summary['before_cleanup_rows']}",
-        f"Rows after cleanup: {run_summary['after_cleanup_rows']}",
-        f"Rows removed (total): {run_summary['deleted_rows']}",
-        f"Rows removed (Model empty): {run_summary['deleted_model_empty_rows']}",
-        f"Rows removed (SKU unmatched): {run_summary['deleted_unmatched_sku_rows']}",
+        f"Rows in stock sheet: {run_summary['total_rows']}",
+        f"Rows marked (SKU unmatched): {run_summary['marked_unmatched_sku_rows']}",
     ]
 
     if daily_supply_plan_path:
@@ -817,15 +815,15 @@ def run(
     if daily_supply_plan_path or odp_master_path:
         log_lines.append(f"Transit date columns: {date_header(transit_start_date)} ~ {date_header(transit_end_date)}")
 
-    samples = run_summary.get("deleted_row_samples", [])
+    samples = run_summary.get("marked_row_samples", [])
     if samples:
-        log_lines.append("Deleted row samples (max 20):")
+        log_lines.append("Marked row samples (max 20):")
         for idx, sample in enumerate(samples, start=1):
             log_lines.append(
                 f"  {idx}. SKU={sample.get('SKU', '')}, WH={sample.get('WH', '')}, Reason={sample.get('Reason', '')}"
             )
     else:
-        log_lines.append("Deleted row samples: none")
+        log_lines.append("Marked row samples: none")
 
     log_path = stock_path.with_name(
         f"{stock_path.stem}_run_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
