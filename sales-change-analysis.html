@@ -1,26 +1,65 @@
 ﻿<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sales Multi-Dimension Analysis</title>
+  <title>销售分析看板（PV/ESS）</title>
   <link rel="stylesheet" href="./style.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
+    body.light-ui {
+      --line-1: #c8d9f2;
+      --line-2: #aac5ec;
+      --text-1: #16345f;
+      --text-2: #2f4f7d;
+      --text-3: #56739f;
+      --brand: #3f8bff;
+      --brand-strong: #2f74db;
+      background:
+        radial-gradient(1200px 520px at 50% -12%, rgba(107, 180, 255, 0.28), rgba(232, 242, 255, 0) 72%),
+        linear-gradient(180deg, #f7fbff 0%, #edf5ff 52%, #eaf3ff 100%);
+    }
     .tool-wrap { max-width: 1360px; }
     .hero {
       margin-bottom: 14px;
-      border: 1px solid #2a4376;
-      background: linear-gradient(180deg, #10224a 0%, #0f1d3c 100%);
+      border: 1px solid #c9ddf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      box-shadow: 0 10px 24px rgba(52, 97, 161, 0.1);
       border-radius: 14px;
       padding: 16px 18px;
     }
     .panel {
-      border: 1px solid #2a4376;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
-      background: linear-gradient(180deg, #10224a 0%, #0f1d3c 100%);
+      border: 1px solid #c9ddf7;
+      box-shadow: 0 8px 20px rgba(52, 97, 161, 0.08);
+      background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+      border-radius: 14px;
+      padding: 16px 18px;
     }
+
+    .hero p,
+    .tip,
+    .mini-tip { color: #4f6f9d; }
+
+    input[type="file"],
+    input[type="text"],
+    .status {
+      background: #ffffff;
+      color: #2a4d7a;
+      border-color: #c5d9f4;
+    }
+    input[type="file"]::file-selector-button {
+      background: #dcecff;
+      color: #255488;
+    }
+    .btn-link {
+      background: #edf4ff;
+      color: #28517f;
+    }
+    .btn-link:hover {
+      background: #dceafa;
+    }
+
     .source-choice {
       display: flex;
       gap: 14px;
@@ -50,10 +89,8 @@
       border: 1px solid var(--line-1);
       border-radius: 10px;
       padding: 10px;
-      background: #0b1937;
-      color: var(--text-1);
     }
-    .mini-tip { color: var(--text-3); font-size: 12px; margin-top: 6px; }
+    .mini-tip { font-size: 12px; margin-top: 6px; }
 
     .jump-wrap {
       display: flex;
@@ -62,9 +99,9 @@
       margin-bottom: 14px;
     }
     .jump-btn {
-      background: #1d3566;
-      color: #e9f1ff;
-      border: 1px solid #355997;
+      background: #e3efff;
+      color: #28507d;
+      border: 1px solid #bdd4f3;
       border-radius: 10px;
       padding: 8px 14px;
       cursor: pointer;
@@ -82,73 +119,101 @@
 
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
       margin-bottom: 12px;
     }
     .kpi-card {
-      background: #0b1934;
-      border: 1px solid #2f4f8a;
-      border-radius: 10px;
+      background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+      border: 1px solid #cddff6;
+      border-radius: 12px;
       padding: 12px;
+      box-shadow: 0 6px 16px rgba(76, 124, 185, 0.1);
     }
-    .kpi-name { color: #a8bfe6; font-size: 13px; margin-bottom: 6px; }
-    .kpi-value { font-size: 24px; font-weight: 700; }
+    .kpi-name { color: #5e7ea9; font-size: 13px; margin-bottom: 6px; }
+    .kpi-value { font-size: 29px; font-weight: 700; color: #1e4672; }
 
     .chart-box {
       margin-top: 10px;
-      border: 1px solid #2a4376;
-      border-radius: 10px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
       padding: 8px;
-      background: #0a1730;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     }
-    .chart { width: 100%; height: 360px; }
-    #trendByRegionChart { height: 430px; }
+    .chart { width: 100%; height: 380px; }
 
     .table-wrap {
       overflow: auto;
-      border: 1px solid #2a4376;
-      border-radius: 10px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
       margin-top: 10px;
-      max-height: 480px;
+      max-height: 420px;
+      background: #fff;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 1120px;
-      background: #0a1730;
+      min-width: 900px;
+      background: #fff;
+      color: #2a4d7a;
     }
     th, td {
-      border-bottom: 1px solid #213d70;
+      border-bottom: 1px solid #e4eefb;
       padding: 8px 10px;
       font-size: 13px;
       text-align: left;
       white-space: nowrap;
     }
     th {
-      background: #11264d;
+      background: #f3f8ff;
       position: sticky;
       top: 0;
       z-index: 1;
+      color: #2a4d7a;
     }
 
-    .summary-grid {
+    .region-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
       gap: 12px;
     }
+    .region-card {
+      background: #fff;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 6px 14px rgba(76, 124, 185, 0.1);
+      min-height: 174px;
+    }
+    .region-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1f4a7a;
+      margin: 0 0 8px;
+    }
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      border-bottom: 1px dashed #e1ecfa;
+      font-size: 13px;
+      color: #3f608c;
+    }
+    .metric-row:last-child { border-bottom: 0; }
+    .metric-label { color: #5f7da6; }
+    .metric-value { font-weight: 700; color: #1f4a7a; }
 
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
-      .summary-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
-<body>
+<body class="light-ui">
   <main class="tool-wrap">
     <header class="hero">
-      <h1>Sales Analysis · PV & ESS Multi-Dimension</h1>
-      <p>Keep one-click run, then view monthly-region detail, semiannual/quarter dashboard, and trend charts.</p>
+      <h1>销售分析看板（PV / ESS）</h1>
+      <p>统一库存分析模块风格，展示 2026 年至今总览与各区域看板。</p>
     </header>
 
     <section class="panel">
@@ -159,8 +224,8 @@
       <div style="margin-top:10px;">
         <label>Sales Workbook Source</label>
         <div class="source-choice">
-          <label><input type="radio" name="salesSource" value="upload" checked /> Upload local file</label>
-          <label><input type="radio" name="salesSource" value="repo" /> Use file from GitHub repository</label>
+          <label><input type="radio" name="salesSource" value="upload" checked /> 上传本地文件</label>
+          <label><input type="radio" name="salesSource" value="repo" /> 使用 GitHub 仓库文件</label>
         </div>
 
         <div id="uploadRow" class="form-grid" style="margin-top:6px;">
@@ -174,7 +239,7 @@
           <div style="flex:1; min-width:360px;">
             <label for="repoSalesPath">Repository file path</label>
             <input id="repoSalesPath" type="text" value="./templates/sales_workbook.xlsx" placeholder="./templates/sales_workbook.xlsx" />
-            <div class="mini-tip">Example: <code>./templates/sales_workbook.xlsx</code> or any workbook path tracked in your repository.</div>
+            <div class="mini-tip">例如：<code>./templates/sales_workbook.xlsx</code></div>
           </div>
         </div>
       </div>
@@ -182,36 +247,25 @@
       <div class="actions">
         <button id="runBtn" class="btn btn-primary">Run Analysis</button>
       </div>
-      <div id="status" class="status">Choose source and click "Run Analysis".</div>
+      <div id="status" class="status">请选择文件来源并点击 Run Analysis。</div>
     </section>
 
     <section class="panel">
       <div class="jump-wrap" id="jumpWrap">
-        <button class="jump-btn active" data-target="block-detail">1) Monthly × Region Detail</button>
-        <button class="jump-btn" data-target="block-dashboard">2) Half-Year / Quarter Dashboard</button>
-        <button class="jump-btn" data-target="block-charts">3) Trend Charts</button>
+        <button class="jump-btn active" data-target="block-total">总计 Dashboard</button>
+        <button class="jump-btn" data-target="block-region">各地区看板</button>
       </div>
 
-      <div id="block-detail" class="content-block active">
-        <h3>All Months · Each Region + Total (PV / ESS)</h3>
-        <div class="table-wrap"><table id="detailTable"></table></div>
+      <div id="block-total" class="content-block active">
+        <h3>2026 YTD 已开票总览（全地区）</h3>
+        <div id="totalKpiGrid" class="kpi-grid"></div>
+        <div class="table-wrap"><table id="periodTable"></table></div>
+        <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
       </div>
 
-      <div id="block-dashboard" class="content-block">
-        <h3>Quick Dashboard (Semiannual + Quarterly)</h3>
-        <div id="kpiGrid" class="kpi-grid"></div>
-        <div class="summary-grid">
-          <div class="table-wrap"><table id="halfyearTable"></table></div>
-          <div class="table-wrap"><table id="quarterTable"></table></div>
-        </div>
-      </div>
-
-      <div id="block-charts" class="content-block">
-        <h3>Change Trend View</h3>
-        <div class="chart-box"><div id="trendMonthlyChart" class="chart"></div></div>
-        <div class="chart-box"><div id="trendQuarterChart" class="chart"></div></div>
-        <div class="chart-box"><div id="trendHalfyearChart" class="chart"></div></div>
-        <div class="chart-box"><div id="trendByRegionChart" class="chart"></div></div>
+      <div id="block-region" class="content-block">
+        <h3>各地区看板（金额 / 数量 / BP达成率 / 同比 / ASP）</h3>
+        <div id="regionGrid" class="region-grid"></div>
       </div>
     </section>
   </main>

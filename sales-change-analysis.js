@@ -13,6 +13,7 @@ const REGION_MAP = {
   "Emerging Market": "Central and Eastern Europe Region",
 };
 
+const TARGET_YEAR = 2026;
 let normalizedRows = [];
 
 function setStatus(text) {
@@ -28,12 +29,12 @@ function hasValue(value) {
   return !(value == null || String(value).trim() === "");
 }
 
-function fmt(value) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n(value));
+function fmt(value, digit = 2) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: digit }).format(n(value));
 }
 
-function fmtInt(value) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n(value));
+function fmtWan(value, digit = 1) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: digit }).format(n(value) / 10000);
 }
 
 function escapeHtml(text) {
@@ -88,6 +89,13 @@ function halfyearKey(month) {
   return `${year}-H${half}`;
 }
 
+function isInvoiced(row, invoiceDate) {
+  if (invoiceDate) return true;
+  const s1 = String(row["Order Status2"] || "").toLowerCase();
+  const s2 = String(row["Order Status"] || "").toLowerCase();
+  return /invoice|invoiced|已开票|开票/.test(s1) || /invoice|invoiced|已开票|开票/.test(s2);
+}
+
 function normalizeRows(rawRows) {
   return rawRows
     .map((row) => {
@@ -110,58 +118,19 @@ function normalizeRows(rawRows) {
         categoryFlag === "HYBRID INVERTER";
 
       const essQty = amountNotEmpty && isEssType ? n(row["Ordered Qty"]) : 0;
+      const invoiceDate = parseExcelDate(row["Invoice Date"]);
 
       return {
         month,
         region: regionStd || "Unknown",
         amount,
-        amountNotEmpty,
         totalMw: n(row["Total MW"]),
         essQty,
         isEssType,
+        invoiced: isInvoiced(row, invoiceDate),
       };
     })
     .filter((row) => row.month !== "Unknown");
-}
-
-function table(elId, headers, rows) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-
-  const head = `<thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>`;
-  const bodyRows = rows.length
-    ? rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")
-    : `<tr><td colspan="${headers.length}">No data</td></tr>`;
-
-  el.innerHTML = `${head}<tbody>${bodyRows}</tbody>`;
-}
-
-function renderPlot(divId, traces, layout = {}) {
-  const el = document.getElementById(divId);
-  if (!el || !window.Plotly) return;
-
-  const baseLayout = {
-    paper_bgcolor: "#0a1730",
-    plot_bgcolor: "#0a1730",
-    font: { color: "#d9e6ff" },
-    margin: { l: 56, r: 40, t: 40, b: 64 },
-    legend: { orientation: "h", y: -0.25 },
-    xaxis: { gridcolor: "#243e70" },
-    yaxis: { gridcolor: "#243e70" },
-  };
-
-  window.Plotly.newPlot(divId, traces, { ...baseLayout, ...layout }, { responsive: true, displayModeBar: false });
-}
-
-function initAccumulator() {
-  return { pvAmount: 0, pvQty: 0, essAmount: 0, essQty: 0 };
-}
-
-function accumulate(target, source) {
-  target.pvAmount += source.pvAmount;
-  target.pvQty += source.pvQty;
-  target.essAmount += source.essAmount;
-  target.essQty += source.essQty;
 }
 
 function classifyRow(row) {
@@ -182,313 +151,224 @@ function classifyRow(row) {
   };
 }
 
-function sortedMonthList(rows) {
-  return [...new Set(rows.map((row) => row.month))].sort((a, b) => a.localeCompare(b));
+function initAccumulator() {
+  return { pvAmount: 0, pvQty: 0, essAmount: 0, essQty: 0 };
 }
 
-function buildAggregations(rows) {
-  const months = sortedMonthList(rows);
-  const regions = [...new Set(rows.map((row) => row.region))].sort((a, b) => a.localeCompare(b));
+function addMetric(target, metric) {
+  target.pvAmount += metric.pvAmount;
+  target.pvQty += metric.pvQty;
+  target.essAmount += metric.essAmount;
+  target.essQty += metric.essQty;
+}
 
-  const monthRegionMap = new Map();
-  const monthTotalMap = new Map();
+function totalAmount(metric) {
+  return n(metric.pvAmount) + n(metric.essAmount);
+}
 
-  rows.forEach((row) => {
-    const metric = classifyRow(row);
+function totalQty(metric) {
+  return n(metric.pvQty) + n(metric.essQty);
+}
 
-    const detailKey = `${row.month}||${row.region}`;
-    if (!monthRegionMap.has(detailKey)) monthRegionMap.set(detailKey, initAccumulator());
-    accumulate(monthRegionMap.get(detailKey), metric);
+function buildYtdRows(rows) {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const startMonth = `${TARGET_YEAR}-01`;
 
-    if (!monthTotalMap.has(row.month)) monthTotalMap.set(row.month, initAccumulator());
-    accumulate(monthTotalMap.get(row.month), metric);
-  });
+  return rows.filter((row) => row.invoiced && row.month >= startMonth && row.month <= currentMonth);
+}
 
-  const detailRows = [];
-  months.forEach((month) => {
-    regions.forEach((region) => {
-      const key = `${month}||${region}`;
-      const value = monthRegionMap.get(key) || initAccumulator();
-      detailRows.push({ month, region, ...value });
-    });
+function allMonthsFromJanToCurrent() {
+  const now = new Date();
+  const endMonth = now.getMonth() + 1;
+  const result = [];
+  for (let m = 1; m <= endMonth; m += 1) {
+    result.push(`${TARGET_YEAR}-${String(m).padStart(2, "0")}`);
+  }
+  return result;
+}
 
-    const total = monthTotalMap.get(month) || initAccumulator();
-    detailRows.push({ month, region: "Total", ...total });
-  });
-
+function aggregateByPeriod(ytdRows) {
+  const monthMap = new Map();
   const quarterMap = new Map();
-  const halfyearMap = new Map();
+  const halfMap = new Map();
+  const regionMap = new Map();
+  const grand = initAccumulator();
 
-  months.forEach((month) => {
-    const total = monthTotalMap.get(month) || initAccumulator();
-    const qKey = quarterKey(month);
-    const hKey = halfyearKey(month);
+  ytdRows.forEach((row) => {
+    const metric = classifyRow(row);
+    addMetric(grand, metric);
 
-    if (!quarterMap.has(qKey)) quarterMap.set(qKey, initAccumulator());
-    if (!halfyearMap.has(hKey)) halfyearMap.set(hKey, initAccumulator());
+    if (!monthMap.has(row.month)) monthMap.set(row.month, initAccumulator());
+    addMetric(monthMap.get(row.month), metric);
 
-    accumulate(quarterMap.get(qKey), total);
-    accumulate(halfyearMap.get(hKey), total);
+    const q = quarterKey(row.month);
+    if (!quarterMap.has(q)) quarterMap.set(q, initAccumulator());
+    addMetric(quarterMap.get(q), metric);
+
+    const h = halfyearKey(row.month);
+    if (!halfMap.has(h)) halfMap.set(h, initAccumulator());
+    addMetric(halfMap.get(h), metric);
+
+    if (!regionMap.has(row.region)) regionMap.set(row.region, initAccumulator());
+    addMetric(regionMap.get(row.region), metric);
   });
 
-  const quarterRows = [...quarterMap.entries()]
-    .map(([period, value]) => ({ period, ...value }))
-    .sort((a, b) => a.period.localeCompare(b.period));
+  return { monthMap, quarterMap, halfMap, regionMap, grand };
+}
 
-  const halfyearRows = [...halfyearMap.entries()]
-    .map(([period, value]) => ({ period, ...value }))
-    .sort((a, b) => a.period.localeCompare(b.period));
+function table(elId, headers, rows) {
+  const el = document.getElementById(elId);
+  if (!el) return;
 
-  return {
-    months,
-    regions,
-    detailRows,
-    quarterRows,
-    halfyearRows,
-    monthTotalMap,
+  const head = `<thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>`;
+  const bodyRows = rows.length
+    ? rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")
+    : `<tr><td colspan="${headers.length}">No data</td></tr>`;
+
+  el.innerHTML = `${head}<tbody>${bodyRows}</tbody>`;
+}
+
+function renderPlot(divId, traces, layout = {}) {
+  const el = document.getElementById(divId);
+  if (!el || !window.Plotly) return;
+
+  const baseLayout = {
+    paper_bgcolor: "#ffffff",
+    plot_bgcolor: "#ffffff",
+    font: { color: "#2e4f7a" },
+    margin: { l: 60, r: 50, t: 36, b: 58 },
+    legend: { orientation: "h", y: -0.25 },
+    xaxis: { gridcolor: "#e2ecf9", linecolor: "#d2e2f8" },
+    yaxis: { gridcolor: "#e2ecf9", linecolor: "#d2e2f8" },
   };
+
+  window.Plotly.newPlot(divId, traces, { ...baseLayout, ...layout }, { responsive: true, displayModeBar: false });
 }
 
-function metricTotalAmount(x) {
-  return n(x.pvAmount) + n(x.essAmount);
-}
+function renderTotalDashboard(agg) {
+  const totalKpiGrid = document.getElementById("totalKpiGrid");
+  const halfH1 = agg.halfMap.get(`${TARGET_YEAR}-H1`) || initAccumulator();
+  const halfH2 = agg.halfMap.get(`${TARGET_YEAR}-H2`) || initAccumulator();
 
-function metricTotalQty(x) {
-  return n(x.pvQty) + n(x.essQty);
-}
-
-function renderDetailTable(detailRows) {
-  table(
-    "detailTable",
-    [
-      "Month",
-      "Region",
-      "PV Sales Amount (Unit Price * Qty)",
-      "PV Sales Qty (Total MW)",
-      "ESS Sales Amount (Unit Price * Qty)",
-      "ESS Sales Qty (Ordered Qty)",
-      "Total Amount",
-      "Total Qty",
-    ],
-    detailRows.map((row) => [
-      escapeHtml(row.month),
-      escapeHtml(row.region),
-      fmt(row.pvAmount),
-      fmt(row.pvQty),
-      fmt(row.essAmount),
-      fmt(row.essQty),
-      fmt(metricTotalAmount(row)),
-      fmt(metricTotalQty(row)),
-    ])
-  );
-}
-
-function renderPeriodTable(tableId, title, rows) {
-  table(
-    tableId,
-    [
-      title,
-      "PV Amount",
-      "PV Qty",
-      "ESS Amount",
-      "ESS Qty",
-      "Total Amount",
-      "Total Qty",
-    ],
-    rows.map((row) => [
-      escapeHtml(row.period),
-      fmt(row.pvAmount),
-      fmt(row.pvQty),
-      fmt(row.essAmount),
-      fmt(row.essQty),
-      fmt(metricTotalAmount(row)),
-      fmt(metricTotalQty(row)),
-    ])
-  );
-}
-
-function renderKpis(months, regions, quarterRows, halfyearRows) {
-  const kpiGrid = document.getElementById("kpiGrid");
-  if (!kpiGrid) return;
-
-  const latestQuarter = quarterRows[quarterRows.length - 1] || null;
-  const latestHalfyear = halfyearRows[halfyearRows.length - 1] || null;
+  const q1 = agg.quarterMap.get(`${TARGET_YEAR}-Q1`) || initAccumulator();
+  const q2 = agg.quarterMap.get(`${TARGET_YEAR}-Q2`) || initAccumulator();
+  const q3 = agg.quarterMap.get(`${TARGET_YEAR}-Q3`) || initAccumulator();
+  const q4 = agg.quarterMap.get(`${TARGET_YEAR}-Q4`) || initAccumulator();
 
   const cards = [
-    { name: "Months Covered", value: fmtInt(months.length) },
-    { name: "Regions Covered", value: fmtInt(regions.length) },
-    { name: "Latest Quarter", value: latestQuarter ? latestQuarter.period : "-" },
-    { name: "Latest Quarter Total Amount", value: latestQuarter ? fmt(metricTotalAmount(latestQuarter)) : "-" },
-    { name: "Latest Half-Year", value: latestHalfyear ? latestHalfyear.period : "-" },
-    { name: "Latest Half-Year Total Amount", value: latestHalfyear ? fmt(metricTotalAmount(latestHalfyear)) : "-" },
-    { name: "Latest Quarter Total Qty", value: latestQuarter ? fmt(metricTotalQty(latestQuarter)) : "-" },
-    { name: "Latest Half-Year Total Qty", value: latestHalfyear ? fmt(metricTotalQty(latestHalfyear)) : "-" },
+    { name: `${TARGET_YEAR} YTD 已开票金额(万)`, value: fmtWan(totalAmount(agg.grand)) },
+    { name: `${TARGET_YEAR} YTD 已开票数量`, value: fmt(totalQty(agg.grand), 0) },
+    { name: `H1 金额(万)`, value: fmtWan(totalAmount(halfH1)) },
+    { name: `H1 数量`, value: fmt(totalQty(halfH1), 0) },
+    { name: `H2 金额(万)`, value: fmtWan(totalAmount(halfH2)) },
+    { name: `H2 数量`, value: fmt(totalQty(halfH2), 0) },
+    { name: `Q1 金额/数量`, value: `${fmtWan(totalAmount(q1))} / ${fmt(totalQty(q1), 0)}` },
+    { name: `Q2 金额/数量`, value: `${fmtWan(totalAmount(q2))} / ${fmt(totalQty(q2), 0)}` },
+    { name: `Q3 金额/数量`, value: `${fmtWan(totalAmount(q3))} / ${fmt(totalQty(q3), 0)}` },
+    { name: `Q4 金额/数量`, value: `${fmtWan(totalAmount(q4))} / ${fmt(totalQty(q4), 0)}` },
   ];
 
-  kpiGrid.innerHTML = cards
+  totalKpiGrid.innerHTML = cards
     .map((card) => `<div class="kpi-card"><div class="kpi-name">${escapeHtml(card.name)}</div><div class="kpi-value">${escapeHtml(String(card.value))}</div></div>`)
+    .join("");
+
+  const periodRows = [
+    { period: `${TARGET_YEAR}-H1`, data: halfH1 },
+    { period: `${TARGET_YEAR}-H2`, data: halfH2 },
+    { period: `${TARGET_YEAR}-Q1`, data: q1 },
+    { period: `${TARGET_YEAR}-Q2`, data: q2 },
+    { period: `${TARGET_YEAR}-Q3`, data: q3 },
+    { period: `${TARGET_YEAR}-Q4`, data: q4 },
+  ];
+
+  table(
+    "periodTable",
+    ["Period", "PV金额", "PV数量", "ESS金额", "ESS数量", "总金额(万)", "总数量"],
+    periodRows.map((row) => [
+      escapeHtml(row.period),
+      fmt(row.data.pvAmount),
+      fmt(row.data.pvQty, 0),
+      fmt(row.data.essAmount),
+      fmt(row.data.essQty, 0),
+      fmtWan(totalAmount(row.data)),
+      fmt(totalQty(row.data), 0),
+    ])
+  );
+
+  const monthAxis = allMonthsFromJanToCurrent();
+  const monthData = monthAxis.map((m) => agg.monthMap.get(m) || initAccumulator());
+
+  renderPlot(
+    "monthlyTrendChart",
+    [
+      {
+        x: monthAxis,
+        y: monthData.map((x) => totalAmount(x) / 10000),
+        type: "scatter",
+        mode: "lines+markers",
+        name: "当期值 金额(万)",
+        line: { color: "#4f8cff", width: 3 },
+        marker: { size: 6 },
+      },
+      {
+        x: monthAxis,
+        y: monthData.map((x) => totalQty(x)),
+        type: "scatter",
+        mode: "lines+markers",
+        name: "当期值 数量",
+        yaxis: "y2",
+        line: { color: "#b57bff", width: 3 },
+        marker: { size: 6 },
+      },
+    ],
+    {
+      title: `${TARGET_YEAR} 月度变化趋势`,
+      yaxis: { title: "金额(万)" },
+      yaxis2: { title: "数量", overlaying: "y", side: "right" },
+    }
+  );
+}
+
+function renderRegionDashboard(agg) {
+  const regionGrid = document.getElementById("regionGrid");
+  const regions = [...agg.regionMap.entries()]
+    .map(([region, metric]) => ({ region, metric }))
+    .sort((a, b) => totalAmount(b.metric) - totalAmount(a.metric));
+
+  if (!regions.length) {
+    regionGrid.innerHTML = '<div class="mini-tip">暂无 2026 YTD 已开票地区数据。</div>';
+    return;
+  }
+
+  regionGrid.innerHTML = regions
+    .map(({ region, metric }) => {
+      const amount = totalAmount(metric);
+      const qty = totalQty(metric);
+      const asp = qty > 0 ? amount / qty : null;
+
+      return `
+        <article class="region-card">
+          <h4 class="region-title">${escapeHtml(region)}</h4>
+          <div class="metric-row"><span class="metric-label">金额(万)</span><span class="metric-value">${fmtWan(amount)}</span></div>
+          <div class="metric-row"><span class="metric-label">数量</span><span class="metric-value">${fmt(qty, 0)}</span></div>
+          <div class="metric-row"><span class="metric-label">BP达成率</span><span class="metric-value">-</span></div>
+          <div class="metric-row"><span class="metric-label">同比</span><span class="metric-value">-</span></div>
+          <div class="metric-row"><span class="metric-label">ASP</span><span class="metric-value">${asp == null ? "-" : fmt(asp)}</span></div>
+        </article>
+      `;
+    })
     .join("");
 }
 
-function renderCharts(agg) {
-  const months = agg.months;
-  const monthTotals = months.map((month) => agg.monthTotalMap.get(month) || initAccumulator());
-
-  renderPlot(
-    "trendMonthlyChart",
-    [
-      {
-        x: months,
-        y: monthTotals.map((x) => x.pvAmount),
-        type: "scatter",
-        mode: "lines+markers",
-        name: "PV Amount",
-        line: { color: "#4f8cff", width: 3 },
-      },
-      {
-        x: months,
-        y: monthTotals.map((x) => x.essAmount),
-        type: "scatter",
-        mode: "lines+markers",
-        name: "ESS Amount",
-        line: { color: "#f6a13a", width: 3 },
-      },
-      {
-        x: months,
-        y: monthTotals.map((x) => x.pvQty),
-        type: "scatter",
-        mode: "lines+markers",
-        yaxis: "y2",
-        name: "PV Qty",
-        line: { color: "#5fd1b9", dash: "dot" },
-      },
-      {
-        x: months,
-        y: monthTotals.map((x) => x.essQty),
-        type: "scatter",
-        mode: "lines+markers",
-        yaxis: "y2",
-        name: "ESS Qty",
-        line: { color: "#d2c366", dash: "dot" },
-      },
-    ],
-    {
-      title: "Monthly Trend (All Regions Total)",
-      yaxis: { title: "Sales Amount" },
-      yaxis2: { title: "Sales Qty", overlaying: "y", side: "right" },
-    }
-  );
-
-  renderPlot(
-    "trendQuarterChart",
-    [
-      {
-        x: agg.quarterRows.map((x) => x.period),
-        y: agg.quarterRows.map((x) => x.pvAmount),
-        type: "bar",
-        name: "PV Amount",
-        marker: { color: "#4f8cff" },
-      },
-      {
-        x: agg.quarterRows.map((x) => x.period),
-        y: agg.quarterRows.map((x) => x.essAmount),
-        type: "bar",
-        name: "ESS Amount",
-        marker: { color: "#f6a13a" },
-      },
-      {
-        x: agg.quarterRows.map((x) => x.period),
-        y: agg.quarterRows.map((x) => metricTotalQty(x)),
-        type: "scatter",
-        mode: "lines+markers",
-        yaxis: "y2",
-        name: "Total Qty",
-        line: { color: "#5fd1b9", width: 2 },
-      },
-    ],
-    {
-      barmode: "group",
-      title: "Quarterly Sales Snapshot",
-      yaxis: { title: "Sales Amount" },
-      yaxis2: { title: "Total Qty", overlaying: "y", side: "right" },
-    }
-  );
-
-  renderPlot(
-    "trendHalfyearChart",
-    [
-      {
-        x: agg.halfyearRows.map((x) => x.period),
-        y: agg.halfyearRows.map((x) => x.pvAmount),
-        type: "bar",
-        name: "PV Amount",
-        marker: { color: "#4f8cff" },
-      },
-      {
-        x: agg.halfyearRows.map((x) => x.period),
-        y: agg.halfyearRows.map((x) => x.essAmount),
-        type: "bar",
-        name: "ESS Amount",
-        marker: { color: "#f6a13a" },
-      },
-      {
-        x: agg.halfyearRows.map((x) => x.period),
-        y: agg.halfyearRows.map((x) => metricTotalQty(x)),
-        type: "scatter",
-        mode: "lines+markers",
-        yaxis: "y2",
-        name: "Total Qty",
-        line: { color: "#d2c366", width: 2 },
-      },
-    ],
-    {
-      barmode: "group",
-      title: "Half-Year Sales Snapshot",
-      yaxis: { title: "Sales Amount" },
-      yaxis2: { title: "Total Qty", overlaying: "y", side: "right" },
-    }
-  );
-
-  const regionMonthlyMap = new Map();
-  normalizedRows.forEach((row) => {
-    const key = `${row.month}||${row.region}`;
-    regionMonthlyMap.set(key, (regionMonthlyMap.get(key) || 0) + classifyRow(row).pvAmount + classifyRow(row).essAmount);
-  });
-
-  const regionTotalAmountMap = new Map();
-  normalizedRows.forEach((row) => {
-    regionTotalAmountMap.set(row.region, (regionTotalAmountMap.get(row.region) || 0) + classifyRow(row).pvAmount + classifyRow(row).essAmount);
-  });
-
-  const topRegions = [...regionTotalAmountMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map((x) => x[0]);
-
-  const traces = topRegions.map((region) => ({
-    x: months,
-    y: months.map((month) => regionMonthlyMap.get(`${month}||${region}`) || 0),
-    type: "scatter",
-    mode: "lines+markers",
-    name: region,
-  }));
-
-  renderPlot("trendByRegionChart", traces, {
-    title: "Monthly Sales Amount Trend by Region (Top 6)",
-    yaxis: { title: "Sales Amount" },
-  });
-}
-
 function renderAll(rows) {
-  const agg = buildAggregations(rows);
+  const ytdRows = buildYtdRows(rows);
+  const agg = aggregateByPeriod(ytdRows);
 
-  renderDetailTable(agg.detailRows);
-  renderKpis(agg.months, agg.regions, agg.quarterRows, agg.halfyearRows);
-  renderPeriodTable("quarterTable", "Quarter", agg.quarterRows);
-  renderPeriodTable("halfyearTable", "Half-Year", agg.halfyearRows);
-  renderCharts(agg);
+  renderTotalDashboard(agg);
+  renderRegionDashboard(agg);
 
-  setStatus(`Done: ${rows.length} rows | ${agg.months.length} months | ${agg.regions.length} regions.`);
+  setStatus(`完成：${TARGET_YEAR} YTD 已开票 ${ytdRows.length} 行，地区 ${agg.regionMap.size} 个。`);
 }
 
 async function parseWorkbookFromArrayBuffer(buffer) {
@@ -503,24 +383,20 @@ async function loadWorkbookBySource() {
 
   if (selectedSource === "repo") {
     const repoPath = String(repoSalesPathEl.value || "").trim();
-    if (!repoPath) throw new Error("Please input a repository file path.");
+    if (!repoPath) throw new Error("请输入仓库文件路径。");
 
-    setStatus(`Loading repository file: ${repoPath}`);
+    setStatus(`读取仓库文件：${repoPath}`);
     const response = await fetch(repoPath, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Repository file not found: ${repoPath} (HTTP ${response.status})`);
-    }
+    if (!response.ok) throw new Error(`Repository file not found: ${repoPath} (HTTP ${response.status})`);
 
     const buffer = await response.arrayBuffer();
     return parseWorkbookFromArrayBuffer(buffer);
   }
 
   const file = fileEl.files?.[0];
-  if (!file) {
-    throw new Error("Please upload a sales workbook first.");
-  }
+  if (!file) throw new Error("请先上传销售工作簿文件。");
 
-  setStatus(`Reading uploaded file: ${file.name}`);
+  setStatus(`读取上传文件：${file.name}`);
   const buffer = await file.arrayBuffer();
   return parseWorkbookFromArrayBuffer(buffer);
 }
@@ -543,7 +419,6 @@ function bindJumpButtons() {
   wrap.querySelectorAll(".jump-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.target;
-
       wrap.querySelectorAll(".jump-btn").forEach((item) => item.classList.remove("active"));
       btn.classList.add("active");
 
@@ -562,13 +437,13 @@ runBtn.addEventListener("click", async () => {
     normalizedRows = normalizeRows(rawRows);
 
     if (!normalizedRows.length) {
-      setStatus("No valid rows found. Please check month/date columns in 'Order details'.");
+      setStatus("没有可用行，请检查 Order details 的日期字段。");
       return;
     }
 
     renderAll(normalizedRows);
   } catch (error) {
-    setStatus(`Failed: ${error.message || error}`);
+    setStatus(`失败：${error.message || error}`);
   }
 });
 
