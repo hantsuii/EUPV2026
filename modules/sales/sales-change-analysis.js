@@ -263,7 +263,8 @@ function normalizeRows(rawRows) {
     const isConfirm = status === "confirm";
 
     const revenue = n(row["Revenue EUR"]);
-    const upqNotEmpty = hasValue(row["Unit Price * Qty"]);
+    const upqValue = n(row["Unit Price * Qty"]);
+    const upqValid = hasValue(row["Unit Price * Qty"]) && upqValue !== 0;
 
     const category = String(row["Category"] || "").trim().toUpperCase();
     const tcl = String(row["TCL Report Product"] || "").trim().toUpperCase();
@@ -275,7 +276,7 @@ function normalizeRows(rawRows) {
 
     const essQtyEligible =
       isESS &&
-      upqNotEmpty &&
+      upqValid &&
       (
         mid === "HYBRID INVERTER" ||
         tcl === "ENERGY+_KIT GEN1" ||
@@ -675,6 +676,8 @@ bindSourceMode();
 bindJumpButtons();
 [incomeTypeSel, yearSel, quarterSel, monthSel].forEach(bindMultiSelectToggle);
 applyLanguage();
+
+
 
 
 

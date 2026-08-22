@@ -43,7 +43,10 @@ const MODULE_I18N = {
     zh: { name: "静态周报", desc: "直接托管的静态报告页面。", badge: "静态" },
     en: { name: "Static Weekly Report", desc: "Static report page hosted directly on Cloudflare Pages.", badge: "Static" },
   },
-  "#": {
+  "./modules/shipment/shipment-details-generator.html": {
+    zh: { name: "Shipment Details生成", desc: "基于 Shipment Details 与 PICKUP 文件生成 Processed_TCL 工作表。", badge: "交互" },
+    en: { name: "Shipment Details Generator", desc: "Generate Processed_TCL sheet from Shipment Details and PICKUP files.", badge: "Interactive" },
+  },  "#": {
     zh: { name: "更多模块", desc: "预留后续模块。", badge: "即将上线" },
     en: { name: "More Modules", desc: "Reserved placeholder for future modules.", badge: "Coming Soon" },
   },
@@ -110,4 +113,6 @@ applyHomeLanguage();
 renderModules().catch((err) => {
   document.getElementById("module-grid").innerHTML = `<p>${t("loadError")}${err}</p>`;
 });
+
+
 

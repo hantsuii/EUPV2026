@@ -21,6 +21,12 @@
                         "badge":  "Static"
                     },
                     {
+                        "name":  "Shipment Details生成",
+                        "desc":  "Generate Processed_TCL sheet from Shipment Details and PICKUP files.",
+                        "url":  "./modules/shipment/shipment-details-generator.html",
+                        "badge":  "Interactive"
+                    },
+                    {
                         "name":  "More Modules",
                         "desc":  "Reserved placeholder for future modules.",
                         "url":  "#",

@@ -1,0 +1,174 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shipment Details生成</title>
+  <link rel="stylesheet" href="../../style.css" />
+  <style>
+    body.light-ui {
+      --line-1: #c8d9f2;
+      --line-2: #aac5ec;
+      --text-1: #16345f;
+      --text-2: #2f4f7d;
+      --text-3: #56739f;
+      --brand: #3f8bff;
+      --brand-strong: #2f74db;
+      background:
+        radial-gradient(1200px 520px at 50% -12%, rgba(107, 180, 255, 0.28), rgba(232, 242, 255, 0) 72%),
+        linear-gradient(180deg, #f7fbff 0%, #edf5ff 52%, #eaf3ff 100%);
+    }
+    .tool-wrap { max-width: 1280px; }
+    .hero,
+    .panel {
+      border: 1px solid #c9ddf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      box-shadow: 0 8px 20px rgba(52, 97, 161, 0.08);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+    }
+    .hero p,
+    .tip { color: #4f6f9d; }
+    .form-grid { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
+    .fake-input {
+      width: 100%;
+      border: 1px solid #c5d9f4;
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+      color: #2a4d7a;
+      font-size: 14px;
+    }
+    .rule-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .rule-card {
+      background: #fff;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .rule-card h4 { margin: 0 0 8px; color: #1f4a7a; font-size: 16px; }
+    .rule-card ul { margin: 0; padding-left: 18px; color: #355b89; }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      margin-top: 10px;
+      background: #fff;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; color: #2a4d7a; }
+    th, td { border-bottom: 1px solid #e4eefb; padding: 8px 10px; text-align: left; font-size: 13px; }
+    th { background: #f3f8ff; }
+    code {
+      background: #edf5ff;
+      border: 1px solid #c2d8f3;
+      color: #2a4f7d;
+      border-radius: 7px;
+      padding: 1px 7px;
+    }
+  </style>
+</head>
+<body class="light-ui">
+  <main class="tool-wrap">
+    <header class="hero">
+      <h1>Shipment Details生成</h1>
+      <p>根据 <code>shipment_tcl_tool.py</code> 的规则：读取 Shipment Details + PICKUP 文件夹，匹配后写回指定工作表。</p>
+      <div class="actions">
+        <a class="btn-link" href="../../index.html">← Back to Home</a>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h3>输入参数</h3>
+      <div class="form-grid" style="margin-top:8px;">
+        <div>
+          <label>Shipment Details File</label>
+          <input class="fake-input" value="SHIPMENT DETAILS*.xlsx" readonly />
+          <div class="tip">对应脚本参数：<code>shipment_file</code></div>
+        </div>
+        <div>
+          <label>PICKUP Folder</label>
+          <input class="fake-input" value="PICKUP 文件夹路径" readonly />
+          <div class="tip">对应脚本参数：<code>pickup_folder</code></div>
+        </div>
+        <div>
+          <label>Output Sheet Name</label>
+          <input class="fake-input" value="Processed_TCL" readonly />
+          <div class="tip">对应脚本参数：<code>sheet_name</code></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>处理逻辑（来自 Python 文件）</h3>
+      <div class="rule-grid">
+        <article class="rule-card">
+          <h4>1) 读取与列名识别</h4>
+          <ul>
+            <li>Shipment Details 从首行读取表头。</li>
+            <li>PICKUP 文件自动尝试多种 header 行（6/5/7/...）。</li>
+            <li>按别名映射识别 TCL REF、B/L、SKU、Product、Container、Quantity、Pallets 等列。</li>
+          </ul>
+        </article>
+        <article class="rule-card">
+          <h4>2) Shipment 按 Pcs 展开</h4>
+          <ul>
+            <li><code>Pcs</code> 为正整数时拆成多行，每行 1。</li>
+            <li>保留原始件数到 <code>Container Nos</code>。</li>
+            <li>拆分序号写入 <code>??</code> 列。</li>
+          </ul>
+        </article>
+        <article class="rule-card">
+          <h4>3) 与 PICKUP 匹配</h4>
+          <ul>
+            <li>使用 4 键匹配：TCL REF + B/L + SKU + Product Name。</li>
+            <li>匹配成功回填：Container no / Quantity / Pallets。</li>
+            <li>每条 PICKUP 记录仅使用一次。</li>
+          </ul>
+        </article>
+        <article class="rule-card">
+          <h4>4) 写回工作簿</h4>
+          <ul>
+            <li>删除同名 sheet（若已存在），重建输出 sheet。</li>
+            <li>表头与单元格自动加边框、居中、列宽自适应。</li>
+            <li>写回原 Shipment Details 文件。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>输出字段布局</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>输出列名</th><th>来源</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>TCL REFERENCE NO.</td><td>Shipment Details</td></tr>
+            <tr><td>2</td><td>Pick Up Date</td><td>Shipment Details</td></tr>
+            <tr><td>3</td><td>Item no</td><td>Shipment Details</td></tr>
+            <tr><td>4</td><td>Product name</td><td>Shipment Details</td></tr>
+            <tr><td>5</td><td>Departure port</td><td>Shipment Details</td></tr>
+            <tr><td>6</td><td>Final Destination</td><td>Shipment Details</td></tr>
+            <tr><td>7</td><td>B/L no.</td><td>Shipment Details</td></tr>
+            <tr><td>8</td><td>Container no</td><td>PICKUP 匹配回填</td></tr>
+            <tr><td>9</td><td>ETD date</td><td>Shipment Details</td></tr>
+            <tr><td>10</td><td>ETA date</td><td>Shipment Details</td></tr>
+            <tr><td>11</td><td>Quantity</td><td>PICKUP 匹配回填</td></tr>
+            <tr><td>12</td><td>Pallets</td><td>PICKUP 匹配回填</td></tr>
+            <tr><td>13</td><td>Container Nos</td><td>Shipment Pcs 原始值</td></tr>
+            <tr><td>14</td><td>??</td><td>拆分序号</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tip" style="margin-top:10px;">当前页面用于规范展示输入/输出需求；正式执行仍由本地 Python 脚本完成。</p>
+    </section>
+  </main>
+</body>
+</html>
