@@ -28,6 +28,7 @@
       box-shadow: 0 10px 24px rgba(52, 97, 161, 0.1);
       border-radius: 14px;
       padding: 16px 18px;
+      position: relative;
     }
     .panel {
       border: 1px solid #c9ddf7;
@@ -35,6 +36,28 @@
       background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
       border-radius: 14px;
       padding: 16px 18px;
+    }
+
+    .lang-switch {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      display: inline-flex;
+      gap: 8px;
+    }
+    .lang-btn {
+      border: 1px solid #bdd4f3;
+      background: #e7f1ff;
+      color: #2d5685;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .lang-btn.active {
+      background: #3f8bff;
+      color: #fff;
+      border-color: #3f8bff;
     }
 
     .hero p,
@@ -56,9 +79,7 @@
       background: #edf4ff;
       color: #28517f;
     }
-    .btn-link:hover {
-      background: #dceafa;
-    }
+    .btn-link:hover { background: #dceafa; }
 
     .source-choice {
       display: flex;
@@ -119,10 +140,11 @@
 
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(5, minmax(180px, 1fr));
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
+    .kpi-grid.kpi-grid-4 { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
     .kpi-card {
       background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
       border: 1px solid #cddff6;
@@ -131,7 +153,14 @@
       box-shadow: 0 6px 16px rgba(76, 124, 185, 0.1);
     }
     .kpi-name { color: #5e7ea9; font-size: 13px; margin-bottom: 6px; }
-    .kpi-value { font-size: 29px; font-weight: 700; color: #1e4672; }
+    .kpi-value { font-size: 28px; font-weight: 700; color: #1e4672; }
+
+    .sub-title {
+      margin: 6px 0 8px;
+      color: #2a4f7c;
+      font-size: 18px;
+      font-weight: 700;
+    }
 
     .chart-box {
       margin-top: 10px;
@@ -153,7 +182,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 900px;
+      min-width: 860px;
       background: #fff;
       color: #2a4d7a;
     }
@@ -174,7 +203,7 @@
 
     .region-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 12px;
     }
     .region-card {
@@ -183,7 +212,7 @@
       border-radius: 12px;
       padding: 12px;
       box-shadow: 0 6px 14px rgba(76, 124, 185, 0.1);
-      min-height: 174px;
+      min-height: 220px;
     }
     .region-title {
       font-size: 20px;
@@ -204,6 +233,9 @@
     .metric-label { color: #5f7da6; }
     .metric-value { font-weight: 700; color: #1f4a7a; }
 
+    @media (max-width: 1180px) {
+      .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    }
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
     }
@@ -212,60 +244,72 @@
 <body class="light-ui">
   <main class="tool-wrap">
     <header class="hero">
-      <h1>销售分析看板（PV / ESS）</h1>
-      <p>统一库存分析模块风格，展示 2026 年至今总览与各区域看板。</p>
+      <div class="lang-switch">
+        <button id="langZh" class="lang-btn">中文</button>
+        <button id="langEn" class="lang-btn">EN</button>
+      </div>
+      <h1 data-i18n="pageTitle">销售分析看板（PV / ESS）</h1>
+      <p data-i18n="pageSubtitle">统一库存分析模块风格，展示 2026 年总览与各区域看板。</p>
     </header>
 
     <section class="panel">
       <div class="actions">
-        <a class="btn-link" href="./index.html">← Back to Home</a>
+        <a class="btn-link" href="./index.html" data-i18n="backHome">← 返回主页</a>
       </div>
 
       <div style="margin-top:10px;">
-        <label>Sales Workbook Source</label>
+        <label data-i18n="sourceLabel">Sales Workbook Source</label>
         <div class="source-choice">
-          <label><input type="radio" name="salesSource" value="upload" checked /> 上传本地文件</label>
-          <label><input type="radio" name="salesSource" value="repo" /> 使用 GitHub 仓库文件</label>
+          <label><input type="radio" name="salesSource" value="upload" checked /> <span data-i18n="sourceUpload">上传本地文件</span></label>
+          <label><input type="radio" name="salesSource" value="repo" /> <span data-i18n="sourceRepo">使用 GitHub 仓库文件</span></label>
         </div>
 
         <div id="uploadRow" class="form-grid" style="margin-top:6px;">
           <div>
-            <label for="salesFile">Upload Sales Workbook (.xlsx)</label>
+            <label for="salesFile" data-i18n="uploadLabel">上传 Sales 工作簿 (.xlsx)</label>
             <input id="salesFile" type="file" accept=".xlsx,.xls" />
           </div>
         </div>
 
         <div id="repoRow" class="repo-row">
           <div style="flex:1; min-width:360px;">
-            <label for="repoSalesPath">Repository file path</label>
+            <label for="repoSalesPath" data-i18n="repoPathLabel">仓库文件路径</label>
             <input id="repoSalesPath" type="text" value="./templates/sales_workbook.xlsx" placeholder="./templates/sales_workbook.xlsx" />
-            <div class="mini-tip">例如：<code>./templates/sales_workbook.xlsx</code></div>
+            <div class="mini-tip" data-i18n="repoPathTip">例如：./templates/sales_workbook.xlsx</div>
           </div>
         </div>
       </div>
 
       <div class="actions">
-        <button id="runBtn" class="btn btn-primary">Run Analysis</button>
+        <button id="runBtn" class="btn btn-primary" data-i18n="runBtn">运行分析</button>
       </div>
-      <div id="status" class="status">请选择文件来源并点击 Run Analysis。</div>
+      <div id="status" class="status" data-i18n="statusInit">请选择文件来源并点击运行。</div>
     </section>
 
     <section class="panel">
       <div class="jump-wrap" id="jumpWrap">
-        <button class="jump-btn active" data-target="block-total">总计 Dashboard</button>
-        <button class="jump-btn" data-target="block-region">各地区看板</button>
+        <button class="jump-btn active" data-target="block-total" data-i18n="tabTotal">总计 Dashboard</button>
+        <button class="jump-btn" data-target="block-region" data-i18n="tabRegion">各地区看板</button>
       </div>
 
       <div id="block-total" class="content-block active">
-        <h3>2026年总览</h3>
-        <div id="totalKpiGrid" class="kpi-grid"></div>
-        <div class="table-wrap"><table id="periodTable"></table></div>
+        <h3 data-i18n="overviewTitle">2026年总览</h3>
+
+        <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
+        <div id="yearKpiRow" class="kpi-grid"></div>
+
+        <div class="sub-title" data-i18n="row2Title">H1 开票指标</div>
+        <div id="h1KpiRow" class="kpi-grid kpi-grid-4"></div>
+
+        <div class="sub-title" data-i18n="row3Title">未结束季度进度（Q3 / Q4）</div>
+        <div class="table-wrap"><table id="quarterProgressTable"></table></div>
+
         <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
         <div class="chart-box"><div id="monthlyAspChart" class="chart"></div></div>
       </div>
 
       <div id="block-region" class="content-block">
-        <h3>各地区看板（总览 + 组件/储能销售明细）</h3>
+        <h3 data-i18n="regionTitle">各地区看板（总览 + 组件/储能销售明细）</h3>
         <div id="regionGrid" class="region-grid"></div>
       </div>
     </section>
@@ -274,5 +318,6 @@
   <script src="./sales-change-analysis.js"></script>
 </body>
 </html>
+
 
 

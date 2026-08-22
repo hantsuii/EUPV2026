@@ -1,29 +1,92 @@
-<!doctype html>
-<html lang="en">
+﻿<!doctype html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Business Analytics Portal</title>
   <link rel="stylesheet" href="./style.css" />
+  <style>
+    body.light-ui {
+      --line-1: #c8d9f2;
+      --line-2: #aac5ec;
+      --text-1: #16345f;
+      --text-2: #2f4f7d;
+      --text-3: #56739f;
+      --brand: #3f8bff;
+      --brand-strong: #2f74db;
+      background:
+        radial-gradient(1200px 520px at 50% -12%, rgba(107, 180, 255, 0.28), rgba(232, 242, 255, 0) 72%),
+        linear-gradient(180deg, #f7fbff 0%, #edf5ff 52%, #eaf3ff 100%);
+    }
+    .container { max-width: 1360px; }
+    .hero {
+      margin-bottom: 14px;
+      border: 1px solid #c9ddf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      box-shadow: 0 10px 24px rgba(52, 97, 161, 0.1);
+      border-radius: 14px;
+      padding: 16px 18px;
+      position: relative;
+    }
+    .note {
+      border: 1px solid #c9ddf7;
+      box-shadow: 0 8px 20px rgba(52, 97, 161, 0.08);
+      background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+    }
+    .lang-switch {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      display: inline-flex;
+      gap: 8px;
+    }
+    .lang-btn {
+      border: 1px solid #bdd4f3;
+      background: #e7f1ff;
+      color: #2d5685;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .lang-btn.active {
+      background: #3f8bff;
+      color: #fff;
+      border-color: #3f8bff;
+    }
+    .hero p, .note li, .note h3 { color: #4f6f9d; }
+    .card {
+      background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+      border: 1px solid #cddff6;
+      box-shadow: 0 6px 16px rgba(76, 124, 185, 0.1);
+    }
+    .badge { background: #ddebff; color: #255488; }
+    .card a { background: #3f8bff; color: #fff; }
+    .card a:hover { background: #2f74db; }
+  </style>
 </head>
-<body>
+<body class="light-ui">
   <main class="container">
     <header class="hero">
+      <div class="lang-switch">
+        <button id="langZh" class="lang-btn">中文</button>
+        <button id="langEn" class="lang-btn">EN</button>
+      </div>
       <h1 id="portal-title">Business Analytics Portal</h1>
       <p id="portal-subtitle">Choose a module to open the analysis page.</p>
     </header>
 
     <section>
-      <h2>Modules</h2>
+      <h2 id="module-title">Modules</h2>
       <div id="module-grid" class="grid"></div>
     </section>
 
     <section class="note">
-      <h3>Usage Notes</h3>
+      <h3 id="usage-title">Usage Notes</h3>
       <ul>
-        <li>Clicking an external module opens another website.</li>
-        <li>Internal modules include a "Back to Home" button.</li>
-        <li>To add or update modules, edit <code>modules.json</code>.</li>
+        <li id="usage-1">Clicking an external module opens another website.</li>
+        <li id="usage-2">Internal modules include a "Back to Home" button.</li>
+        <li id="usage-3">To add or update modules, edit modules.json.</li>
       </ul>
     </section>
   </main>
