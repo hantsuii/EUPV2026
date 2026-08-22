@@ -14,7 +14,6 @@ const REGION_MAP = {
 };
 
 const TARGET_YEAR = 2026;
-let normalizedRows = [];
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -35,6 +34,11 @@ function fmt(value, digit = 2) {
 
 function fmtWan(value, digit = 1) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: digit }).format(n(value) / 10000);
+}
+
+function fmtPct(value, digit = 1) {
+  if (!Number.isFinite(value)) return "-";
+  return `${value.toFixed(digit)}%`;
 }
 
 function escapeHtml(text) {
@@ -82,13 +86,6 @@ function quarterKey(month) {
   return `${year}-Q${quarter}`;
 }
 
-function halfyearKey(month) {
-  const year = Number(month.slice(0, 4));
-  const monthNumber = Number(month.slice(5, 7));
-  const half = monthNumber <= 6 ? 1 : 2;
-  return `${year}-H${half}`;
-}
-
 function isInvoiced(row, invoiceDate) {
   if (invoiceDate) return true;
   const s1 = String(row["Order Status2"] || "").toLowerCase();
@@ -107,114 +104,109 @@ function normalizeRows(rawRows) {
       const amount = n(amountRaw);
       const amountNotEmpty = hasValue(amountRaw);
 
-      const productTclReport = String(row["TCL Report Product"] || "").trim();
-      const productMidCategory = String(row["Product Mid Category"] || "").trim();
-      const productFlag = productTclReport.toUpperCase();
-      const categoryFlag = productMidCategory.toUpperCase();
-
+      const productTclReport = String(row["TCL Report Product"] || "").trim().toUpperCase();
+      const productMidCategory = String(row["Product Mid Category"] || "").trim().toUpperCase();
       const isEssType =
-        productFlag === "ENERGY+_KIT GEN1" ||
-        productFlag === "ENERGY+_KIT" ||
-        categoryFlag === "HYBRID INVERTER";
+        productTclReport === "ENERGY+_KIT GEN1" ||
+        productTclReport === "ENERGY+_KIT" ||
+        productMidCategory === "HYBRID INVERTER";
 
-      const essQty = amountNotEmpty && isEssType ? n(row["Ordered Qty"]) : 0;
       const invoiceDate = parseExcelDate(row["Invoice Date"]);
 
       return {
         month,
         region: regionStd || "Unknown",
         amount,
-        totalMw: n(row["Total MW"]),
-        essQty,
+        pvQtyMw: isEssType ? 0 : n(row["Total MW"]),
+        essQtySet: isEssType && amountNotEmpty ? n(row["Ordered Qty"]) : 0,
         isEssType,
         invoiced: isInvoiced(row, invoiceDate),
       };
     })
-    .filter((row) => row.month !== "Unknown");
+    .filter((row) => row.month !== "Unknown" && row.month.startsWith(`${TARGET_YEAR}-`));
 }
 
-function classifyRow(row) {
+function initMetric() {
+  return { totalAmount: 0, pvAmount: 0, essAmount: 0, pvQtyMw: 0, essQtySet: 0 };
+}
+
+function addRowMetric(target, row) {
+  target.totalAmount += row.amount;
   if (row.isEssType) {
-    return {
-      pvAmount: 0,
-      pvQty: 0,
-      essAmount: row.amount,
-      essQty: row.essQty,
-    };
+    target.essAmount += row.amount;
+    target.essQtySet += row.essQtySet;
+  } else {
+    target.pvAmount += row.amount;
+    target.pvQtyMw += row.pvQtyMw;
   }
-
-  return {
-    pvAmount: row.amount,
-    pvQty: row.totalMw,
-    essAmount: 0,
-    essQty: 0,
-  };
 }
 
-function initAccumulator() {
-  return { pvAmount: 0, pvQty: 0, essAmount: 0, essQty: 0 };
+function calcPvAspEurPerW(metric) {
+  if (!metric || metric.pvQtyMw <= 0) return null;
+  return metric.pvAmount / (metric.pvQtyMw * 1_000_000);
 }
 
-function addMetric(target, metric) {
-  target.pvAmount += metric.pvAmount;
-  target.pvQty += metric.pvQty;
-  target.essAmount += metric.essAmount;
-  target.essQty += metric.essQty;
+function calcEssAspEurPerSet(metric) {
+  if (!metric || metric.essQtySet <= 0) return null;
+  return metric.essAmount / metric.essQtySet;
 }
 
-function totalAmount(metric) {
-  return n(metric.pvAmount) + n(metric.essAmount);
+function monthList2026() {
+  return Array.from({ length: 12 }, (_, idx) => `${TARGET_YEAR}-${String(idx + 1).padStart(2, "0")}`);
 }
 
-function totalQty(metric) {
-  return n(metric.pvQty) + n(metric.essQty);
-}
+function aggregateData(rows) {
+  const all2026 = rows;
+  const invoicedRows = all2026.filter((x) => x.invoiced);
+  const backlogRows = all2026.filter((x) => !x.invoiced);
 
-function buildYtdRows(rows) {
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const startMonth = `${TARGET_YEAR}-01`;
+  const allOrderByQuarter = new Map();
+  const invoicedByMonth = new Map();
+  const invoicedByQuarter = new Map();
+  const invoicedByRegion = new Map();
 
-  return rows.filter((row) => row.invoiced && row.month >= startMonth && row.month <= currentMonth);
-}
-
-function allMonthsFromJanToCurrent() {
-  const now = new Date();
-  const endMonth = now.getMonth() + 1;
-  const result = [];
-  for (let m = 1; m <= endMonth; m += 1) {
-    result.push(`${TARGET_YEAR}-${String(m).padStart(2, "0")}`);
-  }
-  return result;
-}
-
-function aggregateByPeriod(ytdRows) {
-  const monthMap = new Map();
-  const quarterMap = new Map();
-  const halfMap = new Map();
-  const regionMap = new Map();
-  const grand = initAccumulator();
-
-  ytdRows.forEach((row) => {
-    const metric = classifyRow(row);
-    addMetric(grand, metric);
-
-    if (!monthMap.has(row.month)) monthMap.set(row.month, initAccumulator());
-    addMetric(monthMap.get(row.month), metric);
-
-    const q = quarterKey(row.month);
-    if (!quarterMap.has(q)) quarterMap.set(q, initAccumulator());
-    addMetric(quarterMap.get(q), metric);
-
-    const h = halfyearKey(row.month);
-    if (!halfMap.has(h)) halfMap.set(h, initAccumulator());
-    addMetric(halfMap.get(h), metric);
-
-    if (!regionMap.has(row.region)) regionMap.set(row.region, initAccumulator());
-    addMetric(regionMap.get(row.region), metric);
+  monthList2026().forEach((m) => invoicedByMonth.set(m, initMetric()));
+  [1, 2, 3, 4].forEach((q) => {
+    allOrderByQuarter.set(`${TARGET_YEAR}-Q${q}`, initMetric());
+    invoicedByQuarter.set(`${TARGET_YEAR}-Q${q}`, initMetric());
   });
 
-  return { monthMap, quarterMap, halfMap, regionMap, grand };
+  all2026.forEach((row) => {
+    const q = quarterKey(row.month);
+    addRowMetric(allOrderByQuarter.get(q), row);
+  });
+
+  invoicedRows.forEach((row) => {
+    addRowMetric(invoicedByMonth.get(row.month), row);
+    addRowMetric(invoicedByQuarter.get(quarterKey(row.month)), row);
+
+    if (!invoicedByRegion.has(row.region)) invoicedByRegion.set(row.region, initMetric());
+    addRowMetric(invoicedByRegion.get(row.region), row);
+  });
+
+  const totalInvoiced = initMetric();
+  const totalBacklog = initMetric();
+  invoicedRows.forEach((row) => addRowMetric(totalInvoiced, row));
+  backlogRows.forEach((row) => addRowMetric(totalBacklog, row));
+
+  const h1 = initMetric();
+  const h2 = initMetric();
+  invoicedRows.forEach((row) => {
+    if (row.month <= `${TARGET_YEAR}-06`) addRowMetric(h1, row);
+    else addRowMetric(h2, row);
+  });
+
+  return {
+    totalInvoiced,
+    totalBacklog,
+    h1,
+    h2,
+    allOrderByQuarter,
+    invoicedByMonth,
+    invoicedByQuarter,
+    invoicedByRegion,
+    invoicedRows,
+  };
 }
 
 function table(elId, headers, rows) {
@@ -237,10 +229,11 @@ function renderPlot(divId, traces, layout = {}) {
     paper_bgcolor: "#ffffff",
     plot_bgcolor: "#ffffff",
     font: { color: "#2e4f7a" },
-    margin: { l: 60, r: 50, t: 36, b: 58 },
+    margin: { l: 60, r: 55, t: 42, b: 60 },
     legend: { orientation: "h", y: -0.25 },
     xaxis: { gridcolor: "#e2ecf9", linecolor: "#d2e2f8" },
     yaxis: { gridcolor: "#e2ecf9", linecolor: "#d2e2f8" },
+    bargap: 0.24,
   };
 
   window.Plotly.newPlot(divId, traces, { ...baseLayout, ...layout }, { responsive: true, displayModeBar: false });
@@ -248,113 +241,146 @@ function renderPlot(divId, traces, layout = {}) {
 
 function renderTotalDashboard(agg) {
   const totalKpiGrid = document.getElementById("totalKpiGrid");
-  const halfH1 = agg.halfMap.get(`${TARGET_YEAR}-H1`) || initAccumulator();
-  const halfH2 = agg.halfMap.get(`${TARGET_YEAR}-H2`) || initAccumulator();
 
-  const q1 = agg.quarterMap.get(`${TARGET_YEAR}-Q1`) || initAccumulator();
-  const q2 = agg.quarterMap.get(`${TARGET_YEAR}-Q2`) || initAccumulator();
-  const q3 = agg.quarterMap.get(`${TARGET_YEAR}-Q3`) || initAccumulator();
-  const q4 = agg.quarterMap.get(`${TARGET_YEAR}-Q4`) || initAccumulator();
+  const q1All = agg.allOrderByQuarter.get(`${TARGET_YEAR}-Q1`) || initMetric();
+  const q2All = agg.allOrderByQuarter.get(`${TARGET_YEAR}-Q2`) || initMetric();
+  const q3All = agg.allOrderByQuarter.get(`${TARGET_YEAR}-Q3`) || initMetric();
+  const q4All = agg.allOrderByQuarter.get(`${TARGET_YEAR}-Q4`) || initMetric();
 
   const cards = [
-    { name: `${TARGET_YEAR} YTD 已开票金额(万)`, value: fmtWan(totalAmount(agg.grand)) },
-    { name: `${TARGET_YEAR} YTD 已开票数量`, value: fmt(totalQty(agg.grand), 0) },
-    { name: `H1 金额(万)`, value: fmtWan(totalAmount(halfH1)) },
-    { name: `H1 数量`, value: fmt(totalQty(halfH1), 0) },
-    { name: `H2 金额(万)`, value: fmtWan(totalAmount(halfH2)) },
-    { name: `H2 数量`, value: fmt(totalQty(halfH2), 0) },
-    { name: `Q1 金额/数量`, value: `${fmtWan(totalAmount(q1))} / ${fmt(totalQty(q1), 0)}` },
-    { name: `Q2 金额/数量`, value: `${fmtWan(totalAmount(q2))} / ${fmt(totalQty(q2), 0)}` },
-    { name: `Q3 金额/数量`, value: `${fmtWan(totalAmount(q3))} / ${fmt(totalQty(q3), 0)}` },
-    { name: `Q4 金额/数量`, value: `${fmtWan(totalAmount(q4))} / ${fmt(totalQty(q4), 0)}` },
+    { name: `${TARGET_YEAR}年已开票销售额(€)`, value: fmt(agg.totalInvoiced.totalAmount) },
+    { name: `${TARGET_YEAR}年Backlog订单金额(€)`, value: fmt(agg.totalBacklog.totalAmount) },
+    { name: `${TARGET_YEAR}年已销售组件数量(MW)`, value: fmt(agg.totalInvoiced.pvQtyMw, 3) },
+    { name: `${TARGET_YEAR}年已销售储能产品ESS数量(Sets)`, value: fmt(agg.totalInvoiced.essQtySet, 0) },
+
+    { name: `H1 已开票销售额(€)`, value: fmt(agg.h1.totalAmount) },
+    { name: `H1 组件数量(MW)`, value: fmt(agg.h1.pvQtyMw, 3) },
+    { name: `H1 组件平均价格(€/W)`, value: calcPvAspEurPerW(agg.h1) == null ? "-" : fmt(calcPvAspEurPerW(agg.h1), 4) },
+    { name: `H1 储能数量(Sets)`, value: fmt(agg.h1.essQtySet, 0) },
+    { name: `H1 储能平均价格(€/Set)`, value: calcEssAspEurPerSet(agg.h1) == null ? "-" : fmt(calcEssAspEurPerSet(agg.h1), 2) },
+
+    { name: `Q1 订单金额(€)`, value: fmt(q1All.totalAmount) },
+    { name: `Q2 订单金额(€)`, value: fmt(q2All.totalAmount) },
+    { name: `Q3 订单金额(€)`, value: fmt(q3All.totalAmount) },
+    { name: `Q4 订单金额(€)`, value: fmt(q4All.totalAmount) },
   ];
 
   totalKpiGrid.innerHTML = cards
     .map((card) => `<div class="kpi-card"><div class="kpi-name">${escapeHtml(card.name)}</div><div class="kpi-value">${escapeHtml(String(card.value))}</div></div>`)
     .join("");
 
-  const periodRows = [
-    { period: `${TARGET_YEAR}-H1`, data: halfH1 },
-    { period: `${TARGET_YEAR}-H2`, data: halfH2 },
-    { period: `${TARGET_YEAR}-Q1`, data: q1 },
-    { period: `${TARGET_YEAR}-Q2`, data: q2 },
-    { period: `${TARGET_YEAR}-Q3`, data: q3 },
-    { period: `${TARGET_YEAR}-Q4`, data: q4 },
-  ];
+  const quarterRows = [1, 2, 3, 4].map((q) => {
+    const k = `${TARGET_YEAR}-Q${q}`;
+    const d = agg.allOrderByQuarter.get(k) || initMetric();
+    return [k, fmt(d.totalAmount), fmt(d.pvAmount), fmt(d.essAmount), fmt(d.pvQtyMw, 3), fmt(d.essQtySet, 0)];
+  });
 
   table(
     "periodTable",
-    ["Period", "PV金额", "PV数量", "ESS金额", "ESS数量", "总金额(万)", "总数量"],
-    periodRows.map((row) => [
-      escapeHtml(row.period),
-      fmt(row.data.pvAmount),
-      fmt(row.data.pvQty, 0),
-      fmt(row.data.essAmount),
-      fmt(row.data.essQty, 0),
-      fmtWan(totalAmount(row.data)),
-      fmt(totalQty(row.data), 0),
-    ])
+    ["Quarter", "订单总金额(€)", "组件金额(€)", "ESS金额(€)", "组件数量(MW)", "ESS数量(Sets)"],
+    quarterRows
   );
 
-  const monthAxis = allMonthsFromJanToCurrent();
-  const monthData = monthAxis.map((m) => agg.monthMap.get(m) || initAccumulator());
+  const months = monthList2026();
+  const monthData = months.map((m) => agg.invoicedByMonth.get(m) || initMetric());
 
   renderPlot(
     "monthlyTrendChart",
     [
       {
-        x: monthAxis,
-        y: monthData.map((x) => totalAmount(x) / 10000),
+        x: months,
+        y: monthData.map((x) => x.totalAmount / 10000),
         type: "scatter",
         mode: "lines+markers",
-        name: "当期值 金额(万)",
+        name: "总销售金额(万€)",
         line: { color: "#4f8cff", width: 3 },
-        marker: { size: 6 },
       },
       {
-        x: monthAxis,
-        y: monthData.map((x) => totalQty(x)),
-        type: "scatter",
-        mode: "lines+markers",
-        name: "当期值 数量",
-        yaxis: "y2",
-        line: { color: "#b57bff", width: 3 },
-        marker: { size: 6 },
+        x: months,
+        y: monthData.map((x) => x.pvAmount / 10000),
+        type: "bar",
+        name: "组件金额(万€)",
+        marker: { color: "#78b1ff" },
+        opacity: 0.8,
+      },
+      {
+        x: months,
+        y: monthData.map((x) => x.essAmount / 10000),
+        type: "bar",
+        name: "ESS金额(万€)",
+        marker: { color: "#b48bff" },
+        opacity: 0.8,
       },
     ],
     {
-      title: `${TARGET_YEAR} 月度变化趋势`,
-      yaxis: { title: "金额(万)" },
-      yaxis2: { title: "数量", overlaying: "y", side: "right" },
+      title: `${TARGET_YEAR} 月度销售金额变化`,
+      barmode: "group",
+      yaxis: { title: "金额(万€)" },
+    }
+  );
+
+  renderPlot(
+    "monthlyAspChart",
+    [
+      {
+        x: months,
+        y: monthData.map((x) => (calcPvAspEurPerW(x) == null ? null : calcPvAspEurPerW(x))),
+        type: "scatter",
+        mode: "lines+markers",
+        name: "组件ASP(€/W)",
+        line: { color: "#2c7dff", width: 3 },
+      },
+      {
+        x: months,
+        y: monthData.map((x) => (calcEssAspEurPerSet(x) == null ? null : calcEssAspEurPerSet(x))),
+        type: "scatter",
+        mode: "lines+markers",
+        yaxis: "y2",
+        name: "ESS ASP(€/Set)",
+        line: { color: "#a36bff", width: 3 },
+      },
+    ],
+    {
+      title: `${TARGET_YEAR} 月度平均售价变化`,
+      yaxis: { title: "组件ASP (€/W)" },
+      yaxis2: { title: "ESS ASP (€/Set)", overlaying: "y", side: "right" },
     }
   );
 }
-
 function renderRegionDashboard(agg) {
   const regionGrid = document.getElementById("regionGrid");
-  const regions = [...agg.regionMap.entries()]
+  const grand = agg.totalInvoiced.totalAmount;
+
+  const regions = [...agg.invoicedByRegion.entries()]
     .map(([region, metric]) => ({ region, metric }))
-    .sort((a, b) => totalAmount(b.metric) - totalAmount(a.metric));
+    .sort((a, b) => b.metric.totalAmount - a.metric.totalAmount);
 
   if (!regions.length) {
-    regionGrid.innerHTML = '<div class="mini-tip">暂无 2026 YTD 已开票地区数据。</div>';
+    regionGrid.innerHTML = '<div class="mini-tip">暂无 2026 年已开票地区数据。</div>';
     return;
   }
 
   regionGrid.innerHTML = regions
     .map(({ region, metric }) => {
-      const amount = totalAmount(metric);
-      const qty = totalQty(metric);
-      const asp = qty > 0 ? amount / qty : null;
+      const share = grand > 0 ? (metric.totalAmount / grand) * 100 : null;
+      const pvAsp = calcPvAspEurPerW(metric);
+      const essAsp = calcEssAspEurPerSet(metric);
 
       return `
         <article class="region-card">
           <h4 class="region-title">${escapeHtml(region)}</h4>
-          <div class="metric-row"><span class="metric-label">金额(万)</span><span class="metric-value">${fmtWan(amount)}</span></div>
-          <div class="metric-row"><span class="metric-label">数量</span><span class="metric-value">${fmt(qty, 0)}</span></div>
+          <div class="metric-row"><span class="metric-label">总金额(万€)</span><span class="metric-value">${fmtWan(metric.totalAmount)}</span></div>
           <div class="metric-row"><span class="metric-label">BP达成率</span><span class="metric-value">-</span></div>
           <div class="metric-row"><span class="metric-label">同比</span><span class="metric-value">-</span></div>
-          <div class="metric-row"><span class="metric-label">ASP</span><span class="metric-value">${asp == null ? "-" : fmt(asp)}</span></div>
+          <div class="metric-row"><span class="metric-label">总金额占比</span><span class="metric-value">${share == null ? "-" : fmtPct(share)}</span></div>
+
+          <div class="metric-row"><span class="metric-label">ESS金额(万€)</span><span class="metric-value">${fmtWan(metric.essAmount)}</span></div>
+          <div class="metric-row"><span class="metric-label">ESS数量(Sets)</span><span class="metric-value">${fmt(metric.essQtySet, 0)}</span></div>
+          <div class="metric-row"><span class="metric-label">ESS ASP(€/Set)</span><span class="metric-value">${essAsp == null ? "-" : fmt(essAsp, 2)}</span></div>
+
+          <div class="metric-row"><span class="metric-label">组件金额(万€)</span><span class="metric-value">${fmtWan(metric.pvAmount)}</span></div>
+          <div class="metric-row"><span class="metric-label">组件数量(MW)</span><span class="metric-value">${fmt(metric.pvQtyMw, 3)}</span></div>
+          <div class="metric-row"><span class="metric-label">组件ASP(€/W)</span><span class="metric-value">${pvAsp == null ? "-" : fmt(pvAsp, 4)}</span></div>
         </article>
       `;
     })
@@ -362,13 +388,10 @@ function renderRegionDashboard(agg) {
 }
 
 function renderAll(rows) {
-  const ytdRows = buildYtdRows(rows);
-  const agg = aggregateByPeriod(ytdRows);
-
+  const agg = aggregateData(rows);
   renderTotalDashboard(agg);
   renderRegionDashboard(agg);
-
-  setStatus(`完成：${TARGET_YEAR} YTD 已开票 ${ytdRows.length} 行，地区 ${agg.regionMap.size} 个。`);
+  setStatus(`完成：${TARGET_YEAR} 全年数据 ${rows.length} 行；已开票 ${agg.invoicedRows.length} 行。`);
 }
 
 async function parseWorkbookFromArrayBuffer(buffer) {
@@ -434,14 +457,14 @@ function bindJumpButtons() {
 runBtn.addEventListener("click", async () => {
   try {
     const rawRows = await loadWorkbookBySource();
-    normalizedRows = normalizeRows(rawRows);
+    const rows = normalizeRows(rawRows);
 
-    if (!normalizedRows.length) {
-      setStatus("没有可用行，请检查 Order details 的日期字段。");
+    if (!rows.length) {
+      setStatus(`没有 ${TARGET_YEAR} 年可用行，请检查 Order details 日期。`);
       return;
     }
 
-    renderAll(normalizedRows);
+    renderAll(rows);
   } catch (error) {
     setStatus(`失败：${error.message || error}`);
   }
@@ -449,3 +472,6 @@ runBtn.addEventListener("click", async () => {
 
 bindSourceMode();
 bindJumpButtons();
+
+
+
