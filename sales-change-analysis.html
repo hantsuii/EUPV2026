@@ -66,6 +66,7 @@
 
     input[type="file"],
     input[type="text"],
+    select,
     .status {
       background: #ffffff;
       color: #2a4d7a;
@@ -75,11 +76,6 @@
       background: #dcecff;
       color: #255488;
     }
-    .btn-link {
-      background: #edf4ff;
-      color: #28517f;
-    }
-    .btn-link:hover { background: #dceafa; }
 
     .source-choice {
       display: flex;
@@ -111,7 +107,6 @@
       border-radius: 10px;
       padding: 10px;
     }
-    .mini-tip { font-size: 12px; margin-top: 6px; }
 
     .jump-wrap {
       display: flex;
@@ -138,29 +133,21 @@
     .content-block { display: none; }
     .content-block.active { display: block; }
 
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(180px, 1fr));
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-    .kpi-grid.kpi-grid-4 { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+    .kpi-grid { display: grid; gap: 12px; margin-bottom: 10px; }
+    .kpi-grid-4 { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+    .kpi-grid-3 { grid-template-columns: repeat(3, minmax(200px, 1fr)); }
     .kpi-card {
       background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
       border: 1px solid #cddff6;
       border-radius: 12px;
       padding: 12px;
       box-shadow: 0 6px 16px rgba(76, 124, 185, 0.1);
+      min-height: 116px;
     }
-    .kpi-name { color: #5e7ea9; font-size: 13px; margin-bottom: 6px; }
-    .kpi-value { font-size: 28px; font-weight: 700; color: #1e4672; }
+    .kpi-name { color: #5e7ea9; font-size: 13px; margin-bottom: 8px; }
+    .kpi-value { font-size: 26px; font-weight: 700; color: #1e4672; line-height: 1.3; white-space: pre-line; }
 
-    .sub-title {
-      margin: 6px 0 8px;
-      color: #2a4f7c;
-      font-size: 18px;
-      font-weight: 700;
-    }
+    .sub-title { margin: 6px 0 8px; color: #2a4f7c; font-size: 18px; font-weight: 700; }
 
     .chart-box {
       margin-top: 10px;
@@ -179,33 +166,28 @@
       max-height: 420px;
       background: #fff;
     }
-    table {
+    table { width: 100%; border-collapse: collapse; min-width: 920px; background: #fff; color: #2a4d7a; }
+    th, td { border-bottom: 1px solid #e4eefb; padding: 8px 10px; font-size: 13px; text-align: left; white-space: nowrap; }
+    th { background: #f3f8ff; position: sticky; top: 0; z-index: 1; color: #2a4d7a; }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .filter-grid label { display: block; margin-bottom: 4px; font-size: 13px; color: #406491; font-weight: 700; }
+    .filter-grid select {
       width: 100%;
-      border-collapse: collapse;
-      min-width: 860px;
+      border: 1px solid #c5d9f4;
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 14px;
       background: #fff;
       color: #2a4d7a;
     }
-    th, td {
-      border-bottom: 1px solid #e4eefb;
-      padding: 8px 10px;
-      font-size: 13px;
-      text-align: left;
-      white-space: nowrap;
-    }
-    th {
-      background: #f3f8ff;
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      color: #2a4d7a;
-    }
 
-    .region-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 12px;
-    }
+    .region-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
     .region-card {
       background: #fff;
       border: 1px solid #cfe0f6;
@@ -214,12 +196,7 @@
       box-shadow: 0 6px 14px rgba(76, 124, 185, 0.1);
       min-height: 220px;
     }
-    .region-title {
-      font-size: 20px;
-      font-weight: 800;
-      color: #1f4a7a;
-      margin: 0 0 8px;
-    }
+    .region-title { font-size: 20px; font-weight: 800; color: #1f4a7a; margin: 0 0 8px; }
     .metric-row {
       display: flex;
       justify-content: space-between;
@@ -234,10 +211,13 @@
     .metric-value { font-weight: 700; color: #1f4a7a; }
 
     @media (max-width: 1180px) {
-      .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+      .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+      .kpi-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .filter-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
     }
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
+      .filter-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -296,20 +276,46 @@
         <h3 data-i18n="overviewTitle">2026年总览</h3>
 
         <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
-        <div id="yearKpiRow" class="kpi-grid"></div>
+        <div id="yearKpiRow" class="kpi-grid kpi-grid-4"></div>
 
-        <div class="sub-title" data-i18n="row2Title">H1 开票指标</div>
+        <div class="sub-title" data-i18n="futureTitle">未来销售指标（2027+）</div>
+        <div id="futureKpiRow" class="kpi-grid kpi-grid-3"></div>
+
+        <div class="sub-title" data-i18n="row2Title">H1 销售数据</div>
         <div id="h1KpiRow" class="kpi-grid kpi-grid-4"></div>
 
-        <div class="sub-title" data-i18n="row3Title">未结束季度进度（Q3 / Q4）</div>
+        <div class="sub-title" data-i18n="row3Title">未结束季度进度</div>
         <div class="table-wrap"><table id="quarterProgressTable"></table></div>
 
         <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
-        <div class="chart-box"><div id="monthlyAspChart" class="chart"></div></div>
+        <div class="chart-box"><div id="monthlyPvAspChart" class="chart"></div></div>
+        <div class="chart-box"><div id="monthlyEssAspChart" class="chart"></div></div>
       </div>
 
       <div id="block-region" class="content-block">
-        <h3 data-i18n="regionTitle">各地区看板（总览 + 组件/储能销售明细）</h3>
+        <div class="filter-grid">
+          <div>
+            <label for="incomeTypeSel" data-i18n="filterIncome">收入类型</label>
+            <select id="incomeTypeSel">
+              <option value="total" data-i18n="incomeTotal">总计</option>
+              <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
+              <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
+            </select>
+          </div>
+          <div>
+            <label for="yearSel" data-i18n="filterYear">年份</label>
+            <select id="yearSel"></select>
+          </div>
+          <div>
+            <label for="quarterSel" data-i18n="filterQuarter">季度</label>
+            <select id="quarterSel"></select>
+          </div>
+          <div>
+            <label for="monthSel" data-i18n="filterMonth">月份</label>
+            <select id="monthSel"></select>
+          </div>
+        </div>
+
         <div id="regionGrid" class="region-grid"></div>
       </div>
     </section>
@@ -318,6 +324,3 @@
   <script src="./sales-change-analysis.js"></script>
 </body>
 </html>
-
-
-
