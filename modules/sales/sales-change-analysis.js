@@ -263,6 +263,7 @@ function normalizeRows(rawRows) {
     const isConfirm = status === "confirm";
 
     const revenue = n(row["Revenue EUR"]);
+    const upqNotEmpty = hasValue(row["Unit Price * Qty"]);
 
     const category = String(row["Category"] || "").trim().toUpperCase();
     const tcl = String(row["TCL Report Product"] || "").trim().toUpperCase();
@@ -674,6 +675,8 @@ bindSourceMode();
 bindJumpButtons();
 [incomeTypeSel, yearSel, quarterSel, monthSel].forEach(bindMultiSelectToggle);
 applyLanguage();
+
+
 
 
 
