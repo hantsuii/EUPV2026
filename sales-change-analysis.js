@@ -70,22 +70,22 @@ const I18N = {
     statusNoRegion: "当前筛选下无地区数据。",
 
     kpiRevenuePair: "开票收入 / 待确认收入(万€)",
-    kpiPvQtyPair: "组件数量(MW，开票/待确认)",
-    kpiEssQtyPair: "储能数量(Sets，开票/待确认)",
+    kpiPvQtyPair: "组件销量MW（开票/待确认）",
+    kpiEssQtyPair: "储能销量Sets（开票/待确认）",
     kpiBpRate: "BP / 达成率",
     kpiFutureRevenue: "未来销售收入(万€)",
-    kpiFuturePvQty: "未来组件销售量(MW)",
-    kpiFutureEssQty: "未来储能销售量(Sets)",
+    kpiFuturePvQty: "未来组件销量(MW)",
+    kpiFutureEssQty: "未来储能销量(Sets)",
     kpiH1Revenue: "H1 开票金额(万€)",
-    kpiH1PvQty: "H1 开票组件数量(MW)",
-    kpiH1EssQty: "H1 开票储能数量(Sets)",
+    kpiH1PvQty: "H1 开票组件销量(MW)",
+    kpiH1EssQty: "H1 开票储能销量(Sets)",
     kpiH1Rate: "H1 达成率",
 
     qQuarter: "季度",
     qAllAmount: "全部金额(万€)",
     qInvoicedAmount: "开票收入(万€)",
-    qPvQty: "组件数量(MW)",
-    qEssQty: "储能数量(Sets)",
+    qPvQty: "组件销量(MW)",
+    qEssQty: "储能销量(Sets)",
     qRate: "达成率",
 
     chartAmountTitle: `${TARGET_YEAR} 月度销售金额变化（折线=总金额，柱=组件/ESS）`,
@@ -103,10 +103,10 @@ const I18N = {
     regYoy: "同比",
     regShare: "总金额占比",
     regEssAmount: "储能金额(万€)",
-    regEssQty: "储能数量(Sets)",
+    regEssQty: "储能销量(Sets)",
     regEssAsp: "储能ASP(€/Set)",
     regPvAmount: "组件金额(万€)",
-    regPvQty: "组件数量(MW)",
+    regPvQty: "组件销量(MW)",
     regPvAsp: "组件ASP(€/W)",
 
     pairInvoiced: "开票",
@@ -152,22 +152,22 @@ const I18N = {
     statusNoRegion: "No regional data under current filters.",
 
     kpiRevenuePair: "Invoiced / Confirm Revenue (10k €)",
-    kpiPvQtyPair: "PV Qty (MW, Invoiced/Confirm)",
-    kpiEssQtyPair: "ESS Qty (Sets, Invoiced/Confirm)",
+    kpiPvQtyPair: "PV Sales Qty MW (Invoiced/Confirm)",
+    kpiEssQtyPair: "ESS Sales Qty Sets (Invoiced/Confirm)",
     kpiBpRate: "BP / Achievement",
     kpiFutureRevenue: "Future Sales Revenue (10k €)",
     kpiFuturePvQty: "Future PV Sales Qty (MW)",
     kpiFutureEssQty: "Future ESS Sales Qty (Sets)",
     kpiH1Revenue: "H1 Invoiced Revenue (10k €)",
-    kpiH1PvQty: "H1 Invoiced PV Qty (MW)",
-    kpiH1EssQty: "H1 Invoiced ESS Qty (Sets)",
+    kpiH1PvQty: "H1 Invoiced PV Sales Qty (MW)",
+    kpiH1EssQty: "H1 Invoiced ESS Sales Qty (Sets)",
     kpiH1Rate: "H1 Achievement",
 
     qQuarter: "Quarter",
     qAllAmount: "All Amount (10k €)",
     qInvoicedAmount: "Invoiced (10k €)",
-    qPvQty: "PV Qty (MW)",
-    qEssQty: "ESS Qty (Sets)",
+    qPvQty: "PV Sales Qty (MW)",
+    qEssQty: "ESS Sales Qty (Sets)",
     qRate: "Achievement",
 
     chartAmountTitle: `${TARGET_YEAR} Monthly Sales Amount (line=total, bars=PV/ESS)`,
@@ -185,10 +185,10 @@ const I18N = {
     regYoy: "YoY",
     regShare: "Share",
     regEssAmount: "ESS Amount (10k €)",
-    regEssQty: "ESS Qty (Sets)",
+    regEssQty: "ESS Sales Qty (Sets)",
     regEssAsp: "ESS ASP (€/Set)",
     regPvAmount: "PV Amount (10k €)",
-    regPvQty: "PV Qty (MW)",
+    regPvQty: "PV Sales Qty (MW)",
     regPvAsp: "PV ASP (€/W)",
 
     pairInvoiced: "Invoiced",
@@ -264,9 +264,23 @@ function normalizeRows(rawRows) {
 
     const revenue = n(row["Revenue EUR"]);
     const upqNotEmpty = hasValue(row["Unit Price * Qty"]);
+    const category = String(row["Category"] || "").trim().toUpperCase();
     const tcl = String(row["TCL Report Product"] || "").trim().toUpperCase();
     const mid = String(row["Product Mid Category"] || "").trim().toUpperCase();
-    const isEss = tcl === "ENERGY+_KIT GEN1" || tcl === "ENERGY+_KIT" || mid === "HYBRID INVERTER";
+
+    const isPV = category === "PV";
+    const isESS = category === "ESS";
+    const isHP = category === "HP";
+
+    const essQtyEligible =
+      isESS &&
+      upqNotEmpty &&
+      (
+        mid === "HYBRID INVERTER" ||
+        tcl === "ENERGY+_KIT GEN1" ||
+        tcl === "ENERGY+_KIT" ||
+        tcl === "TCL"
+      );
 
     return {
       year,
@@ -276,10 +290,14 @@ function normalizeRows(rawRows) {
       revenue,
       isInvoiced,
       isConfirm,
-      pvAmount: isEss ? 0 : revenue,
-      essAmount: isEss ? revenue : 0,
-      pvQty: isEss ? 0 : n(row["Total MW"]),
-      essQty: isEss && upqNotEmpty ? n(row["Ordered Qty"]) : 0,
+      category,
+      isPV,
+      isESS,
+      isHP,
+      pvAmount: isPV ? revenue : 0,
+      essAmount: isESS ? revenue : 0,
+      pvQty: isPV ? n(row["Total MW"]) : 0,
+      essQty: essQtyEligible ? n(row["Ordered Qty"]) : 0,
     };
   }).filter((r) => Number.isFinite(r.year) && r.year >= TARGET_YEAR && r.quarter && r.month);
 }
@@ -343,7 +361,7 @@ function renderOverview() {
     card(t("kpiRevenuePair"), `${fmtWanInt(aggInv.revenue)} / ${fmtWanInt(aggConf.revenue)}`),
     card(t("kpiPvQtyPair"), `${fmtInt(aggInv.pvQty)} / ${fmtInt(aggConf.pvQty)}`),
     card(t("kpiEssQtyPair"), `${fmtInt(aggInv.essQty)} / ${fmtInt(aggConf.essQty)}`),
-    card(t("kpiBpRate"), `BP: ${t("empty")}\n${t("qRate")}: ${t("empty")}`),
+    (() => { const bpValue = t("empty"); const rateValue = t("empty"); const pair = bpValue && rateValue ? `${bpValue}/${rateValue}` : ""; return card(t("kpiBpRate"), pair); })(),
   ].join("");
 
   const futureRows = allRows.filter((r) => r.year > TARGET_YEAR);
@@ -455,34 +473,60 @@ function renderOverview() {
   setStatus(t("statusDone", { allRows: allRows.length, yearRows: yearRows.length }));
 }
 
-function fillSelect(el, options, selected = "__ALL__") {
+function getSelectedValues(el) {
+  return [...el.options].filter((opt) => opt.selected).map((opt) => opt.value);
+}
+
+function fillSelect(el, options, selectedValues = ["__ALL__"]) {
   el.innerHTML = options.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
-  el.value = selected;
+  const selectedSet = new Set(selectedValues);
+  [...el.options].forEach((opt) => {
+    opt.selected = selectedSet.has(opt.value);
+  });
+  if (![...el.options].some((opt) => opt.selected) && el.options.length) {
+    el.options[0].selected = true;
+  }
 }
 
 function initFilters() {
   const years = [...new Set(allRows.map((r) => r.year))].sort((a, b) => a - b);
-  fillSelect(yearSel, [{ value: "__ALL__", label: t("all") }, ...years.map((y) => ({ value: String(y), label: String(y) }))], String(TARGET_YEAR));
-  fillSelect(quarterSel, [{ value: "__ALL__", label: t("all") }, ...[1, 2, 3, 4].map((q) => ({ value: `Q${q}`, label: `Q${q}` }))]);
+  fillSelect(yearSel, [{ value: "__ALL__", label: t("all") }, ...years.map((y) => ({ value: String(y), label: String(y) }))], [String(TARGET_YEAR)]);
+  fillSelect(quarterSel, [{ value: "__ALL__", label: t("all") }, ...[1, 2, 3, 4].map((q) => ({ value: `Q${q}`, label: `Q${q}` }))], ["__ALL__"]);
 
   const months = [...new Set(allRows.map((r) => r.month))].sort((a, b) => a.localeCompare(b));
-  fillSelect(monthSel, [{ value: "__ALL__", label: t("all") }, ...months.map((m) => ({ value: m, label: m }))]);
+  fillSelect(monthSel, [{ value: "__ALL__", label: t("all") }, ...months.map((m) => ({ value: m, label: m }))], ["__ALL__"]);
 
   fillSelect(incomeTypeSel, [
     { value: "total", label: t("incomeTotal") },
     { value: "invoiced", label: t("incomeInvoiced") },
     { value: "confirm", label: t("incomeConfirm") },
-  ], "total");
+  ], ["total"]);
+}
+
+function applyMultiFilter(rows, values, picker) {
+  if (!values.length || values.includes("__ALL__") || values.includes("total")) return rows;
+  const selected = new Set(values);
+  return rows.filter((row) => selected.has(picker(row)));
 }
 
 function renderRegion() {
   let rows = [...allRows];
-  const incomeType = incomeTypeSel.value;
-  rows = selectIncomeRows(rows, incomeType);
 
-  if (yearSel.value !== "__ALL__") rows = rows.filter((r) => String(r.year) === yearSel.value);
-  if (quarterSel.value !== "__ALL__") rows = rows.filter((r) => r.quarter === quarterSel.value);
-  if (monthSel.value !== "__ALL__") rows = rows.filter((r) => r.month === monthSel.value);
+  const incomeTypes = getSelectedValues(incomeTypeSel);
+  if (incomeTypes.length && !incomeTypes.includes("total")) {
+    rows = rows.filter((r) => {
+      return (incomeTypes.includes("invoiced") && r.isInvoiced) || (incomeTypes.includes("confirm") && r.isConfirm);
+    });
+  }
+
+  const years = getSelectedValues(yearSel);
+  rows = applyMultiFilter(rows, years, (r) => String(r.year));
+
+  const quarters = getSelectedValues(quarterSel);
+  rows = applyMultiFilter(rows, quarters, (r) => r.quarter);
+
+  const months = getSelectedValues(monthSel);
+  rows = applyMultiFilter(rows, months, (r) => r.month);
 
   const totalRevenue = rows.reduce((acc, r) => acc + r.revenue, 0);
   const map = new Map();
@@ -520,7 +564,6 @@ function renderRegion() {
     `;
   }).join("");
 }
-
 function applyLanguage() {
   document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
   document.querySelectorAll("[data-i18n]").forEach((el) => {
@@ -610,6 +653,10 @@ langEnBtn.addEventListener("click", () => setLanguage("en"));
 bindSourceMode();
 bindJumpButtons();
 applyLanguage();
+
+
+
+
 
 
 

@@ -186,6 +186,10 @@
       background: #fff;
       color: #2a4d7a;
     }
+    .filter-grid select[multiple] {
+      min-height: 120px;
+      padding: 6px 8px;
+    }
 
     .region-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
     .region-card {
@@ -296,7 +300,7 @@
         <div class="filter-grid">
           <div>
             <label for="incomeTypeSel" data-i18n="filterIncome">收入类型</label>
-            <select id="incomeTypeSel">
+            <select id="incomeTypeSel" multiple size="3">
               <option value="total" data-i18n="incomeTotal">总计</option>
               <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
               <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
@@ -304,15 +308,15 @@
           </div>
           <div>
             <label for="yearSel" data-i18n="filterYear">年份</label>
-            <select id="yearSel"></select>
+            <select id="yearSel" multiple size="5"></select>
           </div>
           <div>
             <label for="quarterSel" data-i18n="filterQuarter">季度</label>
-            <select id="quarterSel"></select>
+            <select id="quarterSel" multiple size="5"></select>
           </div>
           <div>
             <label for="monthSel" data-i18n="filterMonth">月份</label>
-            <select id="monthSel"></select>
+            <select id="monthSel" multiple size="6"></select>
           </div>
         </div>
 
@@ -324,3 +328,6 @@
   <script src="./sales-change-analysis.js"></script>
 </body>
 </html>
+
+
+
