@@ -27,7 +27,7 @@ const UI = {
 };
 
 const MODULE_I18N = {
-  "./sales-change-analysis.html": {
+  "./modules/sales/sales-change-analysis.html": {
     zh: { name: "销售变化分析（Web）", desc: "上传 Order details，查看销售总览与区域看板。", badge: "交互" },
     en: { name: "Sales Change Analysis (Web)", desc: "Upload Order details and view sales overview + regional dashboard.", badge: "Interactive" },
   },
@@ -35,11 +35,11 @@ const MODULE_I18N = {
     zh: { name: "销售 Dashboard", desc: "按 PV / ESS / HP 多维筛选，查看月度与区域分析。", badge: "交互" },
     en: { name: "Sales Dashboard", desc: "Multi-dimensional filters for PV / ESS / HP with monthly and regional analysis.", badge: "Interactive" },
   },
-  "./available-stock-analysis.html": {
+  "./modules/stock/available-stock-analysis.html": {
     zh: { name: "可用库存分析", desc: "上传源文件并生成可下载库存工作簿。", badge: "交互" },
     en: { name: "Available Stock Analysis", desc: "Upload source files and generate a downloadable stock workbook.", badge: "Interactive" },
   },
-  "./static-weekly-report.html": {
+  "./modules/weekly/static-weekly-report.html": {
     zh: { name: "静态周报", desc: "直接托管的静态报告页面。", badge: "静态" },
     en: { name: "Static Weekly Report", desc: "Static report page hosted directly on Cloudflare Pages.", badge: "Static" },
   },
@@ -110,3 +110,4 @@ applyHomeLanguage();
 renderModules().catch((err) => {
   document.getElementById("module-grid").innerHTML = `<p>${t("loadError")}${err}</p>`;
 });
+

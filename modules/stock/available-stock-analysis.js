@@ -1,4 +1,4 @@
-const statusEl = document.getElementById("status");
+﻿const statusEl = document.getElementById("status");
 const downloadLinkEl = document.getElementById("downloadLink");
 const vizPanelEl = document.getElementById("vizPanel");
 
@@ -54,10 +54,10 @@ const SOURCE_TAG = {
 };
 
 const DEFAULT_REPO_FILE = {
-  inventory: "./templates/inventory.xlsx",
-  dailySupply: "./templates/daily_supply_plan.xlsx",
-  odpMaster: "./templates/odp.xlsx",
-  orderfile: "./templates/orderfile_base.xlsx",
+  inventory: "../../templates/inventory.xlsx",
+  dailySupply: "../../templates/daily_supply_plan.xlsx",
+  odpMaster: "../../templates/odp.xlsx",
+  orderfile: "../../templates/orderfile_base.xlsx",
 };
 
 const levelDefs = [
@@ -227,7 +227,7 @@ await micropip.install("openpyxl")
 `);
 
   setStatus("Loading stock analysis script...");
-  const pyCode = await fetch("./py/inventory_step1_to_stock.py", { cache: "no-store" }).then((r) => r.text());
+  const pyCode = await fetch("../../py/inventory_step1_to_stock.py", { cache: "no-store" }).then((r) => r.text());
   pyodide.FS.mkdirTree("/work");
   pyodide.FS.writeFile("/work/inventory_step1_to_stock.py", pyCode);
 
@@ -247,9 +247,9 @@ async function readFileAsBytes(file) {
 }
 
 async function fetchTemplateBytes() {
-  const resp = await fetch("./templates/stock_template.xlsx", { cache: "no-store" });
+  const resp = await fetch("../../templates/stock_template.xlsx", { cache: "no-store" });
   if (!resp.ok) {
-    throw new Error(`Template file not found: ./templates/stock_template.xlsx (HTTP ${resp.status})`);
+    throw new Error(`Template file not found: ../../templates/stock_template.xlsx (HTTP ${resp.status})`);
   }
   const buffer = await resp.arrayBuffer();
   return new Uint8Array(buffer);

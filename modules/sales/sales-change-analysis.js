@@ -40,7 +40,7 @@ const I18N = {
     sourceRepo: "使用 GitHub 仓库文件",
     uploadLabel: "上传 Sales 工作簿 (.xlsx)",
     repoPathLabel: "仓库文件路径",
-    repoPathTip: "例如：./templates/sales_workbook.xlsx",
+    repoPathTip: "例如：../../templates/sales_workbook.xlsx",
     runBtn: "运行分析",
     statusInit: "请选择文件来源并点击运行。",
     tabTotal: "总计 Dashboard",
@@ -122,7 +122,7 @@ const I18N = {
     sourceRepo: "Use GitHub repository file",
     uploadLabel: "Upload Sales Workbook (.xlsx)",
     repoPathLabel: "Repository file path",
-    repoPathTip: "Example: ./templates/sales_workbook.xlsx",
+    repoPathTip: "Example: ../../templates/sales_workbook.xlsx",
     runBtn: "Run Analysis",
     statusInit: "Choose source and click Run Analysis.",
     tabTotal: "Total Dashboard",
@@ -263,7 +263,7 @@ function normalizeRows(rawRows) {
     const isConfirm = status === "confirm";
 
     const revenue = n(row["Revenue EUR"]);
-    const upqNotEmpty = hasValue(row["Unit Price * Qty"]);
+
     const category = String(row["Category"] || "").trim().toUpperCase();
     const tcl = String(row["TCL Report Product"] || "").trim().toUpperCase();
     const mid = String(row["Product Mid Category"] || "").trim().toUpperCase();
@@ -607,6 +607,26 @@ async function loadWorkbookBySource() {
   return parseWorkbookFromArrayBuffer(await file.arrayBuffer());
 }
 
+function bindMultiSelectToggle(el) {
+  el.addEventListener("mousedown", (event) => {
+    const option = event.target;
+    if (!(option instanceof HTMLOptionElement)) return;
+    event.preventDefault();
+    if (option.value === "__ALL__" || option.value === "total") {
+      [...el.options].forEach((opt) => { opt.selected = opt.value === option.value; });
+    } else {
+      option.selected = !option.selected;
+      [...el.options].forEach((opt) => {
+        if (opt.value === "__ALL__" || opt.value === "total") opt.selected = false;
+      });
+      if (![...el.options].some((opt) => opt.selected)) {
+        const fallback = [...el.options].find((opt) => opt.value === "__ALL__" || opt.value === "total");
+        if (fallback) fallback.selected = true;
+      }
+    }
+    setTimeout(() => el.dispatchEvent(new Event("change", { bubbles: true })), 0);
+  });
+}
 function bindSourceMode() {
   document.querySelectorAll("input[name='salesSource']").forEach((radio) => {
     radio.addEventListener("change", () => {
@@ -652,7 +672,14 @@ langEnBtn.addEventListener("click", () => setLanguage("en"));
 
 bindSourceMode();
 bindJumpButtons();
+[incomeTypeSel, yearSel, quarterSel, monthSel].forEach(bindMultiSelectToggle);
 applyLanguage();
+
+
+
+
+
+
 
 
 

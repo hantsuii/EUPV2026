@@ -1,36 +1,30 @@
-{
-  "portal_title": "Business Analytics Portal",
-  "portal_subtitle": "Choose a module to open the analysis page.",
-  "modules": [
-    {
-      "name": "Sales Change Analysis (Web)",
-      "desc": "Upload Order details and view KPI + A/B/C/D/E sales analysis pages (non-Streamlit).",
-      "url": "./sales-change-analysis.html",
-      "badge": "Interactive"
-    },
-    {
-      "name": "Sales Dashboard",
-      "desc": "Multi-dimensional filters for PV / ESS / HP, plus monthly order and region analysis.",
-      "url": "https://eu-sales-dashboard.streamlit.app/",
-      "badge": "Interactive"
-    },
-    {
-      "name": "Available Stock Analysis",
-      "desc": "Upload source files and generate a downloadable stock workbook.",
-      "url": "./available-stock-analysis.html",
-      "badge": "Interactive"
-    },
-    {
-      "name": "Static Weekly Report",
-      "desc": "Static report page hosted directly on Cloudflare Pages.",
-      "url": "./static-weekly-report.html",
-      "badge": "Static"
-    },
-    {
-      "name": "More Modules",
-      "desc": "Reserved placeholder for future modules.",
-      "url": "#",
-      "badge": "Coming Soon"
-    }
-  ]
+﻿{
+    "portal_title":  "Business Analytics Portal",
+    "portal_subtitle":  "Choose a module to open the analysis page.",
+    "modules":  [
+                    {
+                        "name":  "Sales Change Analysis (Web)",
+                        "desc":  "Upload Order details and view KPI + A/B/C/D/E sales analysis pages (non-Streamlit).",
+                        "url":  "./modules/sales/sales-change-analysis.html",
+                        "badge":  "Interactive"
+                    },
+                    {
+                        "name":  "Available Stock Analysis",
+                        "desc":  "Upload source files and generate a downloadable stock workbook.",
+                        "url":  "./modules/stock/available-stock-analysis.html",
+                        "badge":  "Interactive"
+                    },
+                    {
+                        "name":  "Static Weekly Report",
+                        "desc":  "Static report page hosted directly on Cloudflare Pages.",
+                        "url":  "./modules/weekly/static-weekly-report.html",
+                        "badge":  "Static"
+                    },
+                    {
+                        "name":  "More Modules",
+                        "desc":  "Reserved placeholder for future modules.",
+                        "url":  "#",
+                        "badge":  "Coming Soon"
+                    }
+                ]
 }
