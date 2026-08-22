@@ -1,4 +1,4 @@
-﻿const TARGET_YEAR = 2026;
+const TARGET_YEAR = 2026;
 const APP_LANG_KEY = "app_lang";
 
 const statusEl = document.getElementById("status");
@@ -549,6 +549,8 @@ function renderRegion() {
     const share = totalRevenue > 0 ? (agg.revenue / totalRevenue) * 100 : null;
     const pvAsp = agg.pvQty > 0 ? agg.pvAmount / (agg.pvQty * 1000000) : null;
     const essAsp = agg.essQty > 0 ? agg.essAmount / agg.essQty : null;
+    const hasPvData = agg.pvAmount > 0;
+    const hasEssData = agg.essAmount > 0;
     return `
       <article class="region-card">
         <h4 class="region-title">${region}</h4>
@@ -556,12 +558,16 @@ function renderRegion() {
         <div class="metric-row"><span class="metric-label">${t("regBp")}</span><span class="metric-value">${t("empty")}</span></div>
         <div class="metric-row"><span class="metric-label">${t("regYoy")}</span><span class="metric-value">${t("empty")}</span></div>
         <div class="metric-row"><span class="metric-label">${t("regShare")}</span><span class="metric-value">${fmtPct1(share)}</span></div>
-        <div class="metric-row"><span class="metric-label">${t("regEssAmount")}</span><span class="metric-value">${fmtWanInt(agg.essAmount)}</span></div>
-        <div class="metric-row"><span class="metric-label">${t("regEssQty")}</span><span class="metric-value">${fmtInt(agg.essQty)}</span></div>
-        <div class="metric-row"><span class="metric-label">${t("regEssAsp")}</span><span class="metric-value">${fmtInt(essAsp)}</span></div>
+        ${hasPvData ? `
         <div class="metric-row"><span class="metric-label">${t("regPvAmount")}</span><span class="metric-value">${fmtWanInt(agg.pvAmount)}</span></div>
         <div class="metric-row"><span class="metric-label">${t("regPvQty")}</span><span class="metric-value">${fmtInt(agg.pvQty)}</span></div>
         <div class="metric-row"><span class="metric-label">${t("regPvAsp")}</span><span class="metric-value">${fmtAsp3(pvAsp)}</span></div>
+        ` : ''}
+        ${hasEssData ? `
+        <div class="metric-row"><span class="metric-label">${t("regEssAmount")}</span><span class="metric-value">${fmtWanInt(agg.essAmount)}</span></div>
+        <div class="metric-row"><span class="metric-label">${t("regEssQty")}</span><span class="metric-value">${fmtInt(agg.essQty)}</span></div>
+        <div class="metric-row"><span class="metric-label">${t("regEssAsp")}</span><span class="metric-value">${fmtInt(essAsp)}</span></div>
+        ` : ''}
       </article>
     `;
   }).join("");
