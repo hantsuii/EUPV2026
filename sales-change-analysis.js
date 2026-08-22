@@ -17,6 +17,18 @@ const monthSel = document.getElementById("monthSel");
 
 let currentLang = localStorage.getItem(APP_LANG_KEY) || "zh";
 let allRows = [];
+const REGION_ROLLUP_MAP = {
+  "Italy & Adriatics Region": "Italy Region",
+  "Germany & Austria Region": "DACH Region",
+  "Emerging Market": "Central and Eastern Europe Region",
+  "lberia Region": "Southern Europe Region",
+};
+
+function mapRegionForStats(region) {
+  const raw = String(region || "Unknown").trim() || "Unknown";
+  return REGION_ROLLUP_MAP[raw] || raw;
+}
+
 
 const I18N = {
   zh: {
@@ -58,22 +70,22 @@ const I18N = {
     statusNoRegion: "当前筛选下无地区数据。",
 
     kpiRevenuePair: "开票收入 / 待确认收入(万€)",
-    kpiPvQtyPair: "组件数量(开票 / 待确认)",
-    kpiEssQtyPair: "储能数量(开票 / 待确认)",
+    kpiPvQtyPair: "组件数量(MW，开票/待确认)",
+    kpiEssQtyPair: "储能数量(Sets，开票/待确认)",
     kpiBpRate: "BP / 达成率",
     kpiFutureRevenue: "未来销售收入(万€)",
-    kpiFuturePvQty: "未来组件销售量",
-    kpiFutureEssQty: "未来储能销售量",
+    kpiFuturePvQty: "未来组件销售量(MW)",
+    kpiFutureEssQty: "未来储能销售量(Sets)",
     kpiH1Revenue: "H1 开票金额(万€)",
-    kpiH1PvQty: "H1 开票组件数量",
-    kpiH1EssQty: "H1 开票储能数量",
+    kpiH1PvQty: "H1 开票组件数量(MW)",
+    kpiH1EssQty: "H1 开票储能数量(Sets)",
     kpiH1Rate: "H1 达成率",
 
     qQuarter: "季度",
     qAllAmount: "全部金额(万€)",
     qInvoicedAmount: "开票收入(万€)",
-    qPvQty: "组件数量",
-    qEssQty: "储能数量",
+    qPvQty: "组件数量(MW)",
+    qEssQty: "储能数量(Sets)",
     qRate: "达成率",
 
     chartAmountTitle: `${TARGET_YEAR} 月度销售金额变化（折线=总金额，柱=组件/ESS）`,
@@ -91,10 +103,10 @@ const I18N = {
     regYoy: "同比",
     regShare: "总金额占比",
     regEssAmount: "储能金额(万€)",
-    regEssQty: "储能数量",
+    regEssQty: "储能数量(Sets)",
     regEssAsp: "储能ASP(€/Set)",
     regPvAmount: "组件金额(万€)",
-    regPvQty: "组件数量",
+    regPvQty: "组件数量(MW)",
     regPvAsp: "组件ASP(€/W)",
 
     pairInvoiced: "开票",
@@ -140,22 +152,22 @@ const I18N = {
     statusNoRegion: "No regional data under current filters.",
 
     kpiRevenuePair: "Invoiced / Confirm Revenue (10k €)",
-    kpiPvQtyPair: "PV Qty (Invoiced / Confirm)",
-    kpiEssQtyPair: "ESS Qty (Invoiced / Confirm)",
+    kpiPvQtyPair: "PV Qty (MW, Invoiced/Confirm)",
+    kpiEssQtyPair: "ESS Qty (Sets, Invoiced/Confirm)",
     kpiBpRate: "BP / Achievement",
     kpiFutureRevenue: "Future Sales Revenue (10k €)",
-    kpiFuturePvQty: "Future PV Sales Qty",
-    kpiFutureEssQty: "Future ESS Sales Qty",
+    kpiFuturePvQty: "Future PV Sales Qty (MW)",
+    kpiFutureEssQty: "Future ESS Sales Qty (Sets)",
     kpiH1Revenue: "H1 Invoiced Revenue (10k €)",
-    kpiH1PvQty: "H1 Invoiced PV Qty",
-    kpiH1EssQty: "H1 Invoiced ESS Qty",
+    kpiH1PvQty: "H1 Invoiced PV Qty (MW)",
+    kpiH1EssQty: "H1 Invoiced ESS Qty (Sets)",
     kpiH1Rate: "H1 Achievement",
 
     qQuarter: "Quarter",
     qAllAmount: "All Amount (10k €)",
     qInvoicedAmount: "Invoiced (10k €)",
-    qPvQty: "PV Qty",
-    qEssQty: "ESS Qty",
+    qPvQty: "PV Qty (MW)",
+    qEssQty: "ESS Qty (Sets)",
     qRate: "Achievement",
 
     chartAmountTitle: `${TARGET_YEAR} Monthly Sales Amount (line=total, bars=PV/ESS)`,
@@ -173,10 +185,10 @@ const I18N = {
     regYoy: "YoY",
     regShare: "Share",
     regEssAmount: "ESS Amount (10k €)",
-    regEssQty: "ESS Qty",
+    regEssQty: "ESS Qty (Sets)",
     regEssAsp: "ESS ASP (€/Set)",
     regPvAmount: "PV Amount (10k €)",
-    regPvQty: "PV Qty",
+    regPvQty: "PV Qty (MW)",
     regPvAsp: "PV ASP (€/W)",
 
     pairInvoiced: "Invoiced",
@@ -328,9 +340,9 @@ function renderOverview() {
   yearRows.forEach((r) => addAgg(aggYear, r));
 
   document.getElementById("yearKpiRow").innerHTML = [
-    card(t("kpiRevenuePair"), `${t("pairInvoiced")}: ${fmtWanInt(aggInv.revenue)}\n${t("pairConfirm")}: ${fmtWanInt(aggConf.revenue)}`),
-    card(t("kpiPvQtyPair"), `${t("pairInvoiced")}: ${fmtInt(aggInv.pvQty)}\n${t("pairConfirm")}: ${fmtInt(aggConf.pvQty)}`),
-    card(t("kpiEssQtyPair"), `${t("pairInvoiced")}: ${fmtInt(aggInv.essQty)}\n${t("pairConfirm")}: ${fmtInt(aggConf.essQty)}`),
+    card(t("kpiRevenuePair"), `${fmtWanInt(aggInv.revenue)} / ${fmtWanInt(aggConf.revenue)}`),
+    card(t("kpiPvQtyPair"), `${fmtInt(aggInv.pvQty)} / ${fmtInt(aggConf.pvQty)}`),
+    card(t("kpiEssQtyPair"), `${fmtInt(aggInv.essQty)} / ${fmtInt(aggConf.essQty)}`),
     card(t("kpiBpRate"), `BP: ${t("empty")}\n${t("qRate")}: ${t("empty")}`),
   ].join("");
 
@@ -410,11 +422,14 @@ function renderOverview() {
     yaxis: { title: t("chartAmountY") },
   });
 
+  const pvAspData = data.map((x) => (x.pvQty > 0 ? x.pvAmount / (x.pvQty * 1000000) : null));
   renderPlot("monthlyPvAspChart", [{
     x: months,
-    y: data.map((x) => (x.pvQty > 0 ? x.pvAmount / (x.pvQty * 1000000) : null)),
+    y: pvAspData,
     type: "scatter",
-    mode: "lines+markers",
+    mode: "lines+markers+text",
+    text: pvAspData.map((v) => (v == null ? "" : fmtAsp3(v))),
+    textposition: "top center",
     name: t("chartPvAsp"),
     line: { color: "#2E7CFF", width: 3 },
   }], {
@@ -422,11 +437,14 @@ function renderOverview() {
     yaxis: { title: t("chartPvAsp") },
   });
 
+  const essAspData = data.map((x) => (x.essQty > 0 ? x.essAmount / x.essQty : null));
   renderPlot("monthlyEssAspChart", [{
     x: months,
-    y: data.map((x) => (x.essQty > 0 ? x.essAmount / x.essQty : null)),
+    y: essAspData,
     type: "scatter",
-    mode: "lines+markers",
+    mode: "lines+markers+text",
+    text: essAspData.map((v) => (v == null ? "" : fmtInt(v))),
+    textposition: "top center",
     name: t("chartEssAsp"),
     line: { color: "#9D63FF", width: 3 },
   }], {
@@ -469,8 +487,9 @@ function renderRegion() {
   const totalRevenue = rows.reduce((acc, r) => acc + r.revenue, 0);
   const map = new Map();
   rows.forEach((r) => {
-    if (!map.has(r.region)) map.set(r.region, initAgg());
-    addAgg(map.get(r.region), r);
+    const regionKey = mapRegionForStats(r.region);
+    if (!map.has(regionKey)) map.set(regionKey, initAgg());
+    addAgg(map.get(regionKey), r);
   });
 
   const regionGrid = document.getElementById("regionGrid");
@@ -591,4 +610,11 @@ langEnBtn.addEventListener("click", () => setLanguage("en"));
 bindSourceMode();
 bindJumpButtons();
 applyLanguage();
+
+
+
+
+
+
+
 
