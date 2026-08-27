@@ -190,6 +190,12 @@
       min-height: 120px;
       padding: 6px 8px;
     }
+    .filter-grid.compact select[multiple] { min-height: 82px; }
+    .filter-grid-6 { grid-template-columns: repeat(6, minmax(150px, 1fr)); }
+    .filter-note { color: #5f7da6; font-size: 12px; margin: -2px 0 8px; }
+    .quarter-total td { background: #eef5ff; font-weight: 800; color: #1f4a7a; }
+    .quarter-month td:first-child { padding-left: 28px; color: #5f7da6; }
+    .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
     .region-grid {
       display: grid;
@@ -226,6 +232,7 @@
       .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
       .kpi-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
       .filter-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .chart-grid-2 { grid-template-columns: 1fr; }
     }
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
@@ -282,6 +289,7 @@
       <div class="jump-wrap" id="jumpWrap">
         <button class="jump-btn active" data-target="block-total" data-i18n="tabTotal">总计 Dashboard</button>
         <button class="jump-btn" data-target="block-region" data-i18n="tabRegion">各地区看板</button>
+        <button class="jump-btn" data-target="block-product" data-i18n="tabProduct">产品销售分析</button>
       </div>
 
       <div id="block-total" class="content-block active">
@@ -300,8 +308,21 @@
         <div class="table-wrap"><table id="quarterProgressTable"></table></div>
 
         <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
-        <div class="chart-box"><div id="monthlyPvAspChart" class="chart"></div></div>
-        <div class="chart-box"><div id="monthlyEssAspChart" class="chart"></div></div>
+        <div class="sub-title" data-i18n="aspFilterTitle">ASP 筛选</div>
+        <div class="filter-grid compact">
+          <div>
+            <label for="aspRegionSel" data-i18n="filterRegion">地区</label>
+            <select id="aspRegionSel" multiple size="4"></select>
+          </div>
+          <div>
+            <label for="aspFamilySel" data-i18n="filterProductFamily">Product Family</label>
+            <select id="aspFamilySel" multiple size="4"></select>
+          </div>
+        </div>
+        <div class="chart-grid-2">
+          <div class="chart-box"><div id="monthlyPvAspChart" class="chart"></div></div>
+          <div class="chart-box"><div id="monthlyEssAspChart" class="chart"></div></div>
+        </div>
       </div>
 
       <div id="block-region" class="content-block">
@@ -329,6 +350,56 @@
         </div>
 
         <div id="regionGrid" class="region-grid"></div>
+      </div>
+
+      <div id="block-product" class="content-block">
+        <h3 data-i18n="productTitle">产品销售分析</h3>
+        <div class="filter-grid filter-grid-6">
+          <div>
+            <label for="productMetricSel" data-i18n="productMetric">分析指标</label>
+            <select id="productMetricSel">
+              <option value="revenue" data-i18n="metricRevenue">销售收入</option>
+              <option value="pvQty" data-i18n="metricPvQty">PV 销量 (MW)</option>
+              <option value="essQty" data-i18n="metricEssQty">ESS 销量 (Sets)</option>
+            </select>
+          </div>
+          <div>
+            <label for="productDimensionSel" data-i18n="productDimension">产品维度</label>
+            <select id="productDimensionSel">
+              <option value="category">Category</option>
+              <option value="brand">Brand</option>
+              <option value="sizeFamily">Size Family</option>
+              <option value="productFamily">Product Family</option>
+            </select>
+          </div>
+          <div>
+            <label for="productIncomeSel" data-i18n="filterIncome">收入类型</label>
+            <select id="productIncomeSel">
+              <option value="total" data-i18n="incomeTotal">总计</option>
+              <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
+              <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
+            </select>
+          </div>
+          <div>
+            <label for="productRegionSel" data-i18n="filterRegion">地区</label>
+            <select id="productRegionSel"></select>
+          </div>
+          <div>
+            <label for="productStartMonthSel" data-i18n="startMonth">开始月份</label>
+            <select id="productStartMonthSel"></select>
+          </div>
+          <div>
+            <label for="productEndMonthSel" data-i18n="endMonth">结束月份</label>
+            <select id="productEndMonthSel"></select>
+          </div>
+        </div>
+        <div class="filter-note" data-i18n="productNote">数量视图分别显示 PV MW 或 ESS Sets，避免不同单位相加。</div>
+        <div id="productKpiRow" class="kpi-grid kpi-grid-4"></div>
+        <div class="chart-grid-2">
+          <div class="chart-box"><div id="productTrendChart" class="chart"></div></div>
+          <div class="chart-box"><div id="productShareChart" class="chart"></div></div>
+        </div>
+        <div class="table-wrap"><table id="productRankingTable"></table></div>
       </div>
     </section>
   </main>
