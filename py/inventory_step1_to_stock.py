@@ -303,6 +303,7 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict
         "level2",
         "level3",
         "billable watts(w)",
+        "connector",
         "total pcs per 40hq container",
     ]
     missing = [h for h in required if h not in idx]
@@ -320,6 +321,7 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict
             "Product TCL Report": normalize_text(row[idx["level2"]]),
             "Family": normalize_text(row[idx["level3"]]),
             "Model": normalize_text(row[idx["product model"]]),
+            "Connector": normalize_text(row[idx["connector"]]),
             "Bin": safe_float(row[idx["billable watts(w)"]]),
             "MOQ": safe_float(row[idx["total pcs per 40hq container"]]),
         }
@@ -538,6 +540,7 @@ def write_output_sheet(
         "Family",
         "SKU",
         "Model",
+        "Connector",
         "Bin",
         "MOQ",
         "To be allocated",
@@ -562,32 +565,42 @@ def write_output_sheet(
             "Product TCL Report": UNMATCHED_SKU_MARK,
             "Family": UNMATCHED_SKU_MARK,
             "Model": UNMATCHED_SKU_MARK,
+            "Connector": UNMATCHED_SKU_MARK,
             "Bin": 0,
             "MOQ": 0,
         }, True
 
-    for item in rows:
-        mapped, unmatched = resolve_sku_mapping(item["SKU"])
-        if unmatched:
-            marked_rows_info.append({"SKU": item["SKU"], "WH": item["WH"], "Reason": UNMATCHED_SKU_MARK})
+    def append_stock_row(
+        wh: str,
+        sku: str,
+        mapped: dict[str, Any],
+        stock: float,
+    ) -> None:
         ws.append(
             [
-                item["WH"],
+                wh,
                 mapped.get("Category"),
                 mapped.get("Product TCL Report"),
                 mapped.get("Family"),
-                item["SKU"],
+                sku,
                 mapped.get("Model"),
+                mapped.get("Connector"),
                 mapped.get("Bin"),
                 mapped.get("MOQ"),
                 0,
                 0,
                 0,
                 0,
-                item["Stock"],
+                stock,
             ]
             + [None] * len(transit_headers)
         )
+
+    for item in rows:
+        mapped, unmatched = resolve_sku_mapping(item["SKU"])
+        if unmatched:
+            marked_rows_info.append({"SKU": item["SKU"], "WH": item["WH"], "Reason": UNMATCHED_SKU_MARK})
+        append_stock_row(item["WH"], item["SKU"], mapped, item["Stock"])
 
     header_col = {h: i + 1 for i, h in enumerate(headers)}
     row_by_key: dict[tuple[str, str], int] = {}
@@ -626,24 +639,7 @@ def write_output_sheet(
             mapped, unmatched = resolve_sku_mapping(sku)
             if unmatched:
                 marked_rows_info.append({"SKU": sku, "WH": wh, "Reason": UNMATCHED_SKU_MARK})
-            ws.append(
-                [
-                    wh,
-                    mapped.get("Category"),
-                    mapped.get("Product TCL Report"),
-                    mapped.get("Family"),
-                    sku,
-                    mapped.get("Model"),
-                    mapped.get("Bin"),
-                    mapped.get("MOQ"),
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                ]
-                + [None] * len(transit_headers)
-            )
+            append_stock_row(wh, sku, mapped, 0)
             row_by_key[key] = ws.max_row
 
         row_num = row_by_key[key]
@@ -686,11 +682,13 @@ def write_output_sheet(
         dedup_marked.append(item)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
-    ws_alloc.append(["SKU", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
+    ws_alloc.append(["SKU", "Connector", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
     for order in allocated_orders:
+        mapped, _ = resolve_sku_mapping(order.get("SKU", ""))
         ws_alloc.append(
             [
                 order.get("SKU"),
+                mapped.get("Connector"),
                 order.get("Ordered Qty"),
                 order.get("CRD"),
                 order.get("Customer Name"),

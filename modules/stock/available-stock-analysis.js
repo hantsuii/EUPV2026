@@ -968,7 +968,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
 
   const headerHtml = [
     "<tr>",
-    "<th>Product (SKU | Model)</th>",
+    "<th>Product (Connector | Model | SKU)</th>",
     "<th>In-stock</th>",
     "<th>In-transit (range)</th>",
     "<th>To be allocated</th>",
@@ -1079,7 +1079,7 @@ if '_Transit Source Map' in wb.sheetnames:
             if sku and wh and d_header and source:
                 source_map[f"{sku}||{wh}||{d_header}"] = source
 
-required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Stock", "To be allocated"]
+required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Stock", "To be allocated"]
 for col in required:
     if col not in header_to_idx:
         raise ValueError(f"Missing expected column in stock sheet: {col}")
@@ -1110,6 +1110,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
     product_report = _text(row[header_to_idx['Product TCL Report']])
     family = _text(row[header_to_idx['Family']])
     model = _text(row[header_to_idx['Model']])
+    connector = _text(row[header_to_idx['Connector']])
 
     marker = "sku not matched"
     if any(v.lower() == marker for v in (category, product_report, family, model)):
@@ -1126,7 +1127,8 @@ for row in ws.iter_rows(min_row=2, values_only=True):
             date_source_tags[d] = _merge_tag(date_source_tags.get(d), src)
 
     product_key = f"{sku}||{model}" if model else f"{sku}||"
-    product_label = f"{model} | {sku}" if model else sku
+    product_parts = [part for part in (connector, model, sku) if part]
+    product_label = " | ".join(product_parts) if product_parts else sku
 
     item = {
         "WH": wh,
@@ -1135,6 +1137,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         "Family": family,
         "SKU": sku,
         "Model": model,
+        "Connector": connector,
         "ProductKey": product_key,
         "ProductKeyLabel": product_label,
         "Stock": _num(row[header_to_idx['Stock']]),
@@ -1148,6 +1151,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         "Category": item["Category"],
         "ProductTCLReport": item["ProductTCLReport"],
         "Family": item["Family"],
+        "Connector": item["Connector"],
         "ProductKey": item["ProductKey"],
     }
 

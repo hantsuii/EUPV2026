@@ -38,3 +38,5 @@ python -m http.server 8080
 仓库内附带：
 - 处理代码：`py/inventory_step1_to_stock.py`
 - 模板文件：`templates/stock_template.xlsx`
+- 生成的 `stock` sheet 会从 `SKU` sheet 回填 `Connector`，Product 检索标签显示 `Connector | Model | SKU`
+- 取数、计算和呈现规则汇总：`logic/`
