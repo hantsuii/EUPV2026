@@ -10,14 +10,14 @@
 - 地区读取 `Order details.Region`。
 - Target 读取 `Target` sheet。地区优先读取 `Region`；为兼容旧日报样例，在 `Region` 不存在时回退到 `Country`。
 - 实际和 Target 都应用同一套 H1/H2 地区归并：Italy & Adriatics → Italy、Germany & Austria → DACH、Emerging Market → Central and Eastern Europe、lberia → Southern Europe。
-- Target 后台同时汇总 `Revenue EUR` 和 `Quantity`。PV Quantity 对应 MW，ESS Quantity 对应 Sets；当前不输出 country/category/Product-Sub 层级目标。
+- Target 后台同时汇总 `Revenue EUR` 和 `Quantity`。PV Quantity 对应 MW；ESS Quantity 只汇总 `category Sub = Kits` 的行，对应 Sets；当前不输出 country/category/Product-Sub 层级目标。
 
 ## 数量与 ASP
 
 - PV 数量取 `Total MW`；PV ASP = PV Revenue EUR / (PV MW × 1,000,000)。
 - ESS 数量沿用原页面口径：`Unit Price * Qty` 有效，且产品为 Hybrid Inverter、ENERGY+_KIT GEN1、ENERGY+_KIT 或 TCL 时，取 `Ordered Qty`。
 - ESS ASP = ESS Revenue EUR / ESS Sets。
-- ASP 图表可按 `Region` 和 `Product Family` 多选筛选。
+- PV 和 ESS ASP 纵向分别展示。每张图都可独立按 `Region`、`Brand`、`Level1`、`Level2` 多选筛选；上层筛选变化后，下层选项仅保留当前上层筛选范围内存在的值。
 
 ## BP 与达成率
 
@@ -36,11 +36,17 @@
 
 ## 产品销售分析
 
-- 可选择 Category、Brand、Size Family 或 Product Family 作为产品维度。
+- 可选择 Category、Brand、Level1 或 Level2 作为产品维度。
 - 可选择销售收入、PV MW 或 ESS Sets；数量指标分开显示，避免不同单位相加。
 - 可筛选收入类型、Region、开始月份和结束月份。
 - 输出区间总计、领先产品、领先产品占比、最近月环比、按月堆叠趋势、产品占比和排名表。
 - 排名表同时显示区间值、占比、最近月、上月和环比；收入以万欧元展示。
+
+## 地区详情
+
+- 各地区卡片提供“查看详情”按钮。
+- 点击后以弹窗打开该地区的总计 Dashboard；全年 KPI、未来指标、H1、未结束季度、月度金额趋势及 PV/ESS ASP 与总计页使用相同的计算方法，并保留 PV/ESS 独立的四级 ASP 筛选。
+- 弹窗的数据范围固定为所点击地区，Target 也同步切换到该地区。
 
 ## 展示边界
 

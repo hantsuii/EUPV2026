@@ -196,6 +196,28 @@
     .quarter-total td { background: #eef5ff; font-weight: 800; color: #1f4a7a; }
     .quarter-month td:first-child { padding-left: 28px; color: #5f7da6; }
     .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .asp-panel + .asp-panel { margin-top: 14px; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      padding: 22px;
+      overflow: auto;
+      background: rgba(18, 42, 76, 0.5);
+    }
+    .modal-backdrop.open { display: block; }
+    .modal-dialog {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 16px 18px 24px;
+      border-radius: 16px;
+      background: #f5f9ff;
+      box-shadow: 0 20px 60px rgba(10, 41, 80, 0.35);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .modal-close { min-width: 38px; min-height: 38px; border: 1px solid #bdd4f3; border-radius: 9px; background: #e7f1ff; color: #28507d; cursor: pointer; font-size: 22px; }
+    .detail-btn { align-self: flex-start; margin-top: 10px; border: 1px solid #3f8bff; border-radius: 8px; background: #e7f1ff; color: #255488; padding: 7px 11px; cursor: pointer; font-weight: 700; }
 
     .region-grid {
       display: grid;
@@ -308,19 +330,24 @@
         <div class="table-wrap"><table id="quarterProgressTable"></table></div>
 
         <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
-        <div class="sub-title" data-i18n="aspFilterTitle">ASP 筛选</div>
-        <div class="filter-grid compact">
-          <div>
-            <label for="aspRegionSel" data-i18n="filterRegion">地区</label>
-            <select id="aspRegionSel" multiple size="4"></select>
+        <div class="asp-panel">
+          <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
+          <div class="filter-grid compact">
+            <div><label for="pvAspRegionSel" data-i18n="filterRegion">地区</label><select id="pvAspRegionSel" multiple size="4"></select></div>
+            <div><label for="pvAspBrandSel">Brand</label><select id="pvAspBrandSel" multiple size="4"></select></div>
+            <div><label for="pvAspLevel1Sel">Level1</label><select id="pvAspLevel1Sel" multiple size="4"></select></div>
+            <div><label for="pvAspLevel2Sel">Level2</label><select id="pvAspLevel2Sel" multiple size="4"></select></div>
           </div>
-          <div>
-            <label for="aspFamilySel" data-i18n="filterProductFamily">Product Family</label>
-            <select id="aspFamilySel" multiple size="4"></select>
-          </div>
-        </div>
-        <div class="chart-grid-2">
           <div class="chart-box"><div id="monthlyPvAspChart" class="chart"></div></div>
+        </div>
+        <div class="asp-panel">
+          <div class="sub-title" data-i18n="essAspFilterTitle">ESS ASP 筛选</div>
+          <div class="filter-grid compact">
+            <div><label for="essAspRegionSel" data-i18n="filterRegion">地区</label><select id="essAspRegionSel" multiple size="4"></select></div>
+            <div><label for="essAspBrandSel">Brand</label><select id="essAspBrandSel" multiple size="4"></select></div>
+            <div><label for="essAspLevel1Sel">Level1</label><select id="essAspLevel1Sel" multiple size="4"></select></div>
+            <div><label for="essAspLevel2Sel">Level2</label><select id="essAspLevel2Sel" multiple size="4"></select></div>
+          </div>
           <div class="chart-box"><div id="monthlyEssAspChart" class="chart"></div></div>
         </div>
       </div>
@@ -368,8 +395,8 @@
             <select id="productDimensionSel">
               <option value="category">Category</option>
               <option value="brand">Brand</option>
-              <option value="sizeFamily">Size Family</option>
-              <option value="productFamily">Product Family</option>
+              <option value="level1">Level1</option>
+              <option value="level2">Level2</option>
             </select>
           </div>
           <div>
@@ -403,6 +430,44 @@
       </div>
     </section>
   </main>
+
+  <div id="regionDetailModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="regionDetailTitle">
+    <section class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="regionDetailTitle">地区总计 Dashboard</h2>
+        <button id="regionDetailClose" class="modal-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
+      <div id="detailYearKpiRow" class="kpi-grid kpi-grid-4"></div>
+      <div class="sub-title" data-i18n="futureTitle">未来销售指标（2027+）</div>
+      <div id="detailFutureKpiRow" class="kpi-grid kpi-grid-3"></div>
+      <div class="sub-title" data-i18n="row2Title">H1 销售数据</div>
+      <div id="detailH1KpiRow" class="kpi-grid kpi-grid-4"></div>
+      <div class="sub-title" data-i18n="row3Title">未结束季度进度</div>
+      <div class="table-wrap"><table id="detailQuarterProgressTable"></table></div>
+      <div class="chart-box"><div id="detailMonthlyTrendChart" class="chart"></div></div>
+      <div class="asp-panel">
+        <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
+        <div class="filter-grid compact">
+          <div><label for="detailPvAspRegionSel" data-i18n="filterRegion">地区</label><select id="detailPvAspRegionSel" multiple size="4"></select></div>
+          <div><label for="detailPvAspBrandSel">Brand</label><select id="detailPvAspBrandSel" multiple size="4"></select></div>
+          <div><label for="detailPvAspLevel1Sel">Level1</label><select id="detailPvAspLevel1Sel" multiple size="4"></select></div>
+          <div><label for="detailPvAspLevel2Sel">Level2</label><select id="detailPvAspLevel2Sel" multiple size="4"></select></div>
+        </div>
+        <div class="chart-box"><div id="detailMonthlyPvAspChart" class="chart"></div></div>
+      </div>
+      <div class="asp-panel">
+        <div class="sub-title" data-i18n="essAspFilterTitle">ESS ASP 筛选</div>
+        <div class="filter-grid compact">
+          <div><label for="detailEssAspRegionSel" data-i18n="filterRegion">地区</label><select id="detailEssAspRegionSel" multiple size="4"></select></div>
+          <div><label for="detailEssAspBrandSel">Brand</label><select id="detailEssAspBrandSel" multiple size="4"></select></div>
+          <div><label for="detailEssAspLevel1Sel">Level1</label><select id="detailEssAspLevel1Sel" multiple size="4"></select></div>
+          <div><label for="detailEssAspLevel2Sel">Level2</label><select id="detailEssAspLevel2Sel" multiple size="4"></select></div>
+        </div>
+        <div class="chart-box"><div id="detailMonthlyEssAspChart" class="chart"></div></div>
+      </div>
+    </section>
+  </div>
 
   <script src="./sales-change-analysis.js"></script>
 </body>
