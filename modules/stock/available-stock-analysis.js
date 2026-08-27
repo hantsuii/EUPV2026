@@ -968,7 +968,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
 
   const headerHtml = [
     "<tr>",
-    "<th>Product (Connector | Model | SKU)</th>",
+    "<th>Product (Model | SKU | Connector)</th>",
     "<th>In-stock</th>",
     "<th>In-transit (range)</th>",
     "<th>To be allocated</th>",
@@ -1100,10 +1100,24 @@ for h in headers:
 rows = []
 key_meta = {}
 date_source_tags = {}
-for row in ws.iter_rows(min_row=2, values_only=True):
+stock_rows = list(ws.iter_rows(min_row=2, values_only=True))
+active_sku_keys = set()
+for row in stock_rows:
+    sku = _text(row[header_to_idx['SKU']])
+    if not sku:
+        continue
+    has_activity = _num(row[header_to_idx['Stock']]) != 0 or _num(row[header_to_idx['To be allocated']]) != 0
+    if not has_activity:
+        has_activity = any(_num(row[header_to_idx[d]]) != 0 for d in date_headers)
+    if has_activity:
+        active_sku_keys.add(sku.upper())
+
+for row in stock_rows:
     sku = _text(row[header_to_idx['SKU']])
     wh = _text(row[header_to_idx['WH']])
     if not sku or not wh:
+        continue
+    if sku.upper() not in active_sku_keys:
         continue
 
     category = _text(row[header_to_idx['Category']])
@@ -1127,7 +1141,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
             date_source_tags[d] = _merge_tag(date_source_tags.get(d), src)
 
     product_key = f"{sku}||{model}" if model else f"{sku}||"
-    product_parts = [part for part in (connector, model, sku) if part]
+    product_parts = [part for part in (model, sku, connector) if part]
     product_label = " | ".join(product_parts) if product_parts else sku
 
     item = {

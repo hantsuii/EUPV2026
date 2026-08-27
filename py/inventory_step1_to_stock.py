@@ -596,7 +596,26 @@ def write_output_sheet(
             + [None] * len(transit_headers)
         )
 
+    transit_qty = transit_qty or {}
+    transit_category = transit_category or {}
+    transit_source_tag = transit_source_tag or {}
+    allocated_orders = allocated_orders or []
+    allocated_need = allocated_need or {}
+
+    active_sku_keys: set[str] = set()
     for item in rows:
+        if safe_float(item.get("Stock")) != 0:
+            active_sku_keys.add(normalize_sku_key(item.get("SKU")))
+    for (sku, _wh, _d_header), qty in transit_qty.items():
+        if safe_float(qty) != 0:
+            active_sku_keys.add(normalize_sku_key(sku))
+    for (sku, _wh), qty in allocated_need.items():
+        if safe_float(qty) != 0:
+            active_sku_keys.add(normalize_sku_key(sku))
+
+    for item in rows:
+        if normalize_sku_key(item["SKU"]) not in active_sku_keys:
+            continue
         mapped, unmatched = resolve_sku_mapping(item["SKU"])
         if unmatched:
             marked_rows_info.append({"SKU": item["SKU"], "WH": item["WH"], "Reason": UNMATCHED_SKU_MARK})
@@ -610,11 +629,17 @@ def write_output_sheet(
         if sku and wh and (sku, wh) not in row_by_key:
             row_by_key[(sku, wh)] = r
 
-    transit_qty = transit_qty or {}
-    transit_category = transit_category or {}
-    transit_source_tag = transit_source_tag or {}
-    allocated_orders = allocated_orders or []
-    allocated_need = allocated_need or {}
+    for (sku, wh), need_qty in sorted(allocated_need.items()):
+        if not sku or not wh or safe_float(need_qty) == 0:
+            continue
+        key = (sku, wh)
+        if key in row_by_key:
+            continue
+        mapped, unmatched = resolve_sku_mapping(sku)
+        if unmatched:
+            marked_rows_info.append({"SKU": sku, "WH": wh, "Reason": UNMATCHED_SKU_MARK})
+        append_stock_row(wh, sku, mapped, 0)
+        row_by_key[key] = ws.max_row
 
     stock_col = header_col["Stock"]
     ws.cell(1, stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]
@@ -632,6 +657,8 @@ def write_output_sheet(
 
     for (sku, wh, d_header), qty in transit_qty.items():
         if d_header not in header_col:
+            continue
+        if safe_float(qty) == 0 or normalize_sku_key(sku) not in active_sku_keys:
             continue
 
         key = (sku, wh)
@@ -684,6 +711,8 @@ def write_output_sheet(
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
     ws_alloc.append(["SKU", "Connector", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
     for order in allocated_orders:
+        if safe_float(order.get("Ordered Qty")) == 0:
+            continue
         mapped, _ = resolve_sku_mapping(order.get("SKU", ""))
         ws_alloc.append(
             [

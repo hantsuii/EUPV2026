@@ -47,6 +47,8 @@ SKU sheet 必须包含以下字段：
 
 `Connector` 会随 SKU 映射进入所有来源产生的库存行，包括 Inventory 的现货行、Daily Supply Plan/ODP 的仅在途行，以及对应的最终 Product 展示。未匹配 SKU 的这些映射字段统一写为 `SKU not matched`，该行仍会写入输出工作簿，但不会进入可视化分析数据。
 
+在写出 `stock` 前，按 SKU 检查四个来源的数量：Inventory 的 Stock、Daily Supply Plan 的 Available Quantity、ODP 的 Quantity、Orderfile Base 的 Ordered Qty。四个来源都没有非零数量的 SKU 会被整体跳过，不生成 stock 行；前端读取时也执行同样的 SKU 级防御过滤，因此不会进入可视化数据。任一来源有非零数量则保留该 SKU；如果只有 To be allocated 有量，也会创建对应的 SKU/WH 行。
+
 ## 3. 各来源取数和清洗
 
 ### 3.1 Inventory
@@ -123,9 +125,9 @@ Daily Supply Plan 和 ODP 的数量会累加到同一个 `(SKU, WH, 日期)`。�
 
 筛选层级为：`WH → Category → Product TCL Report → Family → Product`。下级选项根据上级当前选择级联重建。Product 的内部键仍是 `SKU||Model`，显示标签改为：
 
-`Connector | Model | SKU`
+`Model | SKU | Connector`
 
-如果 Connector 或 Model 为空，则自动省略空片段。这样 Product 下拉框、图表分产品线名称、明细表第一列使用同一套检索信息。
+如果 Model 或 Connector 为空，则自动省略空片段。这样 Product 下拉框、图表分产品线名称、明细表第一列使用同一套检索信息。
 
 ### 图表
 
@@ -144,4 +146,4 @@ Daily Supply Plan 和 ODP 的数量会累加到同一个 `(SKU, WH, 日期)`。�
 - `To be allocated` = CRD 在选择日期范围内的 Orderfile 明细数量之和。
 - `Available Qty` = `In-stock + In-transit (range) - To be allocated`。
 
-表格第一列显示 `Connector | Model | SKU`；日期列颜色继续反映来源。图表和明细表都受同一组筛选及日期范围控制。
+表格第一列显示 `Model | SKU | Connector`；日期列颜色继续反映来源。图表和明细表都受同一组筛选及日期范围控制。四个来源均无非零数量的 SKU 不会出现在表格中。
