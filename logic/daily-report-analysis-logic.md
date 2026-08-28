@@ -14,9 +14,9 @@
 
 ## 数量与 ASP
 
-- PV 数量取 `Total MW`；PV ASP = PV Revenue EUR / (PV MW × 1,000,000)。
+- PV ASP 图在筛选和计算前固定限定 `Category = PV`；PV 数量取 `Total MW`，PV ASP = PV Revenue EUR / (PV MW × 1,000,000)。
 - ESS 数量沿用原页面口径：`Unit Price * Qty` 有效，且产品为 Hybrid Inverter、ENERGY+_KIT GEN1、ENERGY+_KIT 或 TCL 时，取 `Ordered Qty`。
-- ESS ASP = ESS Revenue EUR / ESS Sets。
+- ESS ASP 图在筛选和计算前固定限定 `Category = ESS`；ESS ASP = ESS Revenue EUR / ESS Sets。
 - PV 和 ESS ASP 纵向分别展示。每张图都可独立按 `Region`、`Brand`、`Level1`、`Level2` 多选筛选；上层筛选变化后，下层选项仅保留当前上层筛选范围内存在的值。
 
 ## BP 与达成率
@@ -36,7 +36,8 @@
 
 ## 产品销售分析
 
-- 可选择 Category、Brand、Level1 或 Level2 作为产品维度。
+- 产品层级筛选拆分为 Category、Brand、Level1、Level2 四个多选条件，并按上述层级联动刷新下层可选值。
+- 产品趋势图、销售占比和排名默认按 Level2 展示；上层产品条件用于缩小数据范围。
 - 可选择销售收入、PV MW 或 ESS Sets；数量指标分开显示，避免不同单位相加。
 - 可筛选收入类型、Region、开始月份和结束月份。
 - 输出区间总计、领先产品、领先产品占比、最近月环比、按月堆叠趋势、产品占比和排名表。

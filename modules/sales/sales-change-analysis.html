@@ -196,6 +196,19 @@
     .quarter-total td { background: #eef5ff; font-weight: 800; color: #1f4a7a; }
     .quarter-month td:first-child { padding-left: 28px; color: #5f7da6; }
     .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .product-filter-panel {
+      margin: 10px 0 12px;
+      padding: 14px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%);
+    }
+    .filter-section-title { margin: 0 0 9px; color: #2a4f7c; font-size: 14px; font-weight: 800; }
+    .product-hierarchy-grid { grid-template-columns: repeat(4, minmax(175px, 1fr)); margin-bottom: 12px; }
+    .product-control-grid { grid-template-columns: repeat(5, minmax(155px, 1fr)); margin-bottom: 0; }
+    .product-filter-panel .filter-grid { gap: 12px; }
+    .product-chart-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.9fr); gap: 12px; }
+    .product-chart-grid .chart-box { margin-top: 0; }
     .asp-panel + .asp-panel { margin-top: 14px; }
     .modal-backdrop {
       position: fixed;
@@ -255,6 +268,8 @@
       .kpi-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
       .filter-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
       .chart-grid-2 { grid-template-columns: 1fr; }
+      .product-hierarchy-grid, .product-control-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .product-chart-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
@@ -381,48 +396,49 @@
 
       <div id="block-product" class="content-block">
         <h3 data-i18n="productTitle">产品销售分析</h3>
-        <div class="filter-grid filter-grid-6">
-          <div>
-            <label for="productMetricSel" data-i18n="productMetric">分析指标</label>
-            <select id="productMetricSel">
-              <option value="revenue" data-i18n="metricRevenue">销售收入</option>
-              <option value="pvQty" data-i18n="metricPvQty">PV 销量 (MW)</option>
-              <option value="essQty" data-i18n="metricEssQty">ESS 销量 (Sets)</option>
-            </select>
+        <div class="product-filter-panel">
+          <div class="filter-section-title" data-i18n="productHierarchyTitle">产品层级筛选</div>
+          <div class="filter-grid compact product-hierarchy-grid">
+            <div><label for="productCategorySel">Category</label><select id="productCategorySel" multiple size="4"></select></div>
+            <div><label for="productBrandSel">Brand</label><select id="productBrandSel" multiple size="4"></select></div>
+            <div><label for="productLevel1Sel">Level1</label><select id="productLevel1Sel" multiple size="4"></select></div>
+            <div><label for="productLevel2Sel">Level2</label><select id="productLevel2Sel" multiple size="4"></select></div>
           </div>
-          <div>
-            <label for="productDimensionSel" data-i18n="productDimension">产品维度</label>
-            <select id="productDimensionSel">
-              <option value="category">Category</option>
-              <option value="brand">Brand</option>
-              <option value="level1">Level1</option>
-              <option value="level2">Level2</option>
-            </select>
-          </div>
-          <div>
-            <label for="productIncomeSel" data-i18n="filterIncome">收入类型</label>
-            <select id="productIncomeSel">
-              <option value="total" data-i18n="incomeTotal">总计</option>
-              <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
-              <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
-            </select>
-          </div>
-          <div>
-            <label for="productRegionSel" data-i18n="filterRegion">地区</label>
-            <select id="productRegionSel"></select>
-          </div>
-          <div>
-            <label for="productStartMonthSel" data-i18n="startMonth">开始月份</label>
-            <select id="productStartMonthSel"></select>
-          </div>
-          <div>
-            <label for="productEndMonthSel" data-i18n="endMonth">结束月份</label>
-            <select id="productEndMonthSel"></select>
+          <div class="filter-section-title" data-i18n="productControlTitle">分析条件</div>
+          <div class="filter-grid product-control-grid">
+            <div>
+              <label for="productMetricSel" data-i18n="productMetric">分析指标</label>
+              <select id="productMetricSel">
+                <option value="revenue" data-i18n="metricRevenue">销售收入</option>
+                <option value="pvQty" data-i18n="metricPvQty">PV 销量 (MW)</option>
+                <option value="essQty" data-i18n="metricEssQty">ESS 销量 (Sets)</option>
+              </select>
+            </div>
+            <div>
+              <label for="productIncomeSel" data-i18n="filterIncome">收入类型</label>
+              <select id="productIncomeSel">
+                <option value="total" data-i18n="incomeTotal">总计</option>
+                <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
+                <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
+              </select>
+            </div>
+            <div>
+              <label for="productRegionSel" data-i18n="filterRegion">地区</label>
+              <select id="productRegionSel"></select>
+            </div>
+            <div>
+              <label for="productStartMonthSel" data-i18n="startMonth">开始月份</label>
+              <select id="productStartMonthSel"></select>
+            </div>
+            <div>
+              <label for="productEndMonthSel" data-i18n="endMonth">结束月份</label>
+              <select id="productEndMonthSel"></select>
+            </div>
           </div>
         </div>
         <div class="filter-note" data-i18n="productNote">数量视图分别显示 PV MW 或 ESS Sets，避免不同单位相加。</div>
         <div id="productKpiRow" class="kpi-grid kpi-grid-4"></div>
-        <div class="chart-grid-2">
+        <div class="product-chart-grid">
           <div class="chart-box"><div id="productTrendChart" class="chart"></div></div>
           <div class="chart-box"><div id="productShareChart" class="chart"></div></div>
         </div>

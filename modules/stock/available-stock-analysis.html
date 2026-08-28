@@ -192,6 +192,28 @@
 
     .repo-opt { margin-top: 6px; font-size: 12px; color: var(--text-2); }
 
+    .engine-row {
+      display: grid;
+      grid-template-columns: 180px 280px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border: 1px solid #c8dcf6;
+      border-radius: 10px;
+      background: #f4f9ff;
+      color: #2e527f;
+    }
+    .engine-select {
+      min-height: 36px;
+      border: 1px solid #b6cfee;
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: #ffffff;
+      color: #1f4674;
+      font-weight: 600;
+    }
+
     .th-src-inv-dsp, .td-src-inv-dsp { background: rgba(82, 162, 255, 0.2); }
     .th-src-odp, .td-src-odp { background: rgba(255, 170, 92, 0.24); }
     .th-src-mixed, .td-src-mixed { background: rgba(191, 149, 255, 0.22); }
@@ -270,6 +292,7 @@
     @media (max-width: 700px) {
       .filters-grid { grid-template-columns: 1fr; }
       .product-col, .controls-col { grid-column: span 1; }
+      .engine-row { grid-template-columns: 1fr; }
       #stockChart { height: 380px; }
     }
   </style>
@@ -283,6 +306,14 @@
 
     <section class="panel">
       <h2>Step 1: Generate Stock Output</h2>
+      <div class="engine-row">
+        <label for="engineMode">Processing engine</label>
+        <select id="engineMode" class="engine-select">
+          <option value="javascript" selected>JavaScript (Recommended)</option>
+          <option value="python">Python Legacy (Fallback)</option>
+        </select>
+        <div class="small-tip">JavaScript runs directly in the browser. Use Python Legacy if an Excel compatibility issue is encountered.</div>
+      </div>
             <div class="form-grid">
         <div>
           <label for="inventoryFile">Inventory file (Required)</label>
@@ -432,6 +463,8 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <script type="module" src="./available-stock-analysis.js"></script>
 </body>

@@ -32,11 +32,12 @@ python -m http.server 8080
 功能：
 - 上传必填文件：`Inventory Step1`、`Stock 模板`
 - 上传可选文件：`DailySupplyPlan`、`EUPV ODP MASTER`、`Orderfile_Base_Realtime`
-- 浏览器端运行 `py/inventory_step1_to_stock.py`
+- 浏览器端默认运行 JavaScript 库存分析引擎；保留 `py/inventory_step1_to_stock.py` 作为 Python Legacy 回退
 - 输出并下载 `stock_output_YYYYMMDD.xlsx`
 
 仓库内附带：
 - 处理代码：`py/inventory_step1_to_stock.py`
 - 模板文件：`templates/stock_template.xlsx`
 - 生成的 `stock` sheet 会从 `SKU` sheet 回填 `Connector`，Product 检索标签显示 `Model | SKU | Connector`
-- 取数、计算和呈现规则汇总：`logic/`
+- Inventory、Daily Supply Plan、ODP、To be allocated 四个来源均无数量的 SKU，不进入生成的 `stock` 和页面展示
+- 取数、计算和呈现规则汇总：`logic/`；引擎、回退、过滤和验证记录见 `logic/说明.md`

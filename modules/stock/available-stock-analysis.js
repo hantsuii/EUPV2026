@@ -1,4 +1,6 @@
 ﻿const statusEl = document.getElementById("status");
+import { buildStockOutputJs } from "./stock-analysis-js.js";
+
 const downloadLinkEl = document.getElementById("downloadLink");
 const vizPanelEl = document.getElementById("vizPanel");
 
@@ -15,6 +17,7 @@ const useRepoOdpMasterEl = document.getElementById("useRepoOdpMaster");
 const useRepoOrderfileEl = document.getElementById("useRepoOrderfile");
 const transitStartInput = document.getElementById("transitStart");
 const transitEndInput = document.getElementById("transitEnd");
+const engineModeEl = document.getElementById("engineMode");
 
 const whFilterEl = document.getElementById("whFilter");
 const categoryFilterEl = document.getElementById("categoryFilter");
@@ -312,6 +315,32 @@ async function resolveInputWorkbook({
     throw new Error(`Please upload required file: ${label}, or select repository default file.`);
   }
 
+  return null;
+}
+
+async function resolveInputBytes({
+  fileInput,
+  useRepoDefault,
+  repoPath,
+  label,
+  required = false,
+}) {
+  const uploaded = fileInput?.files?.[0];
+  if (uploaded) {
+    const bytes = await readFileAsBytes(uploaded);
+    ensureWorkbookIsXlsxZip(bytes, label);
+    return bytes;
+  }
+
+  if (useRepoDefault) {
+    const bytes = await fetchRepoFileBytes(repoPath, label);
+    ensureWorkbookIsXlsxZip(bytes, label);
+    return bytes;
+  }
+
+  if (required) {
+    throw new Error(`Please upload required file: ${label}, or select repository default file.`);
+  }
   return null;
 }
 
@@ -1007,6 +1036,14 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | In-stock: ${fmtNumber(totalStock)} | In-transit: ${fmtNumber(totalTransit)} | To be allocated: ${fmtNumber(totalAllocated)} | Available Qty: ${fmtNumber(totalAvailable)} | Color tag: Blue=Inventory/Daily Supply, Orange=ODP, Purple=Mixed`;
 }
 
+function applyVisualizationPayload(payload) {
+  vizState.dateHeaders = payload?.dateHeaders || [];
+  vizState.rows = payload?.rows || [];
+  vizState.allocations = payload?.allocations || [];
+  vizState.keyMeta = new Map(Object.entries(payload?.keyMeta || {}));
+  vizState.dateSourceTags = payload?.dateSourceTags || {};
+}
+
 async function extractVisualizationData() {
   await pyodide.runPythonAsync(`
 import json
@@ -1206,14 +1243,10 @@ with open('/work/stock_vis.json', 'w', encoding='utf-8') as f:
   const jsonText = pyodide.FS.readFile("/work/stock_vis.json", { encoding: "utf8" });
   const payload = JSON.parse(jsonText);
 
-  vizState.dateHeaders = payload.dateHeaders || [];
-  vizState.rows = payload.rows || [];
-  vizState.allocations = payload.allocations || [];
-  vizState.keyMeta = new Map(Object.entries(payload.keyMeta || {}));
-  vizState.dateSourceTags = payload.dateSourceTags || {};
+  applyVisualizationPayload(payload);
 }
 
-async function runAnalysis() {
+async function runPythonAnalysis() {
   resetDownloadLink();
 
   runBtn.disabled = true;
@@ -1318,6 +1351,82 @@ run(
   }
 }
 
+async function runJavascriptAnalysis() {
+  resetDownloadLink();
+  runBtn.disabled = true;
+  try {
+    setStatus("Preparing JavaScript Excel engine...");
+    const stockTemplateBytes = await fetchTemplateBytes();
+    const inventoryBytes = await resolveInputBytes({
+      fileInput: inventoryInput,
+      useRepoDefault: Boolean(useRepoInventoryEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.inventory,
+      label: "Inventory Step1",
+      required: true,
+    });
+    const dailySupplyBytes = await resolveInputBytes({
+      fileInput: dailySupplyInput,
+      useRepoDefault: Boolean(useRepoDailySupplyEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.dailySupply,
+      label: "DailySupplyPlan",
+      required: true,
+    });
+    const odpBytes = await resolveInputBytes({
+      fileInput: odpMasterInput,
+      useRepoDefault: Boolean(useRepoOdpMasterEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.odpMaster,
+      label: "EUPV ODP MASTER",
+      required: false,
+    });
+    const orderBytes = await resolveInputBytes({
+      fileInput: orderInput,
+      useRepoDefault: Boolean(useRepoOrderfileEl?.checked),
+      repoPath: DEFAULT_REPO_FILE.orderfile,
+      label: "Orderfile Base",
+      required: false,
+    });
+
+    setStatus("Running JavaScript available stock analysis...");
+    const result = await buildStockOutputJs({
+      stockTemplateBytes,
+      inventoryBytes,
+      dailySupplyBytes,
+      odpBytes,
+      orderBytes,
+      startDate: transitStartInput.value || "2026-08-01",
+      endDate: transitEndInput.value || "2026-12-31",
+    });
+
+    const blob = new Blob([result.outputBytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const objectUrl = URL.createObjectURL(blob);
+    const now = new Date();
+    const fileName = `stock_output_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
+    downloadLinkEl.href = objectUrl;
+    downloadLinkEl.download = fileName;
+    downloadLinkEl.textContent = `Download ${fileName}`;
+    downloadLinkEl.style.display = "inline-block";
+
+    applyVisualizationPayload(result.visualization);
+    initializeCascadeFilters();
+    vizPanelEl.style.display = "block";
+    renderChartAndTable();
+    setTimeout(() => chart && chart.resize(), 30);
+    setStatus(`Done: JavaScript stock file generated. Rows: ${result.summary.totalRows}, active SKUs: ${result.summary.activeSkuCount}.`);
+  } catch (err) {
+    setStatus(`JavaScript engine failed: ${err?.message || err}`);
+    console.error(err);
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+async function runAnalysis() {
+  if (engineModeEl?.value === "python") return runPythonAnalysis();
+  return runJavascriptAnalysis();
+}
+
 function clearAllFilterSelections() {
   for (const def of levelDefs) {
     for (const opt of def.el.options) {
@@ -1333,6 +1442,7 @@ function resetForm() {
   dailySupplyInput.value = "";
   odpMasterInput.value = "";
   orderInput.value = "";
+  if (engineModeEl) engineModeEl.value = "javascript";
   if (useRepoInventoryEl) useRepoInventoryEl.checked = false;
   if (useRepoDailySupplyEl) useRepoDailySupplyEl.checked = false;
   if (useRepoOdpMasterEl) useRepoOdpMasterEl.checked = false;

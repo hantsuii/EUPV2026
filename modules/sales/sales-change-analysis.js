@@ -10,7 +10,8 @@ const essAspFilters = { region: byId("essAspRegionSel"), brand: byId("essAspBran
 const detailPvAspFilters = { region: byId("detailPvAspRegionSel"), brand: byId("detailPvAspBrandSel"), level1: byId("detailPvAspLevel1Sel"), level2: byId("detailPvAspLevel2Sel") };
 const detailEssAspFilters = { region: byId("detailEssAspRegionSel"), brand: byId("detailEssAspBrandSel"), level1: byId("detailEssAspLevel1Sel"), level2: byId("detailEssAspLevel2Sel") };
 const regionDetailModal = byId("regionDetailModal"), regionDetailClose = byId("regionDetailClose"), regionDetailTitle = byId("regionDetailTitle");
-const productMetricSel = byId("productMetricSel"), productDimensionSel = byId("productDimensionSel"), productIncomeSel = byId("productIncomeSel");
+const productHierarchyFilters = { category: byId("productCategorySel"), brand: byId("productBrandSel"), level1: byId("productLevel1Sel"), level2: byId("productLevel2Sel") };
+const productMetricSel = byId("productMetricSel"), productIncomeSel = byId("productIncomeSel");
 const productRegionSel = byId("productRegionSel"), productStartMonthSel = byId("productStartMonthSel"), productEndMonthSel = byId("productEndMonthSel");
 let currentLang = localStorage.getItem(APP_LANG_KEY) || "zh";
 let allRows = [], allTargets = [], activeDetailRegion = null;
@@ -37,7 +38,7 @@ const I18N = {
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
-    productTitle: "产品销售分析", productMetric: "分析指标", productDimension: "产品维度", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets，避免不同单位相加。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
+    productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets，避免不同单位相加；图表和排名默认按 Level2 展示。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
   },
   en: {
     pageTitle: "Sales Analytics Dashboard (PV / ESS)", pageSubtitle: "Sales, target achievement, ASP and product-mix trends.", backHome: "← Back to Home",
@@ -49,7 +50,7 @@ const I18N = {
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Confirm (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
-    productTitle: "Product Sales Analysis", productMetric: "Metric", productDimension: "Product Dimension", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately so unlike units are never added.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
+    productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; charts and ranking are shown by Level2.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
   },
 };
 
@@ -129,12 +130,28 @@ function refreshAspCascade(filters, reset = false, sourceRows = allRows) {
   scope = filterMulti(scope, selected(filters.level1), (r) => r.level1);
   fillSelect(filters.level2, [allOption, ...optionsForRows(scope, "level2")], reset ? ["__ALL__"] : selected(filters.level2));
 }
+function refreshProductCascade(reset = false) {
+  const allOption = { value: "__ALL__", label: t("all") };
+  if (reset) fillSelect(productHierarchyFilters.category, [allOption, ...optionsForRows(allRows, "category")], ["__ALL__"]);
+  let scope = filterMulti(allRows, selected(productHierarchyFilters.category), (r) => r.category);
+  fillSelect(productHierarchyFilters.brand, [allOption, ...optionsForRows(scope, "brand")], reset ? ["__ALL__"] : selected(productHierarchyFilters.brand));
+  scope = filterMulti(scope, selected(productHierarchyFilters.brand), (r) => r.brand);
+  fillSelect(productHierarchyFilters.level1, [allOption, ...optionsForRows(scope, "level1")], reset ? ["__ALL__"] : selected(productHierarchyFilters.level1));
+  scope = filterMulti(scope, selected(productHierarchyFilters.level1), (r) => r.level1);
+  fillSelect(productHierarchyFilters.level2, [allOption, ...optionsForRows(scope, "level2")], reset ? ["__ALL__"] : selected(productHierarchyFilters.level2));
+}
+function applyProductHierarchyFilters(rows) {
+  let result = filterMulti(rows, selected(productHierarchyFilters.category), (r) => r.category);
+  result = filterMulti(result, selected(productHierarchyFilters.brand), (r) => r.brand);
+  result = filterMulti(result, selected(productHierarchyFilters.level1), (r) => r.level1);
+  return filterMulti(result, selected(productHierarchyFilters.level2), (r) => r.level2);
+}
 function initFilters() {
   const allOption = { value: "__ALL__", label: t("all") }, years = [...new Set(allRows.map((r) => r.year))].sort((a, b) => a - b), months = [...new Set(allRows.map((r) => r.month))].sort(), regions = [...new Set(allRows.map((r) => r.region))].sort();
   fillSelect(yearSel, [allOption, ...years.map((v) => ({ value: String(v), label: String(v) }))], years.includes(TARGET_YEAR) ? [String(TARGET_YEAR)] : ["__ALL__"]);
   fillSelect(quarterSel, [allOption, ...[1, 2, 3, 4].map((q) => ({ value: `Q${q}`, label: `Q${q}` }))]); fillSelect(monthSel, [allOption, ...months.map((v) => ({ value: v, label: v }))]);
   fillSelect(incomeTypeSel, [{ value: "total", label: t("incomeTotal") }, { value: "invoiced", label: t("incomeInvoiced") }, { value: "confirm", label: t("incomeConfirm") }], ["total"]);
-  refreshAspCascade(pvAspFilters, true); refreshAspCascade(essAspFilters, true); fillSelect(productRegionSel, [allOption, ...regions.map((v) => ({ value: v, label: v }))]);
+  refreshAspCascade(pvAspFilters, true, allRows.filter((r) => r.isPV)); refreshAspCascade(essAspFilters, true, allRows.filter((r) => r.isESS)); refreshProductCascade(true); fillSelect(productRegionSel, [allOption, ...regions.map((v) => ({ value: v, label: v }))]);
   fillSelect(productStartMonthSel, months.map((v) => ({ value: v, label: v })), months.length ? [months[0]] : []); fillSelect(productEndMonthSel, months.map((v) => ({ value: v, label: v })), months.length ? [months[months.length - 1]] : []);
 }
 
@@ -180,8 +197,9 @@ function applyAspFilters(rows, filters) {
 }
 function renderAspCharts(yearRows, pvChartId, essChartId, filters = null) {
   const months = Array.from({ length: 12 }, (_, i) => `${TARGET_YEAR}-${String(i + 1).padStart(2, "0")}`);
-  const pvData = months.map((m) => aggregate(applyAspFilters(yearRows.filter((r) => r.month === m), filters?.pv))), pv = pvData.map((x) => x.pvQty !== 0 ? x.pvAmount / (x.pvQty * 1000000) : null);
-  const essData = months.map((m) => aggregate(applyAspFilters(yearRows.filter((r) => r.month === m), filters?.ess))), ess = essData.map((x) => x.essQty !== 0 ? x.essAmount / x.essQty : null);
+  const pvRows = yearRows.filter((r) => r.isPV), essRows = yearRows.filter((r) => r.isESS);
+  const pvData = months.map((m) => aggregate(applyAspFilters(pvRows.filter((r) => r.month === m), filters?.pv))), pv = pvData.map((x) => x.pvQty !== 0 ? x.pvAmount / (x.pvQty * 1000000) : null);
+  const essData = months.map((m) => aggregate(applyAspFilters(essRows.filter((r) => r.month === m), filters?.ess))), ess = essData.map((x) => x.essQty !== 0 ? x.essAmount / x.essQty : null);
   renderPlot(pvChartId, [{ x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 } }], { title: t("chartPvAspTitle"), yaxis: { title: t("chartPvAsp") } });
   renderPlot(essChartId, [{ x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 } }], { title: t("chartEssAspTitle"), yaxis: { title: t("chartEssAsp") } });
 }
@@ -206,7 +224,7 @@ function renderRegionDetails(resetFilters = false) {
   const region = activeDetailRegion;
   const rows = allRows.filter((r) => r.region === region), targets = allTargets.filter((r) => r.region === region);
   regionDetailTitle.textContent = t("regionDetailTitle", { region });
-  refreshAspCascade(detailPvAspFilters, resetFilters, rows); refreshAspCascade(detailEssAspFilters, resetFilters, rows);
+  refreshAspCascade(detailPvAspFilters, resetFilters, rows.filter((r) => r.isPV)); refreshAspCascade(detailEssAspFilters, resetFilters, rows.filter((r) => r.isESS));
   renderDashboard(rows, targets, {
     year: "detailYearKpiRow", future: "detailFutureKpiRow", h1: "detailH1KpiRow", quarter: "detailQuarterProgressTable",
     trend: "detailMonthlyTrendChart", pvAsp: "detailMonthlyPvAspChart", essAsp: "detailMonthlyEssAspChart",
@@ -218,10 +236,10 @@ function productValue(row, metric) { return metric === "pvQty" ? row.pvQty : met
 function formatProductValue(value, metric) { return metric === "revenue" ? fmtWanInt(value) : metric === "pvQty" ? fmtOne(value) : fmtInt(value); }
 function renderProduct() {
   if (!allRows.length) return;
-  const metric = productMetricSel.value, dimension = productDimensionSel.value;
+  const metric = productMetricSel.value, dimension = "level2";
   let start = productStartMonthSel.value, end = productEndMonthSel.value;
   if (start > end) [start, end] = [end, start];
-  let rows = filterIncome([...allRows], productIncomeSel.value).filter((r) => r.month >= start && r.month <= end); if (productRegionSel.value !== "__ALL__") rows = rows.filter((r) => r.region === productRegionSel.value); if (metric === "pvQty") rows = rows.filter((r) => r.isPV); if (metric === "essQty") rows = rows.filter((r) => r.isESS);
+  let rows = filterIncome([...allRows], productIncomeSel.value).filter((r) => r.month >= start && r.month <= end); if (productRegionSel.value !== "__ALL__") rows = rows.filter((r) => r.region === productRegionSel.value); rows = applyProductHierarchyFilters(rows); if (metric === "pvQty") rows = rows.filter((r) => r.isPV); if (metric === "essQty") rows = rows.filter((r) => r.isESS);
   const months = [...new Set(allRows.map((r) => r.month).filter((m) => m >= start && m <= end))].sort(), totals = new Map(); rows.forEach((r) => totals.set(r[dimension], (totals.get(r[dimension]) || 0) + productValue(r, metric)));
   const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]), total = ranking.reduce((s, x) => s + x[1], 0), latest = months[months.length - 1], previous = months[months.length - 2], topName = ranking[0]?.[0] || t("noData"), latestTotal = rows.filter((r) => r.month === latest).reduce((s, r) => s + productValue(r, metric), 0), previousTotal = rows.filter((r) => r.month === previous).reduce((s, r) => s + productValue(r, metric), 0);
   byId("productKpiRow").innerHTML = [card(t("productTotal"), formatProductValue(total, metric)), card(t("productTop"), topName), card(t("productTopShare"), fmtPct(total !== 0 && ranking.length ? ranking[0][1] / total * 100 : null)), card(t("productMom"), fmtPct(previousTotal !== 0 ? (latestTotal / previousTotal - 1) * 100 : null))].join("");
@@ -230,7 +248,7 @@ function renderProduct() {
   const metricTitle = t(metric === "revenue" ? "metricRevenue" : metric === "pvQty" ? "metricPvQty" : "metricEssQty"); renderPlot("productTrendChart", traces, { title: `${t("productTrend")} · ${metricTitle}`, barmode: "stack", yaxis: { title: metric === "revenue" ? `${metricTitle} (10k €)` : metricTitle } });
   const positive = ranking.filter((x) => x[1] > 0), pieData = positive.slice(0, 9);
   if (positive.length > 9) pieData.push([t("other"), positive.slice(9).reduce((sum, x) => sum + x[1], 0)]);
-  renderPlot("productShareChart", [{ labels: pieData.map((x) => x[0]), values: pieData.map((x) => x[1]), type: "pie", hole: 0.42, textinfo: "label+percent" }], { title: `${t("productShare")} · ${metricTitle}` });
+  renderPlot("productShareChart", [{ labels: pieData.map((x) => x[0]), values: pieData.map((x) => x[1]), type: "pie", hole: 0.5, textinfo: "label+percent", textposition: "inside", hovertemplate: "%{label}<br>%{value:,.0f}<br>%{percent}<extra></extra>" }], { title: `${t("productShare")} · ${metricTitle}`, showlegend: true, legend: { orientation: "h", y: -0.18, x: 0, font: { size: 11 } }, margin: { l: 24, r: 24, t: 52, b: 96 } });
   const rankRows = ranking.map(([name, value]) => { const latestValue = rows.filter((r) => r.month === latest && r[dimension] === name).reduce((s, r) => s + productValue(r, metric), 0), previousValue = rows.filter((r) => r.month === previous && r[dimension] === name).reduce((s, r) => s + productValue(r, metric), 0); return [name, formatProductValue(value, metric), fmtPct(total !== 0 ? value / total * 100 : null), formatProductValue(latestValue, metric), formatProductValue(previousValue, metric), fmtPct(previousValue !== 0 ? (latestValue / previousValue - 1) * 100 : null)]; });
   table("productRankingTable", [t("rankName"), t("rankValue"), t("rankShare"), `${t("rankLatest")} (${latest || "-"})`, `${t("rankPrevious")} (${previous || "-"})`, t("rankMom")], rankRows);
 }
@@ -245,10 +263,13 @@ document.querySelectorAll("input[name='salesSource']").forEach((radio) => radio.
 byId("jumpWrap").querySelectorAll(".jump-btn").forEach((btn) => btn.addEventListener("click", () => { byId("jumpWrap").querySelectorAll(".jump-btn").forEach((x) => x.classList.toggle("active", x === btn)); document.querySelectorAll(".content-block").forEach((panel) => panel.classList.toggle("active", panel.id === btn.dataset.target)); window.dispatchEvent(new Event("resize")); }));
 runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); if (!allRows.length) { setStatus(t("statusNoRows")); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); } catch (error) { setStatus(t("statusFail", { msg: error.message || error })); } });
 [incomeTypeSel, yearSel, quarterSel, monthSel].forEach((el) => el.addEventListener("change", renderRegion));
-[pvAspFilters, essAspFilters].forEach((filters) => Object.values(filters).forEach((el) => el.addEventListener("change", () => { refreshAspCascade(filters); renderOverview(); })));
-[detailPvAspFilters, detailEssAspFilters].forEach((filters) => Object.values(filters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(filters, false, allRows.filter((r) => r.region === activeDetailRegion)); renderRegionDetails(false); })));
-[productMetricSel, productDimensionSel, productIncomeSel, productRegionSel, productStartMonthSel, productEndMonthSel].forEach((el) => el.addEventListener("change", renderProduct));
-[incomeTypeSel, yearSel, quarterSel, monthSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters)].forEach(bindMultiSelectToggle);
+Object.values(pvAspFilters).forEach((el) => el.addEventListener("change", () => { refreshAspCascade(pvAspFilters, false, allRows.filter((r) => r.isPV)); renderOverview(); }));
+Object.values(essAspFilters).forEach((el) => el.addEventListener("change", () => { refreshAspCascade(essAspFilters, false, allRows.filter((r) => r.isESS)); renderOverview(); }));
+Object.values(detailPvAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailPvAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isPV)); renderRegionDetails(false); }));
+Object.values(detailEssAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailEssAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isESS)); renderRegionDetails(false); }));
+[productMetricSel, productIncomeSel, productRegionSel, productStartMonthSel, productEndMonthSel].forEach((el) => el.addEventListener("change", renderProduct));
+Object.values(productHierarchyFilters).forEach((el) => el.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); }));
+[incomeTypeSel, yearSel, quarterSel, monthSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters), ...Object.values(productHierarchyFilters)].forEach(bindMultiSelectToggle);
 byId("regionGrid").addEventListener("click", (event) => { const button = event.target.closest("button[data-region]"); if (button) openRegionDetails(button.dataset.region); });
 regionDetailClose.addEventListener("click", closeRegionDetails);
 regionDetailModal.addEventListener("click", (event) => { if (event.target === regionDetailModal) closeRegionDetails(); });
