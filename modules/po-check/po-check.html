@@ -20,7 +20,7 @@
     .actions { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 14px; }
     .btn-secondary { background: #e2eefc; color: #275384; }
     .status { white-space: pre-wrap; background: #fff; color: #2a4d7a; border-color: #c5d9f4; }
-    .summary-grid { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 10px 0 14px; }
     .metric { border: 1px solid #cde0f8; border-radius: 10px; padding: 10px 12px; background: #fff; }
     .metric b { display:block; font-size: 24px; color:#1d5eac; margin-top: 3px; }
     .metric span { color:#52729b; font-size:12px; }
@@ -46,8 +46,9 @@
     @media(max-width:950px){ .summary-grid{grid-template-columns:repeat(3,1fr);} }
     @media(max-width:800px){ .form-grid{grid-template-columns:1fr;} .summary-grid{grid-template-columns:repeat(2,1fr);} .lang-switch{position:static;margin-bottom:10px;} }
   </style>
+  <link rel="stylesheet" href="../../theme.css" />
 </head>
-<body class="light-ui">
+<body class="light-ui" data-page="po">
   <main class="tool-wrap">
     <header class="hero">
       <div class="lang-switch"><button class="lang-btn" type="button" data-lang="zh">中文</button><button class="lang-btn" type="button" data-lang="en">EN</button></div>

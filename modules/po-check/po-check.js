@@ -182,11 +182,11 @@
     return { results:sortedResults(results), skuResults, poOutputRows, sourceRows:headData.length };
   }
   function renderSummary() {
-    const all = report.results; const approved = all.filter((r) => normalize(r.approval) === "APPROVED"); const approving = all.filter((r) => normalize(r.approval) === "APPROVING"); const other = all.length - approved.length - approving.length; const issues = all.filter((r) => r.overall !== "通过"); const etaUpdates = all.filter((r) => r.etaNeedsAdjustment);
-    summaryEl.innerHTML = [[t("checkedPo"),all.length],["Approved",approved.length],["Approving",approving.length],[t("otherStatus"),other],[t("issuesReview"),issues.length],[t("etaAdjustments"),etaUpdates.length]].map(([label,value]) => `<div class="metric"><span>${escapeHtml(label)}</span><b>${value}</b></div>`).join("");
+    const all = report.results; const visible = all.filter((r) => normalize(r.purchaseStatus) !== "IN STOCK"); const hiddenInStock = all.length - visible.length; const approved = all.filter((r) => normalize(r.approval) === "APPROVED"); const approving = all.filter((r) => normalize(r.approval) === "APPROVING"); const issues = all.filter((r) => r.overall !== "通过"); const etaUpdates = all.filter((r) => r.etaNeedsAdjustment);
+    summaryEl.innerHTML = [[t("checkedPo"),all.length],[t("visiblePo"),visible.length],[t("hiddenInStock"),hiddenInStock],["Approved",approved.length],["Approving",approving.length],[t("issuesReview"),issues.length],[t("etaAdjustments"),etaUpdates.length]].map(([label,value]) => `<div class="metric"><span>${escapeHtml(label)}</span><b>${value}</b></div>`).join("");
   }
   function filteredResults() {
-    const rows = report.results.filter((r) => (scopeFilter.value === "all" || scopeFilter.value === "issue" ? (scopeFilter.value !== "issue" || r.overall !== "通过") : normalize(r.approval) === normalize(scopeFilter.value)) && (resultFilter.value === "all" || (resultFilter.value === "ok" ? r.overall === "通过" : r.overall !== "通过")));
+    const rows = report.results.filter((r) => normalize(r.purchaseStatus) !== "IN STOCK").filter((r) => (scopeFilter.value === "all" || scopeFilter.value === "issue" ? (scopeFilter.value !== "issue" || r.overall !== "通过") : normalize(r.approval) === normalize(scopeFilter.value)) && (resultFilter.value === "all" || (resultFilter.value === "ok" ? r.overall === "通过" : r.overall !== "通过")));
     return sortedResults(rows);
   }
   function renderResults() {
@@ -198,7 +198,8 @@
     const start = (currentPage - 1) * pageSize;
     const pageRows = rows.slice(start, start + pageSize);
     const shownStart = rows.length ? start + 1 : 0; const shownEnd = start + pageRows.length;
-    tableNoteEl.textContent = t("tableNote", { start:shownStart, end:shownEnd, filtered:rows.length, total:report.results.length });
+    const hiddenInStock = report.results.filter((r) => normalize(r.purchaseStatus) === "IN STOCK").length;
+    tableNoteEl.textContent = t("tableNote", { start:shownStart, end:shownEnd, filtered:rows.length, total:report.results.length, hidden:hiddenInStock });
     pageInfoEl.textContent = t("pageInfo", { page:currentPage, pages:totalPages });
     prevPageBtn.disabled = currentPage <= 1; nextPageBtn.disabled = currentPage >= totalPages;
     const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colSku","skus"],["colModel","models"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colAction","action"]];

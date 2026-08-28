@@ -31,12 +31,6 @@
                         "desc":  "Compare purchase orders with ODP PO Check for ETA, type, TCL reference, SKU and quantity differences.",
                         "url":  "./modules/po-check/po-check.html",
                         "badge":  "Interactive"
-                    },
-                    {
-                        "name":  "More Modules",
-                        "desc":  "Reserved placeholder for future modules.",
-                        "url":  "#",
-                        "badge":  "Coming Soon"
                     }
                 ]
 }

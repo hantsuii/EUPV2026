@@ -276,8 +276,9 @@
       .filter-grid { grid-template-columns: 1fr; }
     }
   </style>
+  <link rel="stylesheet" href="../../theme.css" />
 </head>
-<body class="light-ui">
+<body class="light-ui" data-page="sales">
   <main class="tool-wrap">
     <header class="hero">
       <div class="lang-switch">
@@ -285,7 +286,7 @@
         <button id="langEn" class="lang-btn" type="button" data-lang="en">EN</button>
       </div>
       <h1 data-i18n="pageTitle">销售分析看板（PV / ESS）</h1>
-      <p data-i18n="pageSubtitle">统一库存分析模块风格，展示 2026 年总览与各区域看板。</p>
+      <p data-i18n="pageSubtitle">展示销售、目标达成、ASP 与产品结构趋势。</p>
     </header>
 
     <section class="panel">
@@ -294,7 +295,7 @@
       </div>
 
       <div style="margin-top:10px;">
-        <label data-i18n="sourceLabel">Sales Workbook Source</label>
+        <label data-i18n="sourceLabel">Sales 工作簿来源</label>
         <div class="source-choice">
           <label><input type="radio" name="salesSource" value="upload" checked /> <span data-i18n="sourceUpload">上传本地文件</span></label>
           <label><input type="radio" name="salesSource" value="repo" /> <span data-i18n="sourceRepo">使用 GitHub 仓库文件</span></label>

@@ -25,6 +25,24 @@ python -m http.server 8080
 - 修改模块 `url` 到真实页面地址
 - 新增模块时按相同结构追加对象
 
+## 留言与反馈
+
+主页反馈表单提交到 Cloudflare Pages Function：`/api/feedback`。
+
+在 Cloudflare Pages 的 Settings → Environment variables 中配置以下任一种接收方式：
+
+### 邮件（Resend）
+
+- `RESEND_API_KEY`：Resend API Key（必需）
+- `FEEDBACK_TO_EMAIL`：接收邮箱；未配置时默认使用 `nan02020@qq.com`
+- `FEEDBACK_FROM_EMAIL`：发件地址；可选，正式环境建议使用已验证域名
+
+### Webhook
+
+- `FEEDBACK_WEBHOOK_URL`：Teams、Slack 或其他接受 `{ "text": "..." }` JSON 的 Webhook 地址
+
+Webhook 优先于邮件。若服务端尚未配置，主页会提供发送到管理员邮箱的邮件链接作为回退。
+
 ## 可用库存分析模块
 
 新增页面：`available-stock-analysis.html`
