@@ -29,31 +29,33 @@
 - `NewArk ETA PO`
 - `ETA for New Ark update`
 
-## 2. 核验前提与排除规则
+## 2. 核验范围
 
-先读取采购单 `Status`。以下值忽略大小写和首尾空格后直接排除，不进入任何核验：
+采购单中的所有行都进入核验，不再根据 `Status` 或 `Approval Status` 排除。
 
-- `In Stock`
-- `returned`
-- `reversed`
+每一个 PO 都执行以下全部检查：
 
-排除发生在 Approval Status、PO 匹配、ETA、类型、TCL Reference、SKU 和数量核验之前。页面汇总会显示被排除数量。
+- 采购类型映射
+- `NewArk ETA PO`
+- `ETA for New Ark update`
+- TCL Reference
+- SKU 是否存在
+- SKU 汇总数量
 
-只有未被排除且实际审核状态为 `Approved` 或 `Approving` 的采购单进入核验结果。
-
-## 3. Approved 核验
+## 3. 所有 PO 的统一核验
 
 1. 使用 `Purchase order Number` 匹配 `PO Check` 的 `SPTN-PVHK New Ark PO#`。
 2. 比较采购单 `Estimated time of arrival` 与 `NewArk ETA PO`。
 3. 比较采购单 `Estimated time of arrival` 与 `ETA for New Ark update`。
-4. 若同一 PO 的非空 `ETA for New Ark update` 只有一个值且与采购单 ETA 不同：
+4. 核对采购类型映射、TCL Reference、SKU 和数量。
+5. 若同一 PO 的非空 `ETA for New Ark update` 只有一个值且与采购单 ETA 不同：
    - 总体结果为 `有差异`；
    - 标记为需要调整 ETA；
-   - 下载文件首表中的 ETA 使用 `ETA for New Ark update`；
-   - 页面结果行及首表 ETA 单元格标绿色。
-5. 若同一 PO 出现多个不同的更新 ETA，则标记为 `需复核`，不自动选择 ETA。
+   - 页面结果行及下载文件结果行标绿色；
+   - 建议 ETA 写入 `PO Check Results`，但不改写 `PO Details` 的原始 ETA。
+6. 若同一 PO 出现多个不同的更新 ETA，则标记为 `需复核`，不自动选择 ETA。
 
-## 4. Approving 核验
+## 4. 明细核验
 
 ### 采购类型映射
 
@@ -62,10 +64,6 @@
 | Internal | Internal |
 | Offshore | Offshore purchase |
 | ongoing B/L change | Internal |
-
-### ETA
-
-比较采购单 `Estimated time of arrival` 与 `ETA for New Ark update`。唯一且不同时标记为需要调整 ETA 的 `有差异`；多个更新 ETA 时标记为 `需复核`。
 
 ### TCL Reference
 
@@ -81,6 +79,11 @@
 1. `purchase order line` 按 `Purchase order Number + Customer Model` 汇总 `Qty`。
 2. `PO Check` 按 `SPTN-PVHK New Ark PO# + New Ark SKU` 汇总 `QUANTITY`。
 3. 对 SKU 是否存在及汇总数量是否一致逐项核验。
+
+页面和 `PO Check Results` 同时显示同一 PO 在 ODP 中对应的：
+
+- `New Ark SKU`
+- `Model`
 
 ## 5. 结果排序和颜色
 
@@ -102,8 +105,8 @@
 
 - `Approval Status` 使用自动识别的实际审核状态列。
 - `Note` 使用实际 Note 后一列（X 列）的值，即 TCL Reference。
-- 对符合自动更新条件的 Approved PO，`Estimated time of arrival` 写入 `ETA for New Ark update`，并将该单元格标绿。
-- 未参与核验的采购单仍保留在 `PO Details`，但不做 ETA 修改。
+- `Estimated time of arrival` 始终使用原始采购单中的值，不使用建议 ETA 覆盖。
+- 所有采购单都保留在 `PO Details`。
 
 其余 Sheet：
 
@@ -111,6 +114,13 @@
 - `SKU Qty Results`：逐 PO + SKU 数量核验结果。
 - `Summary`：核验数量、排除数量和类型映射。
 
-## 7. 双语
+## 7. 页面显示与分页
+
+- 表格采用紧凑行高，减少连续记录之间的空白。
+- 默认每页显示 50 行，可切换为 25、50 或 100 行。
+- 提供上一页、下一页和页码信息，不再一次显示全部记录。
+- 结果表增加 `SKU` 和 `Model` 两列。
+
+## 8. 双语
 
 页面支持中文和英文切换。筛选项、状态信息、核验结果、表头、规则说明及下载链接会随语言切换更新。

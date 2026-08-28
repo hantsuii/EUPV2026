@@ -29,9 +29,9 @@
     .legend { display:flex; gap:12px; flex-wrap:wrap; margin:10px 0; color:#46658c; font-size:12px; }
     .legend span::before { content:""; display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
     .legend .review::before { background:#e4d9f6; }.legend .eta::before { background:#c6efce; }.legend .issue::before { background:#ffe9cc; }
-    .table-wrap { overflow:auto; border: 1px solid #cfe0f6; border-radius: 12px; background:#fff; max-height:600px; margin-top:12px; }
+    .table-wrap { overflow:auto; border: 1px solid #cfe0f6; border-radius: 12px; background:#fff; max-height:520px; margin-top:8px; }
     table { width:100%; border-collapse:collapse; min-width:1820px; color:#2a4d7a; }
-    th, td { border-bottom:1px solid #e4eefb; padding:8px 10px; text-align:left; font-size:12px; white-space:nowrap; vertical-align:top; }
+    th, td { border-bottom:1px solid #e4eefb; padding:4px 8px; height:26px; line-height:1.25; text-align:left; font-size:12px; white-space:nowrap; vertical-align:middle; }
     th { position:sticky; top:0; background:#edf4ff; z-index:2; color:#274e7a; }
     tr.row-review { background:#f2ecfb; } tr.row-eta-diff { background:#e2f5e7; } tr.row-issue { background:#fff7e9; }
     .pill { display:inline-block; padding:2px 7px; border-radius:999px; font-weight:700; font-size:11px; }
@@ -39,6 +39,10 @@
     .rules { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
     .rule { border:1px solid #d3e3f8; border-radius:10px; padding:11px 12px; background:#fff; color:#355b89; }
     .rule h3 { margin:0 0 7px; color:#1f4a7a; font-size:15px; }.rule ul { margin:0; padding-left:18px; line-height:1.55; }
+    .pagination { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px; color:#46658c; font-size:12px; }
+    .pagination select { width:auto; min-height:32px; padding:4px 8px; }
+    .pagination button { min-width:36px; padding:6px 10px; border:1px solid #bdd4f3; border-radius:7px; background:#edf5ff; color:#28517f; cursor:pointer; }
+    .pagination button:disabled { opacity:.45; cursor:default; }
     @media(max-width:950px){ .summary-grid{grid-template-columns:repeat(3,1fr);} }
     @media(max-width:800px){ .form-grid{grid-template-columns:1fr;} .summary-grid{grid-template-columns:repeat(2,1fr);} .lang-switch{position:static;margin-bottom:10px;} }
   </style>
@@ -77,14 +81,15 @@
       </div>
       <div id="tableNote" class="small-tip"></div>
       <div class="table-wrap"><div id="resultTable"></div></div>
+      <div class="pagination"><label><span data-i18n="rowsPerPage">每页行数</span> <select id="pageSize"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></label><button id="prevPageBtn" type="button" data-i18n-aria-label="previousPage">←</button><span id="pageInfo"></span><button id="nextPageBtn" type="button" data-i18n-aria-label="nextPage">→</button></div>
     </section>
 
     <section class="panel">
       <h2 data-i18n="rulesTitle">本模块的核验规则</h2>
       <div class="rules">
-        <article class="rule"><h3 data-i18n="prerequisiteTitle">核验前提</h3><ul><li data-i18n="prerequisite1">采购单 Status 为 In Stock、returned 或 reversed 时直接排除，不参与任何核验。</li><li data-i18n="prerequisite2">下载文件的第一个 Sheet 固定为九列 PO Details，Note 取实际 Note 后的 X 列。</li></ul></article>
-        <article class="rule"><h3>Approved</h3><ul><li data-i18n="approved1">按采购单号匹配 PO Check 的 SPTN-PVHK New Ark PO#。</li><li data-i18n="approved2">核对采购单 ETA、NewArk ETA PO、ETA for New Ark update。</li><li data-i18n="approved3">更新 ETA 唯一且不同时，输出表的 ETA 自动使用更新值并标绿。</li></ul></article>
-        <article class="rule"><h3>Approving</h3><ul><li data-i18n="approving1">核对采购类型映射和 ETA for New Ark update。</li><li data-i18n="approving2">从 Customer Po 与 X 列清洗 TCL Reference，并比较完整集合。</li><li data-i18n="approving3">按 PO + SKU 汇总 Customer Model / Qty，与 PO Check 汇总数量核对。</li></ul></article>
+        <article class="rule"><h3 data-i18n="prerequisiteTitle">核验范围</h3><ul><li data-i18n="prerequisite1">所有采购单 Status 和 Approval Status 均进入核验。</li><li data-i18n="prerequisite2">每个 PO 都执行类型、两组 ETA、TCL Reference、SKU 和数量核验。</li></ul></article>
+        <article class="rule"><h3 data-i18n="etaRuleTitle">ETA 与输出</h3><ul><li data-i18n="approved1">按采购单号匹配 PO Check 的 SPTN-PVHK New Ark PO#。</li><li data-i18n="approved2">核对采购单 ETA、NewArk ETA PO、ETA for New Ark update。</li><li data-i18n="approved3">下载文件 PO Details 的 ETA 始终使用原始采购单值，建议 ETA 只在核验结果中展示。</li></ul></article>
+        <article class="rule"><h3 data-i18n="detailRuleTitle">明细核验</h3><ul><li data-i18n="approving1">核对采购类型映射，并显示 ODP 的 SKU 和 Model。</li><li data-i18n="approving2">从 Customer Po 与 X 列清洗 TCL Reference，并比较完整集合。</li><li data-i18n="approving3">按 PO + SKU 汇总 Customer Model / Qty，与 PO Check 汇总数量核对。</li></ul></article>
       </div>
     </section>
   </main>

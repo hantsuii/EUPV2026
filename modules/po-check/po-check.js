@@ -13,14 +13,18 @@
   const tableNoteEl = document.getElementById("tableNote");
   const scopeFilter = document.getElementById("scopeFilter");
   const resultFilter = document.getElementById("resultFilter");
+  const pageSizeEl = document.getElementById("pageSize");
+  const prevPageBtn = document.getElementById("prevPageBtn");
+  const nextPageBtn = document.getElementById("nextPageBtn");
+  const pageInfoEl = document.getElementById("pageInfo");
 
   let report = null;
   let downloadUrl = null;
   let lastStatus = { key: "waiting", params: {} };
+  let currentPage = 1;
 
   const TYPE_MAP = { "INTERNAL": "Internal", "OFFSHORE": "Offshore purchase", "ONGOING B/L CHANGE": "Internal" };
   const APPROVAL_VALUES = new Set(["APPROVED", "APPROVING"]);
-  const EXCLUDED_STATUS = new Set(["IN STOCK", "RETURNED", "REVERSED"]);
 
   function text(value) { return value == null ? "" : String(value).trim(); }
   function normalize(value) { return text(value).replace(/\s+/g, " ").toUpperCase(); }
@@ -61,14 +65,20 @@
   function numbers(value) { const n = Number(String(value ?? "").replace(/,/g, "")); return Number.isFinite(n) ? n : 0; }
   function setEqual(a, b) { return a.length === b.length && a.every((v) => b.includes(v)); }
   function valuesLabel(values) { return values.length ? values.join(" | ") : "（空）"; }
-  function chooseApprovalColumn(rows) {
+  function chooseApprovalColumn(rows, headers) {
     let best = -1, bestCount = -1;
     const maxCols = Math.max(...rows.slice(0, 100).map((r) => r.length));
     for (let c = 0; c < maxCols; c += 1) {
       const count = rows.reduce((sum, r) => sum + (APPROVAL_VALUES.has(normalize(r[c])) ? 1 : 0), 0);
       if (count > bestCount) { best = c; bestCount = count; }
     }
-    if (bestCount < 1) throw new Error(t("approvalColumnMissing"));
+    if (bestCount < 1) {
+      const noteColumn = headerIndex(headers, "Note");
+      if (noteColumn >= 0) return noteColumn;
+      const approvalHeader = headerIndex(headers, "Approval Status");
+      if (approvalHeader >= 0) return approvalHeader + 1;
+      throw new Error(t("approvalColumnMissing"));
+    }
     return best;
   }
   function referencesFrom(value, knownRefs) {
@@ -116,22 +126,20 @@
       customerPo:headerIndex(headHeaders,"Customer Po"), category:headerIndex(headHeaders,"Category"), eta:headerIndex(headHeaders,"Estimated time of arrival"), status:headerIndex(headHeaders,"Status")
     };
     const lineIndex = { po:headerIndex(lineHeaders,"Purchase order Number"), sku:headerIndex(lineHeaders,"Customer Model"), qty:headerIndex(lineHeaders,"Qty") };
-    const pcIndex = { ref:headerIndex(pcHeaders,"TCL REFERENCE"), type:headerIndex(pcHeaders,"New Ark PO Type"), sku:headerIndex(pcHeaders,"New Ark SKU"), qty:headerIndex(pcHeaders,"QUANTITY"), po:headerIndex(pcHeaders,"SPTN-PVHK New Ark PO#"), etaPo:headerIndex(pcHeaders,"NewArk ETA PO"), etaUpdate:headerIndex(pcHeaders,"ETA for New Ark update") };
+    const pcIndex = { ref:headerIndex(pcHeaders,"TCL REFERENCE"), type:headerIndex(pcHeaders,"New Ark PO Type"), sku:headerIndex(pcHeaders,"New Ark SKU"), model:headerIndex(pcHeaders,"Model"), qty:headerIndex(pcHeaders,"QUANTITY"), po:headerIndex(pcHeaders,"SPTN-PVHK New Ark PO#"), etaPo:headerIndex(pcHeaders,"NewArk ETA PO"), etaUpdate:headerIndex(pcHeaders,"ETA for New Ark update") };
     for (const [group, indexes] of Object.entries({ purchaseHead:headIndex, purchaseLine:lineIndex, poCheck:pcIndex })) if (Object.values(indexes).some((i) => i < 0)) throw new Error(t("missingColumns", { group:t(group) }));
-    const approvalCol = chooseApprovalColumn(headData);
+    const approvalCol = chooseApprovalColumn(headData, headHeaders);
     const xCol = approvalCol + 1;
     const poCheckByPo = new Map();
     for (const row of pcData) { const po = text(row[pcIndex.po]); if (!po) continue; if (!poCheckByPo.has(po)) poCheckByPo.set(po, []); poCheckByPo.get(po).push(row); }
     const linesByPo = new Map();
     for (const row of lineData) { const po = text(row[lineIndex.po]); if (!po) continue; if (!linesByPo.has(po)) linesByPo.set(po, []); linesByPo.get(po).push(row); }
 
-    const results = []; const skuResults = []; const poOutputRows = []; let excludedCount = 0;
+    const results = []; const skuResults = []; const poOutputRows = [];
     const makeOutputRow = (row, eta) => [text(row[headIndex.po]), text(row[headIndex.type]), text(row[headIndex.tms]), text(row[headIndex.customerPo]), text(row[headIndex.category]), dateIso(eta), text(row[headIndex.status]), text(row[approvalCol]), text(row[xCol])];
     for (const row of headData) {
       const po = text(row[headIndex.po]); const approval = text(row[approvalCol]); const purchaseStatus = text(row[headIndex.status]);
-      let finalEta = dateIso(row[headIndex.eta]);
-      if (EXCLUDED_STATUS.has(normalize(purchaseStatus))) { excludedCount += 1; poOutputRows.push(makeOutputRow(row, finalEta)); continue; }
-      if (!APPROVAL_VALUES.has(normalize(approval))) { poOutputRows.push(makeOutputRow(row, finalEta)); continue; }
+      const originalEta = dateIso(row[headIndex.eta]);
 
       const odp = poCheckByPo.get(po) || [];
       const poEta = dateIso(row[headIndex.eta]);
@@ -140,6 +148,8 @@
       const etaPo = unique(odp.map((r) => dateIso(r[pcIndex.etaPo])));
       const etaUpdate = unique(odp.map((r) => dateIso(r[pcIndex.etaUpdate])));
       const odpRefs = unique(odp.map((r) => normalize(r[pcIndex.ref]))).sort();
+      const skus = unique(odp.map((r) => text(r[pcIndex.sku]))).sort();
+      const models = unique(odp.map((r) => text(r[pcIndex.model]))).sort();
       const customerRefs = referencesFrom(row[headIndex.customerPo], odpRefs);
       const xRefs = referencesFrom(row[xCol], odpRefs);
       const sourceRefs = unique([...customerRefs, ...xRefs]).sort();
@@ -148,17 +158,14 @@
       if (!odp.length) {
         typeResult = etaPoResult = etaUpdateResult = refResult = skuResult = "未在 PO Check 找到";
         action = "需人工核对"; notes.push("采购单号未在 PO Check 找到。");
-      } else if (normalize(approval) === "APPROVED") {
-        etaPoResult = etaPo.length === 1 ? (etaPo[0] === poEta ? "通过" : "NewArk ETA PO 不一致") : (etaPo.length ? "需复核：多条 NewArk ETA PO" : "NewArk ETA PO 缺失");
-        etaUpdateResult = etaUpdate.length === 1 ? (etaUpdate[0] === poEta ? "通过" : "ETA 更新不一致") : (etaUpdate.length ? "需复核：多条 ETA 更新" : "ETA 更新缺失");
-        if (etaUpdate.length === 1 && etaUpdate[0] !== poEta) { suggestedEta = etaUpdate[0]; finalEta = suggestedEta; action = "建议更新 ETA"; }
-        else if (etaUpdate.length > 1) action = "需人工选择 ETA";
-        else action = "无需更新 ETA";
       } else {
         typeResult = expectedTypes.length === 1 ? (text(row[headIndex.type]) === expectedTypes[0] ? "通过" : "采购类型不一致") : "需复核：多种 PO 类型";
+        etaPoResult = etaPo.length === 1 ? (etaPo[0] === poEta ? "通过" : "NewArk ETA PO 不一致") : (etaPo.length ? "需复核：多条 NewArk ETA PO" : "NewArk ETA PO 缺失");
         etaUpdateResult = etaUpdate.length === 1 ? (etaUpdate[0] === poEta ? "通过" : "ETA 更新不一致") : (etaUpdate.length ? "需复核：多条 ETA 更新" : "ETA 更新缺失");
         refResult = setEqual(sourceRefs, odpRefs) ? "通过" : "TCL Reference 不一致";
-        action = etaUpdateResult === "通过" ? "无需更新 ETA" : etaUpdateResult === "ETA 更新不一致" ? "核对后更新 ETA" : "需人工核对";
+        if (etaUpdate.length === 1 && etaUpdate[0] !== poEta) { suggestedEta = etaUpdate[0]; action = "建议更新 ETA"; }
+        else if (etaUpdate.length > 1) action = "需人工选择 ETA";
+        else action = etaUpdateResult === "通过" ? "无需更新 ETA" : "需人工核对";
         const purchaseSku = new Map(); const odpSku = new Map();
         for (const line of linesByPo.get(po) || []) { const sku = text(line[lineIndex.sku]); if (sku) purchaseSku.set(sku, (purchaseSku.get(sku) || 0) + numbers(line[lineIndex.qty])); }
         for (const check of odp) { const sku = text(check[pcIndex.sku]); if (sku) odpSku.set(sku, (odpSku.get(sku) || 0) + numbers(check[pcIndex.qty])); }
@@ -166,18 +173,17 @@
         for (const sku of allSku) { const inPurchase = purchaseSku.has(sku), inOdp = odpSku.has(sku); const left = purchaseSku.get(sku) || 0, right = odpSku.get(sku) || 0; const result = !inPurchase ? "采购单缺少 SKU" : !inOdp ? "PO Check 缺少 SKU" : Math.abs(left-right) < 0.000001 ? "通过" : "数量不一致"; if (result !== "通过") skuIssues += 1; skuResults.push({ po, sku, purchaseQty:left, odpQty:right, result }); }
         skuResult = skuIssues ? `SKU/数量有 ${skuIssues} 项差异` : "通过";
       }
-      const isApproved = normalize(approval) === "APPROVED";
-      const checks = isApproved ? [etaPoResult, etaUpdateResult] : [typeResult, etaUpdateResult, refResult, skuResult];
+      const checks = [typeResult, etaPoResult, etaUpdateResult, refResult, skuResult];
       const overall = checks.every((v) => v === "通过" || v === "不适用") ? "通过" : checks.some((v) => v.includes("需复核") || v.includes("未在")) ? "需复核" : "有差异";
       const etaNeedsAdjustment = etaUpdateResult === "ETA 更新不一致" && overall === "有差异";
-      results.push({ po, approval, purchaseStatus, purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
-      poOutputRows.push(makeOutputRow(row, finalEta));
+      results.push({ po, approval, purchaseStatus, skus:valuesLabel(skus), models:valuesLabel(models), purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
+      poOutputRows.push(makeOutputRow(row, originalEta));
     }
-    return { results:sortedResults(results), skuResults, poOutputRows, excludedCount, sourceRows:headData.length };
+    return { results:sortedResults(results), skuResults, poOutputRows, sourceRows:headData.length };
   }
   function renderSummary() {
-    const all = report.results; const approved = all.filter((r) => normalize(r.approval) === "APPROVED"); const approving = all.filter((r) => normalize(r.approval) === "APPROVING"); const issues = all.filter((r) => r.overall !== "通过"); const etaUpdates = all.filter((r) => r.etaNeedsAdjustment);
-    summaryEl.innerHTML = [[t("checkedPo"),all.length],["Approved",approved.length],["Approving",approving.length],[t("issuesReview"),issues.length],[t("etaAdjustments"),etaUpdates.length],[t("excludedStatus"),report.excludedCount]].map(([label,value]) => `<div class="metric"><span>${escapeHtml(label)}</span><b>${value}</b></div>`).join("");
+    const all = report.results; const approved = all.filter((r) => normalize(r.approval) === "APPROVED"); const approving = all.filter((r) => normalize(r.approval) === "APPROVING"); const other = all.length - approved.length - approving.length; const issues = all.filter((r) => r.overall !== "通过"); const etaUpdates = all.filter((r) => r.etaNeedsAdjustment);
+    summaryEl.innerHTML = [[t("checkedPo"),all.length],["Approved",approved.length],["Approving",approving.length],[t("otherStatus"),other],[t("issuesReview"),issues.length],[t("etaAdjustments"),etaUpdates.length]].map(([label,value]) => `<div class="metric"><span>${escapeHtml(label)}</span><b>${value}</b></div>`).join("");
   }
   function filteredResults() {
     const rows = report.results.filter((r) => (scopeFilter.value === "all" || scopeFilter.value === "issue" ? (scopeFilter.value !== "issue" || r.overall !== "通过") : normalize(r.approval) === normalize(scopeFilter.value)) && (resultFilter.value === "all" || (resultFilter.value === "ok" ? r.overall === "通过" : r.overall !== "通过")));
@@ -186,9 +192,17 @@
   function renderResults() {
     if (!report) return;
     const rows = filteredResults();
-    tableNoteEl.textContent = t("tableNote", { shown:rows.length, total:report.results.length });
-    const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colAction","action"]];
-    const body = rows.map((r) => {
+    const pageSize = Math.max(10, Number(pageSizeEl?.value || 50));
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    currentPage = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (currentPage - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+    const shownStart = rows.length ? start + 1 : 0; const shownEnd = start + pageRows.length;
+    tableNoteEl.textContent = t("tableNote", { start:shownStart, end:shownEnd, filtered:rows.length, total:report.results.length });
+    pageInfoEl.textContent = t("pageInfo", { page:currentPage, pages:totalPages });
+    prevPageBtn.disabled = currentPage <= 1; nextPageBtn.disabled = currentPage >= totalPages;
+    const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colSku","skus"],["colModel","models"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colAction","action"]];
+    const body = pageRows.map((r) => {
       const cls = r.overall === "需复核" ? "row-review" : r.etaNeedsAdjustment ? "row-eta-diff" : r.overall === "有差异" ? "row-issue" : "";
       return `<tr class="${cls}">${cols.map(([,key]) => `<td>${key === "overall" ? resultPill(r) : escapeHtml(displayValue(r[key]))}</td>`).join("")}</tr>`;
     }).join("");
@@ -197,8 +211,8 @@
   function reportSheets(data) {
     const firstHeaders = ["Purchase order Number","Purchase Type","TMS bill Number / voucher bill Number","Customer Po","Category","Estimated time of arrival","Status","Approval Status","Note"];
     const ordered = sortedResults(data.results);
-    const summary = [["Metric","Value"],["Checked POs",data.results.length],["Approved",data.results.filter((r)=>normalize(r.approval)==="APPROVED").length],["Approving",data.results.filter((r)=>normalize(r.approval)==="APPROVING").length],["Issues / Review",data.results.filter((r)=>r.overall!=="通过").length],["ETA adjustments",data.results.filter((r)=>r.etaNeedsAdjustment).length],["Excluded by Status",data.excludedCount],["Excluded Status","In Stock / returned / reversed"],["Type mapping","Internal → Internal"],["Type mapping","Offshore → Offshore purchase"],["Type mapping","ongoing B/L change → Internal"]];
-    const poRows = [["PO","Approval status","Overall result","Purchase Status","Purchase Type","Expected Purchase Type","ODP PO Type","Purchase ETA","NewArk ETA PO","NewArk ETA PO check","ETA for New Ark update","Update ETA check","Customer Po TCL Ref","X column TCL Ref","PO Check TCL Ref","TCL Ref check","SKU / Qty check","Suggested ETA","ETA action","Notes"], ...ordered.map((r) => [r.po,r.approval,displayValue(r.overall),r.purchaseStatus,r.purchaseType,r.expectedType,r.odpTypes,r.purchaseEta,r.etaPo,displayValue(r.etaPoResult),r.etaUpdate,displayValue(r.etaUpdateResult),r.customerRefs,r.xRefs,r.odpRefs,displayValue(r.refResult),displayValue(r.skuResult),r.suggestedEta,displayValue(r.action),r.notes])];
+    const summary = [["Metric","Value"],["Checked POs",data.results.length],["Approved",data.results.filter((r)=>normalize(r.approval)==="APPROVED").length],["Approving",data.results.filter((r)=>normalize(r.approval)==="APPROVING").length],["Other approval status",data.results.filter((r)=>!APPROVAL_VALUES.has(normalize(r.approval))).length],["Issues / Review",data.results.filter((r)=>r.overall!=="通过").length],["ETA adjustments",data.results.filter((r)=>r.etaNeedsAdjustment).length],["Check scope","All PO statuses; all checks enabled"],["PO Details ETA","Original purchase-order ETA"],["Type mapping","Internal → Internal"],["Type mapping","Offshore → Offshore purchase"],["Type mapping","ongoing B/L change → Internal"]];
+    const poRows = [["PO","Approval status","Overall result","Purchase Status","SKU","Model","Purchase Type","Expected Purchase Type","ODP PO Type","Purchase ETA","NewArk ETA PO","NewArk ETA PO check","ETA for New Ark update","Update ETA check","Customer Po TCL Ref","X column TCL Ref","PO Check TCL Ref","TCL Ref check","SKU / Qty check","Suggested ETA","ETA action","Notes"], ...ordered.map((r) => [r.po,r.approval,displayValue(r.overall),r.purchaseStatus,r.skus,r.models,r.purchaseType,r.expectedType,r.odpTypes,r.purchaseEta,r.etaPo,displayValue(r.etaPoResult),r.etaUpdate,displayValue(r.etaUpdateResult),r.customerRefs,r.xRefs,r.odpRefs,displayValue(r.refResult),displayValue(r.skuResult),r.suggestedEta,displayValue(r.action),r.notes])];
     const skuRows = [["PO","SKU","Purchase Qty","PO Check Qty","Result"], ...data.skuResults.map((r) => [r.po,r.sku,r.purchaseQty,r.odpQty,displayValue(r.result)])];
     return { "PO Details":[firstHeaders, ...data.poOutputRows], "PO Check Results":poRows, "SKU Qty Results":skuRows, "Summary":summary };
   }
@@ -253,11 +267,16 @@
     try {
       const [purchaseWb, odpWb] = await Promise.all([loadWorkbook(purchaseInput.files[0]), loadWorkbook(odpInput.files[0])]);
       report = buildReport(purchaseWb, odpWb); renderSummary(); renderResults(); resultsPanel.style.display = "block"; await downloadReport();
-      setStatus("done", { checked:report.results.length, issues:report.results.filter((r)=>r.overall!=="通过").length, excluded:report.excludedCount });
+      setStatus("done", { checked:report.results.length, issues:report.results.filter((r)=>r.overall!=="通过").length });
     } catch (err) { console.error(err); setStatus("failed", { message:err?.message || err }); }
     finally { runBtn.disabled = false; }
   }
-  function reset() { purchaseInput.value = ""; odpInput.value = ""; report = null; resultsPanel.style.display = "none"; downloadLink.style.display = "none"; if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = null; setStatus("waiting"); }
-  runBtn.addEventListener("click", run); resetBtn.addEventListener("click", reset); scopeFilter.addEventListener("change", renderResults); resultFilter.addEventListener("change", renderResults);
+  function reset() { purchaseInput.value = ""; odpInput.value = ""; report = null; currentPage = 1; resultsPanel.style.display = "none"; downloadLink.style.display = "none"; if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = null; setStatus("waiting"); }
+  runBtn.addEventListener("click", run); resetBtn.addEventListener("click", reset);
+  scopeFilter.addEventListener("change", () => { currentPage = 1; renderResults(); });
+  resultFilter.addEventListener("change", () => { currentPage = 1; renderResults(); });
+  pageSizeEl.addEventListener("change", () => { currentPage = 1; renderResults(); });
+  prevPageBtn.addEventListener("click", () => { currentPage -= 1; renderResults(); });
+  nextPageBtn.addEventListener("click", () => { currentPage += 1; renderResults(); });
   window.addEventListener("app-language-change", () => { statusEl.textContent = t(lastStatus.key, lastStatus.params); if (report) { renderSummary(); renderResults(); } if (downloadLink.download) downloadLink.textContent = t("downloadFile", { file:downloadLink.download }); });
 })();
