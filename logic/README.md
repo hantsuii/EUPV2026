@@ -6,6 +6,7 @@
 
 - [库存分析逻辑](./inventory-analysis-logic.md)：`modules/stock/available-stock-analysis.html`、`modules/stock/available-stock-analysis.js`、`modules/stock/stock-analysis-js.js`、`py/inventory_step1_to_stock.py`
 - [日报/销售分析逻辑](./daily-report-analysis-logic.md)：`modules/sales/sales-change-analysis.html`、`modules/sales/sales-change-analysis.js`
+- [PO 核验逻辑](./po-check-logic.md)：`modules/po-check/po-check.html`、`modules/po-check/po-check-i18n.js`、`modules/po-check/po-check.js`
 - [变更说明](./说明.md)：库存分析 JS 默认引擎、Python 回退、Connector、Product 顺序、零数量 SKU 过滤和验证记录
 
 ## 当前关键约定
