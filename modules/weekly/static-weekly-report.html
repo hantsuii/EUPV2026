@@ -1,29 +1,40 @@
 ﻿<!doctype html>
-<html lang="en">
+<html lang="zh-CN" data-i18n-title-key="pageTitle">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Static Weekly Report</title>
+  <title>静态周报</title>
   <link rel="stylesheet" href="../../style.css" />
 </head>
 <body>
   <main class="container">
     <header class="hero">
-      <h1>Static Weekly Report (Sample)</h1>
-      <p>Place offline-generated HTML, CSV, and Excel links for quick access.</p>
+      <div class="lang-switch">
+        <button class="lang-btn" type="button" data-lang="zh">中文</button>
+        <button class="lang-btn" type="button" data-lang="en">EN</button>
+      </div>
+      <h1 data-i18n="heading">静态周报（示例）</h1>
+      <p data-i18n="subtitle">集中放置离线生成的 HTML、CSV 和 Excel 文件链接，便于快速访问。</p>
     </header>
 
     <section class="section-card">
-      <h2>Downloads</h2>
+      <h2 data-i18n="downloads">下载</h2>
       <ul>
-        <li>Sample report package (placeholder)</li>
-        <li>Monthly summary workbook (placeholder)</li>
-        <li>Trend snapshot CSV (placeholder)</li>
+        <li data-i18n="item1">示例报告包（占位）</li>
+        <li data-i18n="item2">月度汇总工作簿（占位）</li>
+        <li data-i18n="item3">趋势快照 CSV（占位）</li>
       </ul>
       <div class="actions">
-        <a class="btn-link" href="../../index.html">Back to Home</a>
+        <a class="btn-link" href="../../index.html" data-i18n="backHome">← 返回主页</a>
       </div>
     </section>
   </main>
+  <script>
+    window.PAGE_I18N = {
+      zh: { pageTitle: "静态周报", heading: "静态周报（示例）", subtitle: "集中放置离线生成的 HTML、CSV 和 Excel 文件链接，便于快速访问。", downloads: "下载", item1: "示例报告包（占位）", item2: "月度汇总工作簿（占位）", item3: "趋势快照 CSV（占位）", backHome: "← 返回主页" },
+      en: { pageTitle: "Static Weekly Report", heading: "Static Weekly Report (Sample)", subtitle: "Place offline-generated HTML, CSV, and Excel links here for quick access.", downloads: "Downloads", item1: "Sample report package (placeholder)", item2: "Monthly summary workbook (placeholder)", item3: "Trend snapshot CSV (placeholder)", backHome: "← Back to Home" }
+    };
+  </script>
+  <script src="../../module-i18n.js"></script>
 </body>
 </html>

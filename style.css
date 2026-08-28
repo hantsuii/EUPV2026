@@ -264,6 +264,29 @@ code {
   padding: 1px 7px;
 }
 
+.hero { position: relative; }
+.lang-switch {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: inline-flex;
+  gap: 8px;
+}
+.lang-btn {
+  border: 1px solid #bdd4f3;
+  background: #e7f1ff;
+  color: #2d5685;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lang-btn.active {
+  background: #3f8bff;
+  color: #fff;
+  border-color: #3f8bff;
+}
+
 @media (max-width: 720px) {
   .container,
   .tool-wrap { padding: 22px 14px 48px; }

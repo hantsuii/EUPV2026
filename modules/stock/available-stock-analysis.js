@@ -41,6 +41,11 @@ const tableSummaryEl = document.getElementById("tableSummary");
 let pyodide = null;
 let pyReady = false;
 let chart = null;
+let lastStatus = { key: "waiting", params: {} };
+
+function t(key, params = {}) {
+  return window.appI18n?.text(key, params) ?? key;
+}
 
 const vizState = {
   rows: [],
@@ -71,8 +76,9 @@ const levelDefs = [
   { key: "ProductKey", el: productFilterEl, labelKey: "ProductKeyLabel" },
 ];
 
-function setStatus(text) {
-  statusEl.textContent = text;
+function setStatus(key, params = {}) {
+  lastStatus = { key, params };
+  statusEl.textContent = t(key, params);
 }
 
 function resetDownloadLink() {
@@ -178,7 +184,7 @@ function updateSelectionSummary(selectEl, summaryEl) {
   if (!summaryEl || !selectEl) return;
   const labels = Array.from(selectEl.selectedOptions || []).map((opt) => String(opt.textContent || "").trim()).filter(Boolean);
   if (!labels.length) {
-    summaryEl.textContent = "No condition selected";
+    summaryEl.textContent = t("noSelection");
     summaryEl.classList.add("is-empty");
     summaryEl.classList.remove("is-active");
     return;
@@ -186,7 +192,7 @@ function updateSelectionSummary(selectEl, summaryEl) {
 
   const preview = labels.slice(0, 2).join(" / ");
   const suffix = labels.length > 2 ? ` +${labels.length - 2}` : "";
-  summaryEl.textContent = `${labels.length} selected: ${preview}${suffix}`;
+  summaryEl.textContent = t("selectedSummary", { count: labels.length, preview, suffix });
   summaryEl.classList.remove("is-empty");
   summaryEl.classList.add("is-active");
 }
@@ -209,7 +215,7 @@ function refreshFilterSummaries() {
 async function loadPyodideRuntime() {
   if (pyReady) return;
 
-  setStatus("Loading Python runtime (first run may take 20-60 seconds)...");
+  setStatus("loadingPython");
   const script = document.createElement("script");
   script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
   script.async = true;
@@ -222,14 +228,14 @@ async function loadPyodideRuntime() {
 
   pyodide = await globalThis.loadPyodide();
 
-  setStatus("Installing dependency: openpyxl...");
+  setStatus("installing");
   await pyodide.loadPackage("micropip");
   await pyodide.runPythonAsync(`
 import micropip
 await micropip.install("openpyxl")
 `);
 
-  setStatus("Loading stock analysis script...");
+  setStatus("loadingScript");
   const pyCode = await fetch("../../py/inventory_step1_to_stock.py", { cache: "no-store" }).then((r) => r.text());
   pyodide.FS.mkdirTree("/work");
   pyodide.FS.writeFile("/work/inventory_step1_to_stock.py", pyCode);
@@ -241,7 +247,7 @@ if "/work" not in sys.path:
 `);
 
   pyReady = true;
-  setStatus("Environment ready. Upload files and click Generate Stock File.");
+  setStatus("environmentReady");
 }
 
 async function readFileAsBytes(file) {
@@ -252,7 +258,7 @@ async function readFileAsBytes(file) {
 async function fetchTemplateBytes() {
   const resp = await fetch("../../templates/stock_template.xlsx", { cache: "no-store" });
   if (!resp.ok) {
-    throw new Error(`Template file not found: ../../templates/stock_template.xlsx (HTTP ${resp.status})`);
+    throw new Error(t("templateMissing", { path: "../../templates/stock_template.xlsx", status: resp.status }));
   }
   const buffer = await resp.arrayBuffer();
   return new Uint8Array(buffer);
@@ -261,7 +267,7 @@ async function fetchTemplateBytes() {
 async function fetchRepoFileBytes(repoPath, label) {
   const resp = await fetch(repoPath, { cache: "no-store" });
   if (!resp.ok) {
-    throw new Error(`${label} repository default file not found: ${repoPath} (HTTP ${resp.status})`);
+    throw new Error(t("repoMissing", { label, path: repoPath, status: resp.status }));
   }
   const buf = await resp.arrayBuffer();
   return new Uint8Array(buf);
@@ -272,7 +278,7 @@ function ensureWorkbookIsXlsxZip(bytes, label) {
   const b0 = Number(bytes?.[0] ?? -1);
   const b1 = Number(bytes?.[1] ?? -1);
   if (b0 !== 0x50 || b1 !== 0x4b) {
-    throw new Error(`${label} is not a valid .xlsx/.xlsm workbook (zip format). Please export again and upload .xlsx/.xlsm file.`);
+    throw new Error(t("invalidWorkbook", { label }));
   }
 }
 
@@ -312,7 +318,7 @@ async function resolveInputWorkbook({
   }
 
   if (required) {
-    throw new Error(`Please upload required file: ${label}, or select repository default file.`);
+    throw new Error(t("requiredFile", { label }));
   }
 
   return null;
@@ -339,7 +345,7 @@ async function resolveInputBytes({
   }
 
   if (required) {
-    throw new Error(`Please upload required file: ${label}, or select repository default file.`);
+    throw new Error(t("requiredFile", { label }));
   }
   return null;
 }
@@ -429,7 +435,7 @@ function parseVisualizationDateRange() {
   const start = vizStartEl.value ? new Date(`${vizStartEl.value}T00:00:00`) : null;
   const end = vizEndEl.value ? new Date(`${vizEndEl.value}T00:00:00`) : null;
   if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
-    throw new Error("Invalid visualization date range.");
+    throw new Error(t("invalidDate"));
   }
   return { start, end };
 }
@@ -464,7 +470,7 @@ function buildAllocationByMonthAndModel(filteredRows, start, end) {
   for (const row of filteredRows) {
     const model = String(row.Model || "").trim();
     const fallback = String(row.ProductKeyLabel || row.SKU || "").trim();
-    skuWhToModel.set(`${row.SKU}||${row.WH}`, model || fallback || "Unknown Model");
+    skuWhToModel.set(`${row.SKU}||${row.WH}`, model || fallback || t("unknownModel"));
   }
 
   const byModel = new Map();
@@ -517,7 +523,7 @@ function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValue
       value: qty,
       label: {
         show: true,
-        formatter: `Alloc ${fmtNumber(qty)}`,
+        formatter: t("alloc", { qty: fmtNumber(qty) }),
         color: "#ffd8b3",
         fontSize: 11,
       },
@@ -638,20 +644,20 @@ function renderChartAndTable() {
   if (!matchedRows.length) {
     chart.clear();
     chart.setOption({
-      title: { text: "No data under current filters", left: "center", top: "middle", textStyle: { color: "#cddcff" } },
+      title: { text: t("noFilterData"), left: "center", top: "middle", textStyle: { color: "#cddcff" } },
       xAxis: { show: false },
       yAxis: { show: false },
       series: [],
       backgroundColor: "transparent",
     });
-    detailTableEl.innerHTML = "<div style='padding:10px;color:#cbdcff;'>No detail rows.</div>";
-    tableSummaryEl.textContent = "No rows matched current filters.";
+    detailTableEl.innerHTML = `<div style='padding:10px;color:#cbdcff;'>${escapeHtml(t("noDetailRows"))}</div>`;
+    tableSummaryEl.textContent = t("noFilterRows");
     return;
   }
 
   const inRangeHeaders = getDateHeadersInRange(start, end);
   if (!inRangeHeaders.length) {
-    throw new Error("No transit date headers in selected date range.");
+    throw new Error(t("noTransitHeaders"));
   }
 
   const analysisRows = matchedRows.filter((row) => hasAnyActivityInRange(row, inRangeHeaders));
@@ -659,19 +665,19 @@ function renderChartAndTable() {
   if (!analysisRows.length) {
     chart.clear();
     chart.setOption({
-      title: { text: "No active stock/transit/allocation under current filters", left: "center", top: "middle", textStyle: { color: "#cddcff" } },
+      title: { text: t("noActiveData"), left: "center", top: "middle", textStyle: { color: "#cddcff" } },
       xAxis: { show: false },
       yAxis: { show: false },
       series: [],
       backgroundColor: "transparent",
     });
-    detailTableEl.innerHTML = "<div style='padding:10px;color:#cbdcff;'>No active detail rows.</div>";
-    tableSummaryEl.textContent = "All matched rows are zero-activity (Stock/Transit/To be allocated).";
+    detailTableEl.innerHTML = `<div style='padding:10px;color:#cbdcff;'>${escapeHtml(t("noActiveRows"))}</div>`;
+    tableSummaryEl.textContent = t("zeroRows");
     return;
   }
 
   if (matchedRows.length > analysisRows.length) {
-    setStatus(`Visualization note: excluded ${matchedRows.length - analysisRows.length} zero-activity rows.`);
+    setStatus("excludedRows", { count: matchedRows.length - analysisRows.length });
   }
 
   const allocByModel = buildAllocationByMonthAndModel(analysisRows, start, end);
@@ -701,11 +707,11 @@ function renderChartAndTable() {
     const shown = entries.slice(0, 12);
 
     if (entries.length > shown.length) {
-      setStatus(`Visualization note: ${entries.length} products selected, showing top ${shown.length} lines by ending value.`);
+      setStatus("topLines", { count: entries.length, shown: shown.length });
     }
 
     if (!shown.length) {
-      throw new Error("No series available for split mode.");
+      throw new Error(t("noSplitSeries"));
     }
 
     bucketLabels = shown[0].bucket.labels;
@@ -724,9 +730,9 @@ function renderChartAndTable() {
   } else if (lineMode === "warehouse") {
     const groups = new Map();
     for (const row of analysisRows) {
-      const key = row.WH || "Unknown";
+      const key = row.WH || t("unknownWarehouse");
       if (!groups.has(key)) {
-        groups.set(key, { label: `WH ${key}`, rows: [] });
+        groups.set(key, { label: t("warehouseSeries", { name: key }), rows: [] });
       }
       groups.get(key).rows.push(row);
     }
@@ -741,7 +747,7 @@ function renderChartAndTable() {
     entries.sort((a, b) => b.finalValue - a.finalValue);
 
     if (!entries.length) {
-      throw new Error("No series available for warehouse mode.");
+      throw new Error(t("noWarehouseSeries"));
     }
 
     bucketLabels = entries[0].bucket.labels;
@@ -764,7 +770,7 @@ function renderChartAndTable() {
     bucketValuesForAllocRef = bucket.values;
 
     allSeries.push({
-      name: "Available Stock",
+      name: t("availableStock"),
       type: "line",
       smooth: true,
       symbol: bucket.labels.length > 80 ? "none" : "circle",
@@ -786,9 +792,9 @@ function renderChartAndTable() {
     const sourceBucketMixed = buildBucketSeries(sourceDaily.mixed, granularity);
 
     const sourceLineDefs = [
-      { name: "Transit Source - Inventory/DSP", bucket: sourceBucketInv, color: "#7fc4ff" },
-      { name: "Transit Source - ODP", bucket: sourceBucketOdp, color: "#ffbb77" },
-      { name: "Transit Source - Mixed", bucket: sourceBucketMixed, color: "#c59dff" },
+      { name: t("transitInv"), bucket: sourceBucketInv, color: "#7fc4ff" },
+      { name: t("transitOdp"), bucket: sourceBucketOdp, color: "#ffbb77" },
+      { name: t("transitMixed"), bucket: sourceBucketMixed, color: "#c59dff" },
     ];
 
     for (const def of sourceLineDefs) {
@@ -836,7 +842,7 @@ function renderChartAndTable() {
     const [fillColor, borderColor] = allocPalette[idx % allocPalette.length];
 
     allSeries.push({
-      name: `To be allocated - ${entry.model}`,
+      name: t("toAllocate", { model: entry.model }),
       type: "bar",
       stack: "alloc",
       yAxisIndex: 1,
@@ -897,7 +903,7 @@ function renderChartAndTable() {
     yAxis: [
       {
         type: "value",
-        name: "Available Stock",
+        name: t("availableStock"),
         nameTextStyle: { color: "#4f79ad" },
         axisLine: { lineStyle: { color: "#8bb0dd" } },
         axisLabel: { color: "#50719f" },
@@ -905,7 +911,7 @@ function renderChartAndTable() {
       },
       {
         type: "value",
-        name: "To be allocated",
+        name: t("axisAllocated"),
         nameTextStyle: { color: "#c88034" },
         axisLine: { lineStyle: { color: "#c8a177" } },
         axisLabel: { color: "#c27c35" },
@@ -990,18 +996,18 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
     .sort((a, b) => a.Product.localeCompare(b.Product));
 
   if (!rows.length) {
-    detailTableEl.innerHTML = "<div style='padding:10px;color:#cbdcff;'>No detail rows.</div>";
-    tableSummaryEl.textContent = "No rows matched current filters.";
+    detailTableEl.innerHTML = `<div style='padding:10px;color:#cbdcff;'>${escapeHtml(t("noDetailRows"))}</div>`;
+    tableSummaryEl.textContent = t("noFilterRows");
     return;
   }
 
   const headerHtml = [
     "<tr>",
-    "<th>Product (Model | SKU | Connector)</th>",
-    "<th>In-stock</th>",
-    "<th>In-transit (range)</th>",
-    "<th>To be allocated</th>",
-    "<th>Available Qty</th>",
+    `<th>${escapeHtml(t("tableProduct"))}</th>`,
+    `<th>${escapeHtml(t("inStock"))}</th>`,
+    `<th>${escapeHtml(t("inTransitRange"))}</th>`,
+    `<th>${escapeHtml(t("allocated"))}</th>`,
+    `<th>${escapeHtml(t("availableQty"))}</th>`,
     ...arrivalDateHeaders.map((dateHeader) => {
       const sourceTag = vizState.dateSourceTags?.[dateHeader] || SOURCE_TAG.INV_DSP;
       const className = `th-${sourceClassFromTag(sourceTag)}`;
@@ -1033,7 +1039,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   const totalAllocated = rows.reduce((sum, item) => sum + Number(item.Allocated || 0), 0);
   const totalAvailable = rows.reduce((sum, item) => sum + Number(item.Available || 0), 0);
 
-  tableSummaryEl.textContent = `Rows: ${rows.length} | Arrival date columns: ${arrivalDateHeaders.length} | In-stock: ${fmtNumber(totalStock)} | In-transit: ${fmtNumber(totalTransit)} | To be allocated: ${fmtNumber(totalAllocated)} | Available Qty: ${fmtNumber(totalAvailable)} | Color tag: Blue=Inventory/Daily Supply, Orange=ODP, Purple=Mixed`;
+  tableSummaryEl.textContent = t("tableSummary", { rows: rows.length, dates: arrivalDateHeaders.length, stock: fmtNumber(totalStock), transit: fmtNumber(totalTransit), allocated: fmtNumber(totalAllocated), available: fmtNumber(totalAvailable) });
 }
 
 function applyVisualizationPayload(payload) {
@@ -1253,7 +1259,7 @@ async function runPythonAnalysis() {
   try {
     await loadPyodideRuntime();
 
-    setStatus("Preparing input files...");
+    setStatus("preparingInputs");
     const stockTemplateBytes = await fetchTemplateBytes();
 
     const inventoryPath = await resolveInputWorkbook({
@@ -1301,7 +1307,7 @@ async function runPythonAnalysis() {
     const odpMasterPy = odpMasterPath ? `'${odpMasterPath}'` : "None";
     const orderPy = orderPath ? `'${orderPath}'` : "None";
 
-    setStatus("Running available stock analysis...");
+    setStatus("runningPython");
 
     await pyodide.runPythonAsync(`
 from pathlib import Path
@@ -1330,10 +1336,10 @@ run(
 
     downloadLinkEl.href = objectUrl;
     downloadLinkEl.download = fileName;
-    downloadLinkEl.textContent = `Download ${fileName}`;
+    downloadLinkEl.textContent = t("download", { file: fileName });
     downloadLinkEl.style.display = "inline-block";
 
-    setStatus("Done: stock file generated. Building visualization data...");
+    setStatus("generatedBuilding");
 
     await extractVisualizationData();
     initializeCascadeFilters();
@@ -1342,9 +1348,9 @@ run(
     renderChartAndTable();
     setTimeout(() => chart && chart.resize(), 30);
 
-    setStatus("Done: stock file generated and visualization is ready.");
+    setStatus("generatedReady");
   } catch (err) {
-    setStatus(`Failed: ${err?.message || err}`);
+    setStatus("failed", { message: err?.message || err });
     console.error(err);
   } finally {
     runBtn.disabled = false;
@@ -1355,7 +1361,7 @@ async function runJavascriptAnalysis() {
   resetDownloadLink();
   runBtn.disabled = true;
   try {
-    setStatus("Preparing JavaScript Excel engine...");
+    setStatus("preparingJs");
     const stockTemplateBytes = await fetchTemplateBytes();
     const inventoryBytes = await resolveInputBytes({
       fileInput: inventoryInput,
@@ -1386,7 +1392,7 @@ async function runJavascriptAnalysis() {
       required: false,
     });
 
-    setStatus("Running JavaScript available stock analysis...");
+    setStatus("runningJs");
     const result = await buildStockOutputJs({
       stockTemplateBytes,
       inventoryBytes,
@@ -1405,7 +1411,7 @@ async function runJavascriptAnalysis() {
     const fileName = `stock_output_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
     downloadLinkEl.href = objectUrl;
     downloadLinkEl.download = fileName;
-    downloadLinkEl.textContent = `Download ${fileName}`;
+    downloadLinkEl.textContent = t("download", { file: fileName });
     downloadLinkEl.style.display = "inline-block";
 
     applyVisualizationPayload(result.visualization);
@@ -1413,9 +1419,9 @@ async function runJavascriptAnalysis() {
     vizPanelEl.style.display = "block";
     renderChartAndTable();
     setTimeout(() => chart && chart.resize(), 30);
-    setStatus(`Done: JavaScript stock file generated. Rows: ${result.summary.totalRows}, active SKUs: ${result.summary.activeSkuCount}.`);
+    setStatus("jsDone", { rows: result.summary.totalRows, skus: result.summary.activeSkuCount });
   } catch (err) {
-    setStatus(`JavaScript engine failed: ${err?.message || err}`);
+    setStatus("jsFailed", { message: err?.message || err });
     console.error(err);
   } finally {
     runBtn.disabled = false;
@@ -1452,7 +1458,7 @@ function resetForm() {
   resetDownloadLink();
   vizPanelEl.style.display = "none";
   detailTableEl.innerHTML = "";
-  tableSummaryEl.textContent = "No data.";
+  tableSummaryEl.textContent = t("noData");
   vizState.rows = [];
   vizState.allocations = [];
   vizState.dateHeaders = [];
@@ -1461,7 +1467,7 @@ function resetForm() {
   if (chart) {
     chart.clear();
   }
-  setStatus("Reset complete. Upload files and run again.");
+  setStatus("resetDone");
 }
 
 for (let i = 0; i < levelDefs.length; i += 1) {
@@ -1472,7 +1478,7 @@ for (let i = 0; i < levelDefs.length; i += 1) {
     rebuildCascadeFrom(i + 1, false);
     refreshFilterSummaries();
     if (vizPanelEl.style.display !== "none") {
-      try { renderChartAndTable(); } catch (err) { setStatus(`Visualization failed: ${err?.message || err}`); }
+      try { renderChartAndTable(); } catch (err) { setStatus("visualizationFailed", { message: err?.message || err }); }
     }
   });
 }
@@ -1481,7 +1487,7 @@ applyVizBtn.addEventListener("click", () => {
   try {
     renderChartAndTable();
   } catch (err) {
-    setStatus(`Visualization failed: ${err?.message || err}`);
+    setStatus("visualizationFailed", { message: err?.message || err });
   }
 });
 
@@ -1491,7 +1497,7 @@ clearFiltersBtn.addEventListener("click", () => {
     rebuildCascadeFrom(1, false);
     renderChartAndTable();
   } catch (err) {
-    setStatus(`Visualization failed: ${err?.message || err}`);
+    setStatus("visualizationFailed", { message: err?.message || err });
   }
 });
 
@@ -1501,10 +1507,25 @@ if (lineModeEl) {
     try {
       renderChartAndTable();
     } catch (err) {
-      setStatus(`Visualization failed: ${err?.message || err}`);
+      setStatus("visualizationFailed", { message: err?.message || err });
     }
   });
 }
 
 runBtn.addEventListener("click", runAnalysis);
 resetBtn.addEventListener("click", resetForm);
+
+window.addEventListener("app-language-change", () => {
+  statusEl.textContent = t(lastStatus.key, lastStatus.params);
+  refreshFilterSummaries();
+  if (downloadLinkEl.download) {
+    downloadLinkEl.textContent = t("download", { file: downloadLinkEl.download });
+  }
+  if (vizPanelEl.style.display !== "none" && vizState.rows.length) {
+    try {
+      renderChartAndTable();
+    } catch (err) {
+      setStatus("visualizationFailed", { message: err?.message || err });
+    }
+  }
+});

@@ -1,5 +1,5 @@
 ﻿<!doctype html>
-<html lang="en">
+<html lang="zh-CN" data-i18n-title-key="pageTitle">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -300,131 +300,135 @@
 <body class="light-ui">
   <main class="tool-wrap">
     <header class="hero">
-      <h1>Available Stock Analysis</h1>
-      <p>Generate stock output, then explore available stock trends with interactive visualization.</p>
+      <div class="lang-switch">
+        <button class="lang-btn" type="button" data-lang="zh">中文</button>
+        <button class="lang-btn" type="button" data-lang="en">EN</button>
+      </div>
+      <h1 data-i18n="heading">可用库存分析</h1>
+      <p data-i18n="subtitle">生成库存结果，并通过交互式图表查看可用库存趋势。</p>
     </header>
 
     <section class="panel">
-      <h2>Step 1: Generate Stock Output</h2>
+      <h2 data-i18n="step1">步骤 1：生成库存结果</h2>
       <div class="engine-row">
-        <label for="engineMode">Processing engine</label>
+        <label for="engineMode" data-i18n="engine">处理引擎</label>
         <select id="engineMode" class="engine-select">
-          <option value="javascript" selected>JavaScript (Recommended)</option>
-          <option value="python">Python Legacy (Fallback)</option>
+          <option value="javascript" selected data-i18n="engineJs">JavaScript（推荐）</option>
+          <option value="python" data-i18n="enginePy">Python 旧版（备用）</option>
         </select>
-        <div class="small-tip">JavaScript runs directly in the browser. Use Python Legacy if an Excel compatibility issue is encountered.</div>
+        <div class="small-tip" data-i18n="engineTip">JavaScript 直接在浏览器中运行；如遇 Excel 兼容问题，可使用 Python 旧版。</div>
       </div>
             <div class="form-grid">
         <div>
-          <label for="inventoryFile">Inventory file (Required)</label>
+          <label for="inventoryFile" data-i18n="inventoryFile">Inventory 文件（必选）</label>
           <input id="inventoryFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
-            <label><input id="useRepoInventory" type="checkbox" /> Use repository default file</label>
+            <label><input id="useRepoInventory" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
           </div>
         </div>
         <div>
-          <label for="dailySupplyFile">Daily Supply Plan file (Required)</label>
+          <label for="dailySupplyFile" data-i18n="dailyFile">Daily Supply Plan 文件（必选）</label>
           <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
-            <label><input id="useRepoDailySupply" type="checkbox" /> Use repository default file</label>
+            <label><input id="useRepoDailySupply" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
           </div>
         </div>
         <div>
-          <label for="odpMasterFile">EUPV ODP MASTER (Optional)</label>
+          <label for="odpMasterFile" data-i18n="odpFile">EUPV ODP MASTER（可选）</label>
           <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
-            <label><input id="useRepoOdpMaster" type="checkbox" /> Use repository default file</label>
+            <label><input id="useRepoOdpMaster" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
           </div>
         </div>
         <div>
-          <label for="orderFile">Orderfile Base Realtime (Optional)</label>
+          <label for="orderFile" data-i18n="orderFile">Orderfile Base Realtime（可选）</label>
           <input id="orderFile" type="file" accept=".xlsx,.xlsm" />
           <div class="repo-opt">
-            <label><input id="useRepoOrderfile" type="checkbox" /> Use repository default file</label>
+            <label><input id="useRepoOrderfile" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
           </div>
         </div>
         <div>
-          <label for="transitStart">Transit Start</label>
+          <label for="transitStart" data-i18n="transitStart">在途开始日期</label>
           <input id="transitStart" type="date" value="2026-08-01" />
         </div>
         <div>
-          <label for="transitEnd">Transit End</label>
+          <label for="transitEnd" data-i18n="transitEnd">在途结束日期</label>
           <input id="transitEnd" type="date" value="2026-12-31" />
         </div>
       </div>
 
       <div class="actions">
-        <button id="runBtn" class="btn-primary">Generate Stock File</button>
-        <button id="resetBtn" class="btn-secondary" type="button">Reset</button>
-        <a class="btn-link" href="../../index.html">Back to Home</a>
+        <button id="runBtn" class="btn-primary" data-i18n="generate">生成库存文件</button>
+        <button id="resetBtn" class="btn-secondary" type="button" data-i18n="reset">重置</button>
+        <a class="btn-link" href="../../index.html" data-i18n="backHome">← 返回主页</a>
       </div>
     </section>
 
     <section class="panel">
-      <h2>Run Status</h2>
-      <div id="status" class="status">Waiting to run...</div>
-      <a id="downloadLink" class="download-link" style="display:none;" download>Download generated file</a>
+      <h2 data-i18n="runStatus">运行状态</h2>
+      <div id="status" class="status" data-i18n="waiting">等待运行……</div>
+      <a id="downloadLink" class="download-link" style="display:none;" download data-i18n="downloadGenerated">下载生成的文件</a>
     </section>
 
     <section id="vizPanel" class="panel viz-panel" style="display:none;">
-      <h2>Step 2: Available Stock Visualization</h2>
-      <p class="tip">Available Stock formula: <code>Stock + cumulative in-transit arrivals</code>. CRD-based <code>To be allocated</code> is marked on chart by month.</p>
-      <p class="small-tip">Multi-select tip: click items directly to toggle select/unselect (no Ctrl needed).</p>
+      <h2 data-i18n="step2">步骤 2：可用库存可视化</h2>
+      <p class="tip" data-i18n="formulaTip">可用库存公式：库存 + 累计在途到货。按 CRD 计算的待分配数量会按月标记在图表上。</p>
+      <p class="small-tip" data-i18n="multiTip">多选提示：直接点击选项即可切换选中/取消，无需按 Ctrl。</p>
       <div class="source-legend">
-        <span class="source-chip"><span class="source-dot dot-inv-dsp"></span> Inventory / Daily Supply Plan</span>
-        <span class="source-chip"><span class="source-dot dot-odp"></span> ODP file</span>
-        <span class="source-chip"><span class="source-dot dot-mixed"></span> Mixed (both sources)</span>
+        <span class="source-chip"><span class="source-dot dot-inv-dsp"></span> <span data-i18n="sourceInv">Inventory / Daily Supply Plan</span></span>
+        <span class="source-chip"><span class="source-dot dot-odp"></span> <span data-i18n="sourceOdp">ODP 文件</span></span>
+        <span class="source-chip"><span class="source-dot dot-mixed"></span> <span data-i18n="sourceMixed">混合（两个来源）</span></span>
       </div>
 
       <div class="filters-grid">
         <div>
-          <label for="whFilter" class="label-with-icon"><span class="icon">W</span>WH</label>
+          <label for="whFilter" class="label-with-icon"><span class="icon">W</span><span data-i18n="warehouse">仓库（WH）</span></label>
           <select id="whFilter" multiple></select>
-          <div id="whSelectionSummary" class="selection-summary is-empty">No condition selected</div>
+          <div id="whSelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
         </div>
         <div>
-          <label for="categoryFilter" class="label-with-icon"><span class="icon">C</span>Category</label>
+          <label for="categoryFilter" class="label-with-icon"><span class="icon">C</span><span data-i18n="category">类别</span></label>
           <select id="categoryFilter" multiple></select>
-          <div id="categorySelectionSummary" class="selection-summary is-empty">No condition selected</div>
+          <div id="categorySelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
         </div>
         <div>
-          <label for="productReportFilter" class="label-with-icon"><span class="icon">R</span>Product TCL Report</label>
+          <label for="productReportFilter" class="label-with-icon"><span class="icon">R</span><span data-i18n="productReport">Product TCL Report</span></label>
           <select id="productReportFilter" multiple></select>
-          <div id="productReportSelectionSummary" class="selection-summary is-empty">No condition selected</div>
+          <div id="productReportSelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
         </div>
         <div>
-          <label for="familyFilter" class="label-with-icon"><span class="icon">F</span>Family</label>
+          <label for="familyFilter" class="label-with-icon"><span class="icon">F</span><span data-i18n="family">系列</span></label>
           <select id="familyFilter" multiple></select>
-          <div id="familySelectionSummary" class="selection-summary is-empty">No condition selected</div>
+          <div id="familySelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
         </div>
         <div class="product-col">
-          <label for="productFilter" class="label-with-icon"><span class="icon">P</span>Product (Model | SKU | Connector)</label>
+          <label for="productFilter" class="label-with-icon"><span class="icon">P</span><span data-i18n="product">产品（型号 | SKU | 接头）</span></label>
           <select id="productFilter" multiple></select>
-          <div id="productSelectionSummary" class="selection-summary is-empty">No condition selected</div>
-          <div class="small-tip">Tip: select dimensions first. Product items show Model, SKU, and Connector for easier retrieval.</div>
+          <div id="productSelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+          <div class="small-tip" data-i18n="productTip">提示：请先选择维度；产品选项会显示型号、SKU 和接头，便于查找。</div>
         </div>
         <div>
-          <label for="vizStart">Start Date</label>
+          <label for="vizStart" data-i18n="startDate">开始日期</label>
           <input id="vizStart" class="compact" type="date" />
-          <label for="vizEnd" style="margin-top:10px;">End Date</label>
+          <label for="vizEnd" style="margin-top:10px;" data-i18n="endDate">结束日期</label>
           <input id="vizEnd" class="compact" type="date" />
         </div>
         <div class="controls-col">
-          <label for="granularity">Granularity</label>
+          <label for="granularity" data-i18n="granularity">时间粒度</label>
           <select id="granularity" class="compact">
-            <option value="day">Daily</option>
-            <option value="week">Weekly</option>
-            <option value="month">Monthly</option>
+            <option value="day" data-i18n="daily">每日</option>
+            <option value="week" data-i18n="weekly">每周</option>
+            <option value="month" data-i18n="monthly">每月</option>
           </select>
-          <label for="lineMode" style="margin-top:10px;">Line Mode</label>
+          <label for="lineMode" style="margin-top:10px;" data-i18n="lineMode">曲线模式</label>
           <select id="lineMode" class="compact">
-            <option value="total">Total selected products</option>
-            <option value="split">Split by product</option>
-            <option value="warehouse">Split by warehouse</option>
+            <option value="total" data-i18n="lineTotal">所选产品合计</option>
+            <option value="split" data-i18n="lineProduct">按产品拆分</option>
+            <option value="warehouse" data-i18n="lineWarehouse">按仓库拆分</option>
           </select>
           <div class="inline-actions" style="margin-top:10px;">
-            <button id="applyVizBtn" class="btn-primary" type="button">Apply Filters</button>
-            <button id="clearFiltersBtn" class="btn-secondary" type="button">Clear Filters</button>
+            <button id="applyVizBtn" class="btn-primary" type="button" data-i18n="applyFilters">应用筛选</button>
+            <button id="clearFiltersBtn" class="btn-secondary" type="button" data-i18n="clearFilters">清除筛选</button>
           </div>
         </div>
       </div>
@@ -433,36 +437,27 @@
         <div id="stockChart"></div>
       </div>
 
-      <h3 style="margin-top:14px;">In-stock & In-transit Detail (arrival columns only)</h3>
-      <div id="tableSummary" class="small-tip">No data.</div>
+      <h3 style="margin-top:14px;" data-i18n="detailTitle">库存与在途明细（仅显示到货日期列）</h3>
+      <div id="tableSummary" class="small-tip" data-i18n="noData">暂无数据。</div>
       <div class="table-wrap">
         <div id="detailTable"></div>
       </div>
     </section>
 
     <section class="panel">
-      <h2>使用说明（中文）</h2>
+      <h2 data-i18n="instructions">使用说明</h2>
       <ul class="usage-list">
-        <li>Inventory 文件来自 NewArk-Inventory 模块-Inventory List 导出。</li>
-        <li>Daily Supply Plan 文件来自 NewArk-Planning 模块-Supply Plan-选择起止月份-导出。</li>
-        <li>ODP 文件来自 SharePoint，请联系 Planning 或 PSR team 获取。</li>
-        <li>Orderfile Base 文件来自 NewArk-Report Center PV 模块-Orderfile Base-选择月份导出。</li>
-        <li>Inventory 和 Daily Supply Plan 为必选文件；ODP 和 Orderfile Base 为可选文件。</li>
-      </ul>
-    </section>
-
-    <section class="panel">
-      <h2>Instructions (English)</h2>
-      <ul class="usage-list">
-        <li>Inventory file comes from NewArk-Inventory module-Inventory List export.</li>
-        <li>Daily Supply Plan file comes from NewArk-Planning module-Supply Plan-select start and end months-export.</li>
-        <li>ODP file comes from SharePoint. Please contact the Planning or PSR team.</li>
-        <li>Orderfile Base file comes from NewArk-Report Center PV module-Orderfile Base-select month-export.</li>
-        <li>Inventory and Daily Supply Plan are required; ODP and Orderfile Base are optional.</li>
+        <li data-i18n="instruction1">Inventory 文件来自 NewArk-Inventory 模块的 Inventory List 导出。</li>
+        <li data-i18n="instruction2">Daily Supply Plan 文件来自 NewArk-Planning 模块的 Supply Plan，选择起止月份后导出。</li>
+        <li data-i18n="instruction3">ODP 文件来自 SharePoint，请联系 Planning 或 PSR 团队获取。</li>
+        <li data-i18n="instruction4">Orderfile Base 文件来自 NewArk-Report Center PV 模块，选择月份后导出。</li>
+        <li data-i18n="instruction5">Inventory 和 Daily Supply Plan 为必选文件；ODP 和 Orderfile Base 为可选文件。</li>
       </ul>
     </section>
   </main>
 
+  <script src="./stock-i18n.js"></script>
+  <script src="../../module-i18n.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>

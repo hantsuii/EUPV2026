@@ -1,5 +1,5 @@
 ﻿<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-i18n-title-key="pageTitle">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -76,78 +76,82 @@
 <body class="light-ui">
   <main class="tool-wrap">
     <header class="hero">
-      <h1>Shipment Details生成</h1>
-      <p>根据 <code>shipment_tcl_tool.py</code> 的规则：读取 Shipment Details + PICKUP 文件夹，匹配后写回指定工作表。</p>
+      <div class="lang-switch">
+        <button class="lang-btn" type="button" data-lang="zh">中文</button>
+        <button class="lang-btn" type="button" data-lang="en">EN</button>
+      </div>
+      <h1 data-i18n="heading">Shipment Details 生成</h1>
+      <p data-i18n="subtitle">根据本地脚本规则读取 Shipment Details 与 PICKUP 文件，匹配后写回指定工作表。</p>
       <div class="actions">
-        <a class="btn-link" href="../../index.html">← Back to Home</a>
+        <a class="btn-link" href="../../index.html" data-i18n="backHome">← 返回主页</a>
       </div>
     </header>
 
     <section class="panel">
-      <h3>输入参数</h3>
+      <h3 data-i18n="inputs">输入参数</h3>
       <div class="form-grid" style="margin-top:8px;">
         <div>
-          <label>Shipment Details File</label>
+          <label data-i18n="shipmentFile">Shipment Details 文件</label>
           <input class="fake-input" value="SHIPMENT DETAILS*.xlsx" readonly />
-          <div class="tip">对应脚本参数：<code>shipment_file</code></div>
+          <div class="tip"><span data-i18n="scriptParam">对应脚本参数：</span><code>shipment_file</code></div>
         </div>
         <div>
-          <label>PICKUP Folder</label>
-          <input class="fake-input" value="PICKUP 文件夹路径" readonly />
-          <div class="tip">对应脚本参数：<code>pickup_folder</code></div>
+          <label data-i18n="pickupFolder">PICKUP 文件夹</label>
+          <input class="fake-input" data-i18n-value="pickupValue" value="PICKUP 文件夹路径" readonly />
+          <div class="tip"><span data-i18n="scriptParam">对应脚本参数：</span><code>pickup_folder</code></div>
         </div>
         <div>
-          <label>Output Sheet Name</label>
+          <label data-i18n="outputSheet">输出工作表名称</label>
           <input class="fake-input" value="Processed_TCL" readonly />
-          <div class="tip">对应脚本参数：<code>sheet_name</code></div>
+          <div class="tip"><span data-i18n="scriptParam">对应脚本参数：</span><code>sheet_name</code></div>
         </div>
       </div>
     </section>
 
     <section class="panel">
-      <h3>处理逻辑（来自 Python 文件）</h3>
+      <h3 data-i18n="logicTitle">处理逻辑（来自 Python 文件）</h3>
       <div class="rule-grid">
         <article class="rule-card">
-          <h4>1) 读取与列名识别</h4>
+          <h4 data-i18n="rule1Title">1) 读取与列名识别</h4>
           <ul>
-            <li>Shipment Details 从首行读取表头。</li>
-            <li>PICKUP 文件自动尝试多种 header 行（6/5/7/...）。</li>
-            <li>按别名映射识别 TCL REF、B/L、SKU、Product、Container、Quantity、Pallets 等列。</li>
+            <li data-i18n="rule1a">Shipment Details 从首行读取表头。</li>
+            <li data-i18n="rule1b">PICKUP 文件自动尝试多种表头行（6/5/7/...）。</li>
+            <li data-i18n="rule1c">按别名映射识别 TCL REF、B/L、SKU、Product、Container、Quantity、Pallets 等列。</li>
           </ul>
         </article>
         <article class="rule-card">
-          <h4>2) Shipment 按 Pcs 展开</h4>
+          <h4 data-i18n="rule2Title">2) Shipment 按 Pcs 展开</h4>
           <ul>
-            <li><code>Pcs</code> 为正整数时拆成多行，每行 1。</li>
-            <li>保留原始件数到 <code>Container Nos</code>。</li>
-            <li>拆分序号写入 <code>??</code> 列。</li>
+            <li data-i18n="rule2a">Pcs 为正整数时拆成多行，每行 1。</li>
+            <li data-i18n="rule2b">保留原始件数到 Container Nos。</li>
+            <li data-i18n="rule2c">拆分序号写入 ?? 列。</li>
           </ul>
         </article>
         <article class="rule-card">
-          <h4>3) 与 PICKUP 匹配</h4>
+          <h4 data-i18n="rule3Title">3) 与 PICKUP 匹配</h4>
           <ul>
-            <li>使用 4 键匹配：TCL REF + B/L + SKU + Product Name。</li>
-            <li>匹配成功回填：Container no / Quantity / Pallets。</li>
-            <li>每条 PICKUP 记录仅使用一次。</li>
+            <li data-i18n="rule3a">使用 4 键匹配：TCL REF + B/L + SKU + Product Name。</li>
+            <li data-i18n="rule3b">匹配成功后回填 Container no / Quantity / Pallets。</li>
+            <li data-i18n="rule3c">每条 PICKUP 记录仅使用一次。</li>
           </ul>
         </article>
         <article class="rule-card">
-          <h4>4) 写回工作簿</h4>
+          <h4 data-i18n="rule4Title">4) 写回工作簿</h4>
           <ul>
-            <li>删除同名 sheet（若已存在），重建输出 sheet。</li>
-            <li>表头与单元格自动加边框、居中、列宽自适应。</li>
-            <li>写回原 Shipment Details 文件。</li>
+            <li data-i18n="rule4a">删除同名工作表（若已存在），再重建输出工作表。</li>
+            <li data-i18n="rule4b">表头与单元格自动加边框、居中并自适应列宽。</li>
+            <li data-i18n="rule4c">写回原 Shipment Details 文件。</li>
           </ul>
         </article>
       </div>
     </section>
 
     <section class="panel">
-      <h3>输出字段布局</h3>
+      <h3 data-i18n="outputLayout">输出字段布局</h3>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>输出列名</th><th>来源</th></tr>
+            <tr><th>#</th><th data-i18n="outputColumn">输出列名</th><th data-i18n="source">来源</th></tr>
           </thead>
           <tbody>
             <tr><td>1</td><td>TCL REFERENCE NO.</td><td>Shipment Details</td></tr>
@@ -157,18 +161,29 @@
             <tr><td>5</td><td>Departure port</td><td>Shipment Details</td></tr>
             <tr><td>6</td><td>Final Destination</td><td>Shipment Details</td></tr>
             <tr><td>7</td><td>B/L no.</td><td>Shipment Details</td></tr>
-            <tr><td>8</td><td>Container no</td><td>PICKUP 匹配回填</td></tr>
+            <tr><td>8</td><td>Container no</td><td data-i18n="pickupMatched">PICKUP 匹配回填</td></tr>
             <tr><td>9</td><td>ETD date</td><td>Shipment Details</td></tr>
             <tr><td>10</td><td>ETA date</td><td>Shipment Details</td></tr>
-            <tr><td>11</td><td>Quantity</td><td>PICKUP 匹配回填</td></tr>
-            <tr><td>12</td><td>Pallets</td><td>PICKUP 匹配回填</td></tr>
-            <tr><td>13</td><td>Container Nos</td><td>Shipment Pcs 原始值</td></tr>
-            <tr><td>14</td><td>??</td><td>拆分序号</td></tr>
+            <tr><td>11</td><td>Quantity</td><td data-i18n="pickupMatched">PICKUP 匹配回填</td></tr>
+            <tr><td>12</td><td>Pallets</td><td data-i18n="pickupMatched">PICKUP 匹配回填</td></tr>
+            <tr><td>13</td><td>Container Nos</td><td data-i18n="originalPcs">Shipment Pcs 原始值</td></tr>
+            <tr><td>14</td><td>??</td><td data-i18n="splitIndex">拆分序号</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="tip" style="margin-top:10px;">当前页面用于规范展示输入/输出需求；正式执行仍由本地 Python 脚本完成。</p>
+      <p class="tip" style="margin-top:10px;" data-i18n="footerNote">当前页面用于规范展示输入/输出需求；正式执行仍由本地 Python 脚本完成。</p>
     </section>
   </main>
+  <script>
+    window.PAGE_I18N = {
+      zh: {
+        pageTitle: "Shipment Details 生成", heading: "Shipment Details 生成", subtitle: "根据本地脚本规则读取 Shipment Details 与 PICKUP 文件，匹配后写回指定工作表。", backHome: "← 返回主页", inputs: "输入参数", shipmentFile: "Shipment Details 文件", pickupFolder: "PICKUP 文件夹", pickupValue: "PICKUP 文件夹路径", outputSheet: "输出工作表名称", scriptParam: "对应脚本参数：", logicTitle: "处理逻辑（来自 Python 文件）", rule1Title: "1) 读取与列名识别", rule1a: "Shipment Details 从首行读取表头。", rule1b: "PICKUP 文件自动尝试多种表头行（6/5/7/...）。", rule1c: "按别名映射识别 TCL REF、B/L、SKU、Product、Container、Quantity、Pallets 等列。", rule2Title: "2) Shipment 按 Pcs 展开", rule2a: "Pcs 为正整数时拆成多行，每行 1。", rule2b: "保留原始件数到 Container Nos。", rule2c: "拆分序号写入 ?? 列。", rule3Title: "3) 与 PICKUP 匹配", rule3a: "使用 4 键匹配：TCL REF + B/L + SKU + Product Name。", rule3b: "匹配成功后回填 Container no / Quantity / Pallets。", rule3c: "每条 PICKUP 记录仅使用一次。", rule4Title: "4) 写回工作簿", rule4a: "删除同名工作表（若已存在），再重建输出工作表。", rule4b: "表头与单元格自动加边框、居中并自适应列宽。", rule4c: "写回原 Shipment Details 文件。", outputLayout: "输出字段布局", outputColumn: "输出列名", source: "来源", pickupMatched: "PICKUP 匹配回填", originalPcs: "Shipment Pcs 原始值", splitIndex: "拆分序号", footerNote: "当前页面用于规范展示输入/输出需求；正式执行仍由本地 Python 脚本完成。"
+      },
+      en: {
+        pageTitle: "Shipment Details Generator", heading: "Shipment Details Generator", subtitle: "Read Shipment Details and PICKUP files, match their records, and write the result to the specified worksheet using the local script rules.", backHome: "← Back to Home", inputs: "Input Parameters", shipmentFile: "Shipment Details File", pickupFolder: "PICKUP Folder", pickupValue: "PICKUP folder path", outputSheet: "Output Sheet Name", scriptParam: "Script parameter: ", logicTitle: "Processing Logic (from Python)", rule1Title: "1) Read Files and Detect Columns", rule1a: "Read the Shipment Details header from the first row.", rule1b: "Try several possible header rows in PICKUP files (6/5/7/...).", rule1c: "Detect TCL REF, B/L, SKU, Product, Container, Quantity, Pallets, and other columns through alias mapping.", rule2Title: "2) Expand Shipment Rows by Pcs", rule2a: "When Pcs is a positive integer, split it into rows with a value of 1.", rule2b: "Keep the original quantity in Container Nos.", rule2c: "Write the split sequence number to the ?? column.", rule3Title: "3) Match with PICKUP", rule3a: "Use four keys: TCL REF + B/L + SKU + Product Name.", rule3b: "When matched, fill Container no / Quantity / Pallets.", rule3c: "Use each PICKUP record only once.", rule4Title: "4) Write Back to Workbook", rule4a: "Delete an existing sheet with the same name, then create the output sheet again.", rule4b: "Add borders and centering, and auto-fit the column widths.", rule4c: "Write the result back to the original Shipment Details file.", outputLayout: "Output Field Layout", outputColumn: "Output Column", source: "Source", pickupMatched: "Matched from PICKUP", originalPcs: "Original Shipment Pcs", splitIndex: "Split sequence", footerNote: "This page documents the input and output requirements; processing is still performed by the local Python script."
+      }
+    };
+  </script>
+  <script src="../../module-i18n.js"></script>
 </body>
 </html>

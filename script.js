@@ -1,5 +1,5 @@
 ﻿const APP_LANG_KEY = "app_lang";
-let currentLang = localStorage.getItem(APP_LANG_KEY) || "zh";
+let currentLang = ["zh", "en"].includes(localStorage.getItem(APP_LANG_KEY)) ? localStorage.getItem(APP_LANG_KEY) : "zh";
 
 const UI = {
   zh: {
@@ -12,6 +12,7 @@ const UI = {
     usage3: "需要新增或调整模块时，编辑 modules.json。",
     openModule: "打开模块",
     loadError: "模块加载失败：",
+    pageTitle: "业务分析门户",
   },
   en: {
     portalTitle: "Business Analytics Portal",
@@ -23,6 +24,7 @@ const UI = {
     usage3: "To add or update modules, edit modules.json.",
     openModule: "Open Module",
     loadError: "Failed to load modules: ",
+    pageTitle: "Business Analytics Portal",
   },
 };
 
@@ -58,6 +60,7 @@ function t(key) {
 
 function applyHomeLanguage() {
   document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
+  document.title = t("pageTitle");
   document.getElementById("portal-title").textContent = t("portalTitle");
   document.getElementById("portal-subtitle").textContent = t("portalSubtitle");
   document.getElementById("module-title").textContent = t("moduleTitle");
@@ -67,6 +70,8 @@ function applyHomeLanguage() {
   document.getElementById("usage-3").textContent = t("usage3");
   document.getElementById("langZh").classList.toggle("active", currentLang === "zh");
   document.getElementById("langEn").classList.toggle("active", currentLang === "en");
+  document.getElementById("langZh").setAttribute("aria-pressed", String(currentLang === "zh"));
+  document.getElementById("langEn").setAttribute("aria-pressed", String(currentLang === "en"));
 }
 
 function localizeModule(module) {

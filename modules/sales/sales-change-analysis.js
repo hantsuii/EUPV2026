@@ -13,8 +13,9 @@ const regionDetailModal = byId("regionDetailModal"), regionDetailClose = byId("r
 const productHierarchyFilters = { category: byId("productCategorySel"), brand: byId("productBrandSel"), level1: byId("productLevel1Sel"), level2: byId("productLevel2Sel") };
 const productMetricSel = byId("productMetricSel"), productIncomeSel = byId("productIncomeSel");
 const productRegionSel = byId("productRegionSel"), productStartMonthSel = byId("productStartMonthSel"), productEndMonthSel = byId("productEndMonthSel");
-let currentLang = localStorage.getItem(APP_LANG_KEY) || "zh";
+let currentLang = ["zh", "en"].includes(localStorage.getItem(APP_LANG_KEY)) ? localStorage.getItem(APP_LANG_KEY) : "zh";
 let allRows = [], allTargets = [], activeDetailRegion = null;
+let lastStatus = { key: "statusInit", vars: {} };
 
 const REGION_ROLLUP_MAP = {
   "Italy & Adriatics Region": "Italy Region",
@@ -30,10 +31,10 @@ function mapRegionForStats(region) {
 const I18N = {
   zh: {
     pageTitle: "销售分析看板（PV / ESS）", pageSubtitle: "展示销售、目标达成、ASP 与产品结构趋势。", backHome: "← 返回主页",
-    sourceLabel: "Sales Workbook Source", sourceUpload: "上传本地文件", sourceRepo: "使用 GitHub 仓库文件", uploadLabel: "上传 Sales 工作簿 (.xlsx)", repoPathLabel: "仓库文件路径", repoPathTip: "例如：../../templates/sales_workbook.xlsx", runBtn: "运行分析", statusInit: "请选择文件来源并点击运行。",
+    sourceLabel: "Sales 工作簿来源", sourceUpload: "上传本地文件", sourceRepo: "使用仓库文件", uploadLabel: "上传 Sales 工作簿 (.xlsx)", repoPathLabel: "仓库文件路径", repoPathTip: "例如：../../templates/sales_workbook.xlsx", runBtn: "运行分析", statusInit: "请选择文件来源并点击运行。", category: "类别", brand: "品牌", level1: "一级分类", level2: "二级分类", close: "关闭",
     tabTotal: "总计 Dashboard", tabRegion: "各地区看板", tabProduct: "产品销售分析", overviewTitle: "2026年总览", row1Title: "全年核心指标", futureTitle: "未来销售指标（2027+）", row2Title: "H1 销售数据", row3Title: "未结束季度进度",
     filterIncome: "收入类型", filterYear: "年份", filterQuarter: "季度", filterMonth: "月份", filterRegion: "地区", incomeTotal: "总计", incomeInvoiced: "开票收入", incomeConfirm: "待确认收入", all: "全部",
-    statusReadRepo: "读取仓库文件：{path}", statusReadUpload: "读取上传文件：{name}", statusNoPath: "请输入仓库文件路径。", statusNoFile: "请先上传销售工作簿文件。", statusNoRows: "Order details 中没有可用的 Month / Quartely 数据。", statusDone: "完成：销售 {allRows} 行，Target {targetRows} 行。", statusFail: "失败：{msg}", statusNoRegion: "当前筛选下无地区数据。",
+    statusReadRepo: "读取仓库文件：{path}", statusReadUpload: "读取上传文件：{name}", statusNoPath: "请输入仓库文件路径。", statusNoFile: "请先上传销售工作簿文件。", statusNoRows: "Order details 中没有可用的 Month / Quartely 数据。", statusDone: "完成：销售 {allRows} 行，Target {targetRows} 行。", statusFail: "失败：{msg}", statusNoRegion: "当前筛选下无地区数据。", ordersMissing: "工作簿中未找到“Order details”工作表。", targetMissing: "工作簿中未找到“Target”工作表。", repoMissing: "未找到仓库文件：{path}（HTTP {status}）",
     kpiRevenuePair: "开票收入 / 待确认收入(万€)", kpiPvQtyPair: "组件销量MW（开票/待确认）", kpiEssQtyPair: "储能销量Sets（开票/待确认）", kpiBpRate: "BP金额 / 总计达成率", kpiTargetDetail: "目标 {target} / 总计达成 {rate}", kpiFutureRevenue: "未来销售收入(万€)", kpiFuturePvQty: "未来组件销量(MW)", kpiFutureEssQty: "未来储能销量(Sets)", kpiH1Revenue: "H1 开票金额(万€)", kpiH1PvQty: "H1 开票组件销量(MW)", kpiH1EssQty: "H1 开票储能销量(Sets)", kpiH1Rate: "H1 开票达成率",
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)",
@@ -42,10 +43,10 @@ const I18N = {
   },
   en: {
     pageTitle: "Sales Analytics Dashboard (PV / ESS)", pageSubtitle: "Sales, target achievement, ASP and product-mix trends.", backHome: "← Back to Home",
-    sourceLabel: "Sales Workbook Source", sourceUpload: "Upload local file", sourceRepo: "Use GitHub repository file", uploadLabel: "Upload Sales Workbook (.xlsx)", repoPathLabel: "Repository file path", repoPathTip: "Example: ../../templates/sales_workbook.xlsx", runBtn: "Run Analysis", statusInit: "Choose source and click Run Analysis.",
+    sourceLabel: "Sales Workbook Source", sourceUpload: "Upload local file", sourceRepo: "Use repository file", uploadLabel: "Upload Sales Workbook (.xlsx)", repoPathLabel: "Repository file path", repoPathTip: "Example: ../../templates/sales_workbook.xlsx", runBtn: "Run Analysis", statusInit: "Choose a source and click Run Analysis.", category: "Category", brand: "Brand", level1: "Level 1", level2: "Level 2", close: "Close",
     tabTotal: "Total Dashboard", tabRegion: "Regional Dashboard", tabProduct: "Product Analysis", overviewTitle: "2026 Overview", row1Title: "Full-Year Core Metrics", futureTitle: "Future Sales Metrics (2027+)", row2Title: "H1 Sales Metrics", row3Title: "Open Quarter Progress",
     filterIncome: "Income Type", filterYear: "Year", filterQuarter: "Quarter", filterMonth: "Month", filterRegion: "Region", incomeTotal: "Total", incomeInvoiced: "Invoiced", incomeConfirm: "Confirm", all: "All",
-    statusReadRepo: "Loading repository file: {path}", statusReadUpload: "Reading uploaded file: {name}", statusNoPath: "Please input repository file path.", statusNoFile: "Please upload sales workbook first.", statusNoRows: "No usable Month / Quartely data in Order details.", statusDone: "Done: {allRows} sales rows, {targetRows} target rows.", statusFail: "Failed: {msg}", statusNoRegion: "No regional data under current filters.",
+    statusReadRepo: "Loading repository file: {path}", statusReadUpload: "Reading uploaded file: {name}", statusNoPath: "Please enter the repository file path.", statusNoFile: "Please upload the sales workbook first.", statusNoRows: "No usable Month / Quartely data in Order details.", statusDone: "Done: {allRows} sales rows, {targetRows} target rows.", statusFail: "Failed: {msg}", statusNoRegion: "No regional data under current filters.", ordersMissing: "Sheet 'Order details' was not found in the workbook.", targetMissing: "Sheet 'Target' was not found in the workbook.", repoMissing: "Repository file not found: {path} (HTTP {status})",
     kpiRevenuePair: "Invoiced / Confirm Revenue (10k €)", kpiPvQtyPair: "PV Qty MW (Invoiced/Confirm)", kpiEssQtyPair: "ESS Qty Sets (Invoiced/Confirm)", kpiBpRate: "BP Revenue / Total Achievement", kpiTargetDetail: "Target {target} / Total achievement {rate}", kpiFutureRevenue: "Future Revenue (10k €)", kpiFuturePvQty: "Future PV Qty (MW)", kpiFutureEssQty: "Future ESS Qty (Sets)", kpiH1Revenue: "H1 Invoiced Revenue (10k €)", kpiH1PvQty: "H1 Invoiced PV Qty (MW)", kpiH1EssQty: "H1 Invoiced ESS Qty (Sets)", kpiH1Rate: "H1 Invoiced Achievement",
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Confirm (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)",
@@ -55,7 +56,7 @@ const I18N = {
 };
 
 function t(key, vars = {}) { let text = I18N[currentLang]?.[key] ?? I18N.zh[key] ?? key; Object.entries(vars).forEach(([k, v]) => { text = text.replace(`{${k}}`, String(v)); }); return text; }
-function setStatus(text) { statusEl.textContent = text; }
+function setStatus(key, vars = {}) { lastStatus = { key, vars }; statusEl.textContent = t(key, vars); }
 function n(v) { const x = Number(v); return Number.isFinite(x) ? x : 0; }
 function hasValue(v) { return !(v == null || String(v).trim() === ""); }
 function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -160,7 +161,7 @@ function renderOverview() {
     year: "yearKpiRow", future: "futureKpiRow", h1: "h1KpiRow", quarter: "quarterProgressTable",
     trend: "monthlyTrendChart", pvAsp: "monthlyPvAspChart", essAsp: "monthlyEssAspChart",
   }, { pv: pvAspFilters, ess: essAspFilters });
-  setStatus(t("statusDone", { allRows: allRows.length, targetRows: allTargets.length }));
+  setStatus("statusDone", { allRows: allRows.length, targetRows: allTargets.length });
 }
 function renderDashboard(sourceRows, sourceTargets, ids, aspFilters = null) {
   const yearRows = sourceRows.filter((r) => r.year === TARGET_YEAR), targetYear = sourceTargets.filter((r) => r.year === TARGET_YEAR);
@@ -253,15 +254,39 @@ function renderProduct() {
   table("productRankingTable", [t("rankName"), t("rankValue"), t("rankShare"), `${t("rankLatest")} (${latest || "-"})`, `${t("rankPrevious")} (${previous || "-"})`, t("rankMom")], rankRows);
 }
 
-function applyLanguage() { document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en"; document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); }); langZhBtn.classList.toggle("active", currentLang === "zh"); langEnBtn.classList.toggle("active", currentLang === "en"); if (allRows.length) { initFilters(); renderOverview(); renderRegion(); renderProduct(); } }
+function applyLanguage() {
+  document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
+  document.title = t("pageTitle");
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel)));
+  langZhBtn.classList.toggle("active", currentLang === "zh");
+  langEnBtn.classList.toggle("active", currentLang === "en");
+  langZhBtn.setAttribute("aria-pressed", String(currentLang === "zh"));
+  langEnBtn.setAttribute("aria-pressed", String(currentLang === "en"));
+  if (allRows.length) {
+    const selectedById = new Map([...document.querySelectorAll("select[id]")].map((el) => [el.id, selected(el)]));
+    initFilters();
+    selectedById.forEach((values, id) => {
+      const el = byId(id);
+      if (!el) return;
+      const wanted = new Set(values);
+      [...el.options].forEach((option) => { option.selected = wanted.has(option.value); });
+    });
+    renderOverview();
+    renderRegion();
+    renderProduct();
+  } else {
+    setStatus(lastStatus.key, lastStatus.vars);
+  }
+}
 function setLanguage(lang) { currentLang = lang; localStorage.setItem(APP_LANG_KEY, lang); applyLanguage(); }
-async function parseWorkbookFromArrayBuffer(buffer) { const workbook = XLSX.read(buffer, { type: "array" }), ordersSheet = workbook.Sheets["Order details"], targetSheet = workbook.Sheets.Target; if (!ordersSheet) throw new Error("Sheet 'Order details' not found in workbook."); if (!targetSheet) throw new Error("Sheet 'Target' not found in workbook."); return { orders: XLSX.utils.sheet_to_json(ordersSheet, { defval: null }), targets: XLSX.utils.sheet_to_json(targetSheet, { defval: null }) }; }
-async function loadWorkbookBySource() { const source = document.querySelector("input[name='salesSource']:checked")?.value || "upload"; if (source === "repo") { const path = String(repoSalesPathEl.value || "").trim(); if (!path) throw new Error(t("statusNoPath")); setStatus(t("statusReadRepo", { path })); const response = await fetch(path, { cache: "no-store" }); if (!response.ok) throw new Error(`Repository file not found: ${path} (HTTP ${response.status})`); return parseWorkbookFromArrayBuffer(await response.arrayBuffer()); } const file = fileEl.files?.[0]; if (!file) throw new Error(t("statusNoFile")); setStatus(t("statusReadUpload", { name: file.name })); return parseWorkbookFromArrayBuffer(await file.arrayBuffer()); }
+async function parseWorkbookFromArrayBuffer(buffer) { const workbook = XLSX.read(buffer, { type: "array" }), ordersSheet = workbook.Sheets["Order details"], targetSheet = workbook.Sheets.Target; if (!ordersSheet) throw new Error(t("ordersMissing")); if (!targetSheet) throw new Error(t("targetMissing")); return { orders: XLSX.utils.sheet_to_json(ordersSheet, { defval: null }), targets: XLSX.utils.sheet_to_json(targetSheet, { defval: null }) }; }
+async function loadWorkbookBySource() { const source = document.querySelector("input[name='salesSource']:checked")?.value || "upload"; if (source === "repo") { const path = String(repoSalesPathEl.value || "").trim(); if (!path) throw new Error(t("statusNoPath")); setStatus("statusReadRepo", { path }); const response = await fetch(path, { cache: "no-store" }); if (!response.ok) throw new Error(t("repoMissing", { path, status: response.status })); return parseWorkbookFromArrayBuffer(await response.arrayBuffer()); } const file = fileEl.files?.[0]; if (!file) throw new Error(t("statusNoFile")); setStatus("statusReadUpload", { name: file.name }); return parseWorkbookFromArrayBuffer(await file.arrayBuffer()); }
 function bindMultiSelectToggle(el) { el.addEventListener("mousedown", (event) => { const option = event.target; if (!(option instanceof HTMLOptionElement)) return; event.preventDefault(); if (["__ALL__", "total"].includes(option.value)) [...el.options].forEach((o) => { o.selected = o === option; }); else { option.selected = !option.selected; [...el.options].forEach((o) => { if (["__ALL__", "total"].includes(o.value)) o.selected = false; }); if (![...el.options].some((o) => o.selected)) { const fallback = [...el.options].find((o) => ["__ALL__", "total"].includes(o.value)); if (fallback) fallback.selected = true; } } setTimeout(() => el.dispatchEvent(new Event("change", { bubbles: true })), 0); }); }
 
 document.querySelectorAll("input[name='salesSource']").forEach((radio) => radio.addEventListener("change", () => { const useRepo = document.querySelector("input[name='salesSource']:checked")?.value === "repo"; repoRow.classList.toggle("active", useRepo); uploadRow.style.display = useRepo ? "none" : "grid"; }));
 byId("jumpWrap").querySelectorAll(".jump-btn").forEach((btn) => btn.addEventListener("click", () => { byId("jumpWrap").querySelectorAll(".jump-btn").forEach((x) => x.classList.toggle("active", x === btn)); document.querySelectorAll(".content-block").forEach((panel) => panel.classList.toggle("active", panel.id === btn.dataset.target)); window.dispatchEvent(new Event("resize")); }));
-runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); if (!allRows.length) { setStatus(t("statusNoRows")); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); } catch (error) { setStatus(t("statusFail", { msg: error.message || error })); } });
+runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); if (!allRows.length) { setStatus("statusNoRows"); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); } catch (error) { setStatus("statusFail", { msg: error.message || error }); } });
 [incomeTypeSel, yearSel, quarterSel, monthSel].forEach((el) => el.addEventListener("change", renderRegion));
 Object.values(pvAspFilters).forEach((el) => el.addEventListener("change", () => { refreshAspCascade(pvAspFilters, false, allRows.filter((r) => r.isPV)); renderOverview(); }));
 Object.values(essAspFilters).forEach((el) => el.addEventListener("change", () => { refreshAspCascade(essAspFilters, false, allRows.filter((r) => r.isESS)); renderOverview(); }));

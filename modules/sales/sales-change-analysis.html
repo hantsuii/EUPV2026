@@ -281,8 +281,8 @@
   <main class="tool-wrap">
     <header class="hero">
       <div class="lang-switch">
-        <button id="langZh" class="lang-btn">中文</button>
-        <button id="langEn" class="lang-btn">EN</button>
+        <button id="langZh" class="lang-btn" type="button" data-lang="zh">中文</button>
+        <button id="langEn" class="lang-btn" type="button" data-lang="en">EN</button>
       </div>
       <h1 data-i18n="pageTitle">销售分析看板（PV / ESS）</h1>
       <p data-i18n="pageSubtitle">统一库存分析模块风格，展示 2026 年总览与各区域看板。</p>
@@ -349,9 +349,9 @@
           <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
           <div class="filter-grid compact">
             <div><label for="pvAspRegionSel" data-i18n="filterRegion">地区</label><select id="pvAspRegionSel" multiple size="4"></select></div>
-            <div><label for="pvAspBrandSel">Brand</label><select id="pvAspBrandSel" multiple size="4"></select></div>
-            <div><label for="pvAspLevel1Sel">Level1</label><select id="pvAspLevel1Sel" multiple size="4"></select></div>
-            <div><label for="pvAspLevel2Sel">Level2</label><select id="pvAspLevel2Sel" multiple size="4"></select></div>
+            <div><label for="pvAspBrandSel" data-i18n="brand">品牌</label><select id="pvAspBrandSel" multiple size="4"></select></div>
+            <div><label for="pvAspLevel1Sel" data-i18n="level1">一级分类</label><select id="pvAspLevel1Sel" multiple size="4"></select></div>
+            <div><label for="pvAspLevel2Sel" data-i18n="level2">二级分类</label><select id="pvAspLevel2Sel" multiple size="4"></select></div>
           </div>
           <div class="chart-box"><div id="monthlyPvAspChart" class="chart"></div></div>
         </div>
@@ -359,9 +359,9 @@
           <div class="sub-title" data-i18n="essAspFilterTitle">ESS ASP 筛选</div>
           <div class="filter-grid compact">
             <div><label for="essAspRegionSel" data-i18n="filterRegion">地区</label><select id="essAspRegionSel" multiple size="4"></select></div>
-            <div><label for="essAspBrandSel">Brand</label><select id="essAspBrandSel" multiple size="4"></select></div>
-            <div><label for="essAspLevel1Sel">Level1</label><select id="essAspLevel1Sel" multiple size="4"></select></div>
-            <div><label for="essAspLevel2Sel">Level2</label><select id="essAspLevel2Sel" multiple size="4"></select></div>
+            <div><label for="essAspBrandSel" data-i18n="brand">品牌</label><select id="essAspBrandSel" multiple size="4"></select></div>
+            <div><label for="essAspLevel1Sel" data-i18n="level1">一级分类</label><select id="essAspLevel1Sel" multiple size="4"></select></div>
+            <div><label for="essAspLevel2Sel" data-i18n="level2">二级分类</label><select id="essAspLevel2Sel" multiple size="4"></select></div>
           </div>
           <div class="chart-box"><div id="monthlyEssAspChart" class="chart"></div></div>
         </div>
@@ -399,10 +399,10 @@
         <div class="product-filter-panel">
           <div class="filter-section-title" data-i18n="productHierarchyTitle">产品层级筛选</div>
           <div class="filter-grid compact product-hierarchy-grid">
-            <div><label for="productCategorySel">Category</label><select id="productCategorySel" multiple size="4"></select></div>
-            <div><label for="productBrandSel">Brand</label><select id="productBrandSel" multiple size="4"></select></div>
-            <div><label for="productLevel1Sel">Level1</label><select id="productLevel1Sel" multiple size="4"></select></div>
-            <div><label for="productLevel2Sel">Level2</label><select id="productLevel2Sel" multiple size="4"></select></div>
+            <div><label for="productCategorySel" data-i18n="category">类别</label><select id="productCategorySel" multiple size="4"></select></div>
+            <div><label for="productBrandSel" data-i18n="brand">品牌</label><select id="productBrandSel" multiple size="4"></select></div>
+            <div><label for="productLevel1Sel" data-i18n="level1">一级分类</label><select id="productLevel1Sel" multiple size="4"></select></div>
+            <div><label for="productLevel2Sel" data-i18n="level2">二级分类</label><select id="productLevel2Sel" multiple size="4"></select></div>
           </div>
           <div class="filter-section-title" data-i18n="productControlTitle">分析条件</div>
           <div class="filter-grid product-control-grid">
@@ -451,7 +451,7 @@
     <section class="modal-dialog">
       <div class="modal-header">
         <h2 id="regionDetailTitle">地区总计 Dashboard</h2>
-        <button id="regionDetailClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="regionDetailClose" class="modal-close" type="button" aria-label="关闭" data-i18n-aria-label="close">×</button>
       </div>
       <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
       <div id="detailYearKpiRow" class="kpi-grid kpi-grid-4"></div>
@@ -466,9 +466,9 @@
         <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
         <div class="filter-grid compact">
           <div><label for="detailPvAspRegionSel" data-i18n="filterRegion">地区</label><select id="detailPvAspRegionSel" multiple size="4"></select></div>
-          <div><label for="detailPvAspBrandSel">Brand</label><select id="detailPvAspBrandSel" multiple size="4"></select></div>
-          <div><label for="detailPvAspLevel1Sel">Level1</label><select id="detailPvAspLevel1Sel" multiple size="4"></select></div>
-          <div><label for="detailPvAspLevel2Sel">Level2</label><select id="detailPvAspLevel2Sel" multiple size="4"></select></div>
+          <div><label for="detailPvAspBrandSel" data-i18n="brand">品牌</label><select id="detailPvAspBrandSel" multiple size="4"></select></div>
+          <div><label for="detailPvAspLevel1Sel" data-i18n="level1">一级分类</label><select id="detailPvAspLevel1Sel" multiple size="4"></select></div>
+          <div><label for="detailPvAspLevel2Sel" data-i18n="level2">二级分类</label><select id="detailPvAspLevel2Sel" multiple size="4"></select></div>
         </div>
         <div class="chart-box"><div id="detailMonthlyPvAspChart" class="chart"></div></div>
       </div>
@@ -476,9 +476,9 @@
         <div class="sub-title" data-i18n="essAspFilterTitle">ESS ASP 筛选</div>
         <div class="filter-grid compact">
           <div><label for="detailEssAspRegionSel" data-i18n="filterRegion">地区</label><select id="detailEssAspRegionSel" multiple size="4"></select></div>
-          <div><label for="detailEssAspBrandSel">Brand</label><select id="detailEssAspBrandSel" multiple size="4"></select></div>
-          <div><label for="detailEssAspLevel1Sel">Level1</label><select id="detailEssAspLevel1Sel" multiple size="4"></select></div>
-          <div><label for="detailEssAspLevel2Sel">Level2</label><select id="detailEssAspLevel2Sel" multiple size="4"></select></div>
+          <div><label for="detailEssAspBrandSel" data-i18n="brand">品牌</label><select id="detailEssAspBrandSel" multiple size="4"></select></div>
+          <div><label for="detailEssAspLevel1Sel" data-i18n="level1">一级分类</label><select id="detailEssAspLevel1Sel" multiple size="4"></select></div>
+          <div><label for="detailEssAspLevel2Sel" data-i18n="level2">二级分类</label><select id="detailEssAspLevel2Sel" multiple size="4"></select></div>
         </div>
         <div class="chart-box"><div id="detailMonthlyEssAspChart" class="chart"></div></div>
       </div>

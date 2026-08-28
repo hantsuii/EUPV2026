@@ -95,7 +95,7 @@ function readSheetRows(ws, headerRow = 1) {
 function getFirstWorksheet(workbook) {
   const names = workbook.worksheets ? workbook.worksheets.map((ws) => ws.name) : workbook.SheetNames;
   const name = names?.[0];
-  if (!name) throw new Error("Workbook has no worksheets.");
+  if (!name) throw localizedError("noSheets");
   return workbook.getWorksheet ? workbook.getWorksheet(name) : workbook.Sheets[name];
 }
 
@@ -103,7 +103,7 @@ function pickSkuSheetName(workbook, explicitName) {
   const sheetNames = workbook.worksheets ? workbook.worksheets.map((ws) => ws.name) : workbook.SheetNames;
   if (explicitName) {
     if (sheetNames.includes(explicitName)) return explicitName;
-    throw new Error(`SKU sheet not found: ${explicitName}`);
+    throw localizedError("skuSheetMissing", { name: explicitName });
   }
   const candidates = ["SKU", "SKU Mapping", "Legacy Mapping Product"];
   const lowered = new Map(sheetNames.map((name) => [name.toLowerCase(), name]));
@@ -187,7 +187,7 @@ function compareDateParts(a, b) {
 function iterDateKeys(startValue, endValue) {
   const start = parseDateParts(startValue);
   const end = parseDateParts(endValue);
-  if (!start || !end || compareDateParts(start, end) > 0) throw new Error("Invalid transit date range.");
+  if (!start || !end || compareDateParts(start, end) > 0) throw localizedError("invalidTransitRange");
   const cursor = new Date(start.year, start.month - 1, start.day);
   const endDate = new Date(end.year, end.month - 1, end.day);
   const out = [];
@@ -233,7 +233,7 @@ function buildSkuLookup(workbook, sheetName) {
     "total pcs per 40hq container",
   ];
   const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw new Error(`SKU sheet missing columns: ${missing.join(", ")}`);
+  if (missing.length) throw localizedError("missingColumns", { sheet: "SKU", columns: missing.join(", ") });
 
   const lookup = new Map();
   for (const row of rows) {
@@ -263,7 +263,7 @@ function extractInventoryRows(workbook) {
     "brand",
   ];
   const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw new Error(`Inventory Detail missing columns: ${missing.join(", ")}`);
+  if (missing.length) throw localizedError("missingColumns", { sheet: "Inventory Detail", columns: missing.join(", ") });
 
   const grouped = new Map();
   for (const row of rows) {
@@ -289,7 +289,7 @@ function extractTransitData(workbook, startValue, endValue) {
   const { rows, index } = readSheetRows(getFirstWorksheet(workbook));
   const required = ["in-transit warehouse(code)", "customer model", "supply date", "available quantity"];
   const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw new Error(`DailySupplyPlan missing columns: ${missing.join(", ")}`);
+  if (missing.length) throw localizedError("missingColumns", { sheet: "DailySupplyPlan", columns: missing.join(", ") });
 
   const qty = new Map();
   const category = new Map();
@@ -315,11 +315,11 @@ function extractOdpTransitData(workbook, startValue, endValue) {
   let ws = workbook.getWorksheet
     ? (workbook.getWorksheet("Total Stcok") || workbook.getWorksheet("Total Stock"))
     : (workbook.Sheets["Total Stcok"] || workbook.Sheets["Total Stock"]);
-  if (!ws) throw new Error("ODP file missing `Total Stcok`/`Total Stock` sheet");
+  if (!ws) throw localizedError("odpSheetMissing");
   const { rows, index } = readSheetRows(ws);
   const required = ["new ark wh", "new ark sku", "quantity", "eta for new ark update"];
   const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw new Error(`ODP Total Stock missing columns: ${missing.join(", ")}`);
+  if (missing.length) throw localizedError("missingColumns", { sheet: "ODP Total Stock", columns: missing.join(", ") });
 
   const qty = new Map();
   const category = new Map();
@@ -359,7 +359,7 @@ function extractAllocatedOrders(workbook) {
     "factory",
   ];
   const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw new Error(`Order file missing columns: ${missing.join(", ")}`);
+  if (missing.length) throw localizedError("missingColumns", { sheet: "Order file", columns: missing.join(", ") });
 
   const orders = [];
   const need = new Map();
@@ -618,8 +618,8 @@ export async function buildStockOutputJs({
   startDate,
   endDate,
 }) {
-  if (!globalThis.ExcelJS) throw new Error("JavaScript Excel output engine is not loaded.");
-  if (!globalThis.XLSX) throw new Error("JavaScript Excel input engine is not loaded.");
+  if (!globalThis.ExcelJS) throw localizedError("outputEngineMissing");
+  if (!globalThis.XLSX) throw localizedError("inputEngineMissing");
   const loadTemplate = async (bytes, label) => {
     if (!bytes) return null;
     const workbook = new globalThis.ExcelJS.Workbook();
@@ -627,7 +627,7 @@ export async function buildStockOutputJs({
       await workbook.xlsx.load(bytes);
       return workbook;
     } catch (error) {
-      throw new Error(`${label} could not be read: ${error?.message || error}`);
+      throw localizedError("readFailed", { label, message: error?.message || error });
     }
   };
   const loadSource = async (bytes, label) => {
@@ -635,7 +635,7 @@ export async function buildStockOutputJs({
     try {
       return globalThis.XLSX.read(bytes, { type: "array", cellDates: true, cellFormula: true, raw: true });
     } catch (error) {
-      throw new Error(`${label} could not be read: ${error?.message || error}`);
+      throw localizedError("readFailed", { label, message: error?.message || error });
     }
   };
 
@@ -742,4 +742,18 @@ export async function buildStockOutputJs({
       skuSheetName,
     },
   };
+}
+function localizedError(key, vars = {}) {
+  const lang = localStorage.getItem("app_lang") === "en" ? "en" : "zh";
+  const messages = {
+    zh: {
+      noSheets: "工作簿中没有工作表。", skuSheetMissing: "未找到 SKU 工作表：{name}", invalidTransitRange: "在途日期范围无效。", missingColumns: "{sheet} 缺少字段：{columns}", odpSheetMissing: "ODP 文件中缺少“Total Stcok”或“Total Stock”工作表。", outputEngineMissing: "JavaScript Excel 输出引擎未加载。", inputEngineMissing: "JavaScript Excel 输入引擎未加载。", readFailed: "无法读取 {label}：{message}"
+    },
+    en: {
+      noSheets: "Workbook has no worksheets.", skuSheetMissing: "SKU sheet not found: {name}", invalidTransitRange: "Invalid transit date range.", missingColumns: "{sheet} is missing columns: {columns}", odpSheetMissing: "ODP file is missing the 'Total Stcok' or 'Total Stock' sheet.", outputEngineMissing: "JavaScript Excel output engine is not loaded.", inputEngineMissing: "JavaScript Excel input engine is not loaded.", readFailed: "{label} could not be read: {message}"
+    }
+  };
+  let message = messages[lang][key] || key;
+  Object.entries(vars).forEach(([name, value]) => { message = message.replace(`{${name}}`, String(value)); });
+  return new Error(message);
 }
