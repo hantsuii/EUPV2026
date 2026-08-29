@@ -59,3 +59,14 @@ Webhook 优先于邮件。若服务端尚未配置，主页会提供发送到管
 - 生成的 `stock` sheet 会从 `SKU` sheet 回填 `Connector`，Product 检索标签显示 `Model | SKU | Connector`
 - Inventory、Daily Supply Plan、ODP、To be allocated 四个来源均无数量的 SKU，不进入生成的 `stock` 和页面展示
 - 取数、计算和呈现规则汇总：`logic/`；引擎、回退、过滤和验证记录见 `logic/说明.md`
+
+## ODP 发运与航线分析模块
+
+新增页面：`modules/odp/odp-shipping-analysis.html`
+
+- 合并当前 PV、H2-2025 与 H1-2025 历史数据，并按 TCL Reference 去重
+- 自动排除 Quantity 小于等于 0 的记录
+- 按 ATD 日期范围统计 POL 到目的港的实际航程
+- 航线默认需累计至少 10 柜且至少 5 个独立航次
+- 展示最小、平均、最大航程及经验 P70/P85/P90
+- 提供可维护的港口标准名称映射，并支持 JSON 导入、导出

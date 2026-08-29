@@ -31,6 +31,12 @@
                         "desc":  "Compare purchase orders with ODP PO Check for ETA, type, TCL reference, SKU and quantity differences.",
                         "url":  "./modules/po-check/po-check.html",
                         "badge":  "Interactive"
+                    },
+                    {
+                        "name":  "ODP Shipping Analysis",
+                        "desc":  "Analyze route lead times, P70/P85/P90 service levels and maintain port mappings.",
+                        "url":  "./modules/odp/odp-shipping-analysis.html",
+                        "badge":  "Interactive"
                     }
                 ]
 }
