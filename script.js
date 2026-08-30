@@ -38,8 +38,8 @@ const MODULE_I18N = {
   }
   ,
   "./modules/odp/odp-shipping-analysis.html": {
-    zh: { name:"ODP 发运分析", desc:"按订单月、发货月、到货月分析产品，并用历史 P90 评估航线船期。", badge:"物流分析" },
-    en: { name:"ODP Shipping Analysis", desc:"Analyze products by order, departure, and arrival month with historical route P90.", badge:"Logistics" }, icon:"ship", accent:"blue"
+    zh: { name:"ODP 发运分析", desc:"按订单、发货和到货月份分析产品，并评估航线 P90 与运营绩效。", badge:"物流分析" },
+    en: { name:"ODP Shipping Analysis", desc:"Analyze products by order, departure and arrival month, route P90, and operational performance.", badge:"Logistics" }, icon:"ship", accent:"blue"
   }
 };
 

@@ -101,9 +101,9 @@ function parseSkuModelMap(workbook){
 function parseAssumptionRows(workbook){
   const ws=workbook.Sheets["Assumption ATP"];if(!ws)return[];
   const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}),headers=(grid[2]||[]).map(headerName);
-  const pol=headers.indexOf("PORT OF LOADING"),dest=headers.indexOf("PORT DESTINATION"),wh=headers.indexOf("New Ark WH"),customs=headers.indexOf("Customs+Leg3"),comments=headers.indexOf("Comments");
+  const pol=headers.indexOf("PORT OF LOADING"),dest=headers.indexOf("PORT DESTINATION"),wh=headers.indexOf("New Ark WH"),days=headers.indexOf("in Days"),weeks=headers.indexOf("in Weeks"),customs=headers.indexOf("Customs+Leg3"),comments=headers.indexOf("Comments");
   if(pol<0||dest<0)return[];
-  return grid.slice(3).flatMap((row)=>clean(row[pol])&&clean(row[dest])?[{rawPol:row[pol],rawDestination:row[dest],warehouse:wh>=0?clean(row[wh]):null,customs:customs>=0?toNumber(row[customs]):null,comments:comments>=0?clean(row[comments]):null}]:[]);
+  return grid.slice(3).flatMap((row)=>clean(row[pol])&&clean(row[dest])?[{rawPol:row[pol],rawDestination:row[dest],warehouse:wh>=0?clean(row[wh]):null,inDays:days>=0?toNumber(row[days]):null,inWeeks:weeks>=0?toNumber(row[weeks]):null,customs:customs>=0?toNumber(row[customs]):null,comments:comments>=0?clean(row[comments]):null}]:[]);
 }
 
 async function loadSkuModelMap(){
@@ -143,12 +143,14 @@ function buildVoyages(){const start=byId("startDate").value?new Date(`${byId("st
 function routeStats(voyages){const groups=new Map();voyages.forEach((v)=>{const key=`${v.pol}|${v.destination}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(v);});const minC=Math.max(1,Number(byId("minContainers").value)||10),minV=Math.max(1,Number(byId("minVoyages").value)||5);return[...groups.values()].map((g)=>{const leads=g.map((x)=>x.lead),containers=g.reduce((s,x)=>s+x.containers,0);return{pol:g[0].pol,destination:g[0].destination,voyages:g.length,references:g.reduce((s,x)=>s+x.references,0),containers,min:Math.min(...leads),average:leads.reduce((s,x)=>s+x,0)/leads.length,max:Math.max(...leads),p90:nearestRank(leads,.9),first:new Date(Math.min(...g.map((x)=>x.atd))),last:new Date(Math.max(...g.map((x)=>x.atd))),eligible:containers>=minC&&g.length>=minV};}).filter((x)=>x.eligible).sort((a,b)=>b.containers-a.containers);}
 function renderRoutes(){const voyages=buildVoyages(),routes=routeStats(voyages);byId("recordKpi").textContent=fmtNumber(records.length);byId("voyageKpi").textContent=fmtNumber(voyages.length);byId("routeKpi").textContent=fmtNumber(routes.length);byId("zeroKpi").textContent=fmtNumber(quantityZeroCount);renderTable("routeTable",[t("hPol"),t("hDestination"),t("hVoyages"),t("hReferences"),t("hContainers"),t("hMin"),t("hAverage"),t("hMax"),t("hP90"),t("hHistory")],routes.map((x)=>[x.pol,x.destination,x.voyages,x.references,fmtNumber(x.containers,1),x.min,x.average.toFixed(1),x.max,x.p90,`${isoDate(x.first)} ～ ${isoDate(x.last)}`]));if(hasLoadedWorkbook)statusEl.textContent=t("done",{records:fmtNumber(records.length),zero:quantityZeroCount,invalid:invalidQuantityCount,voyages:fmtNumber(voyages.length),mapped:skuModelMatched,main:mainRecordCount});}
 
-function findAssumptionMeta(pol,destination){return assumptionRows.find((x)=>resolvePort(x.rawPol,"POL")===pol&&resolvePort(x.rawDestination,"DEST")===destination)||{};}
 function exportAssumptionATP(){
-  const routes=routeStats(buildVoyages());if(!routes.length)return;
-  const rows=[[],[],["Index","PORT OF LOADING","PORT DESTINATION","New Ark WH","in Days","in Weeks","Customs+Leg3","Comments"]];
-  routes.forEach((route)=>{const meta=findAssumptionMeta(route.pol,route.destination),weeks=Math.ceil(route.p90/7),comment=`P90 ${route.p90} days | ${route.voyages} voyages | ${route.containers.toFixed(1)} containers | ATD ${isoDate(route.first)} to ${isoDate(route.last)}`;rows.push([`${route.pol}${route.destination}`,route.pol,route.destination,meta.warehouse||"",weeks*7,weeks,meta.customs??0,comment]);});
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:28},{wch:18},{wch:24},{wch:24},{wch:12},{wch:12},{wch:16},{wch:70}];ws["!autofilter"]={ref:`A3:H${rows.length}`};
+  const routes=routeStats(buildVoyages()),routeMap=new Map(routes.map((x)=>[`${x.pol}|${x.destination}`,x])),output=new Map();
+  assumptionRows.forEach((meta)=>{const pol=resolvePort(meta.rawPol,"POL"),destination=resolvePort(meta.rawDestination,"DEST"),key=`${pol}|${destination}`;if(!pol||!destination||output.has(key))return;const route=routeMap.get(key),weeks=route?Math.ceil(route.p90/7):(meta.inWeeks||Math.ceil((meta.inDays||0)/7)),days=route?weeks*7:(meta.inDays||weeks*7),comment=route?`P90 ${route.p90} days | ${route.voyages} voyages | ${route.containers.toFixed(1)} containers | ATD ${isoDate(route.first)} to ${isoDate(route.last)}`:`${meta.comments||""}${meta.comments?" | ":""}Insufficient P90 sample; existing assumption retained`;output.set(key,{pol,destination,warehouse:meta.warehouse||"",days,weeks,customs:meta.customs??0,comment});});
+  routes.forEach((route)=>{const key=`${route.pol}|${route.destination}`;if(output.has(key))return;const weeks=Math.ceil(route.p90/7);output.set(key,{pol:route.pol,destination:route.destination,warehouse:"",days:weeks*7,weeks,customs:0,comment:`P90 ${route.p90} days | ${route.voyages} voyages | ${route.containers.toFixed(1)} containers | ATD ${isoDate(route.first)} to ${isoDate(route.last)}`});});
+  if(!output.size)return;
+  const rows=[[],[],[null,null,null,null,"Index","PORT OF LOADING","PORT DESTINATION","New Ark WH","in Days","in Weeks","Customs+Leg3","Comments"]];
+  [...output.values()].sort((a,b)=>a.pol.localeCompare(b.pol)||a.destination.localeCompare(b.destination)).forEach((x)=>rows.push([null,null,null,null,`${x.pol}${x.destination}`,x.pol,x.destination,x.warehouse,x.days,x.weeks,x.customs,x.comment]));
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:3},{wch:3},{wch:3},{wch:3},{wch:28},{wch:18},{wch:24},{wch:24},{wch:12},{wch:12},{wch:16},{wch:70}];ws["!autofilter"]={ref:`E3:L${rows.length}`};
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Assumption ATP P90");XLSX.writeFile(wb,`Assumption_ATP_P90_${isoDate(new Date()).replaceAll("-","")}.xlsx`);statusEl.textContent=t("assumptionDownloaded");
 }
 

@@ -37,7 +37,7 @@
 
 ## Assumption ATP P90 输出
 
-- 仅输出当前日期区间、柜量门槛和航次门槛下达标的航线。
+- 达标航线使用当前日期区间和门槛下计算的 P90；样本不足的原有 Assumption ATP 航线保留现值并在 Comments 标记。
 - `in Weeks = CEILING(P90天数 / 7)`，`in Days = in Weeks * 7`，用于保守的整周预测。
 - `New Ark WH` 与 `Customs+Leg3` 优先沿用源文件 `Assumption ATP` 中相同港口组合的值。
 - 输出列为 Index、PORT OF LOADING、PORT DESTINATION、New Ark WH、in Days、in Weeks、Customs+Leg3、Comments。
