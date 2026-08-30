@@ -124,18 +124,32 @@ function parseWorkbook(workbook,skuModelMap){
   renderAll();
 }
 
-function groupRows(source,keyFn){const map=new Map();source.forEach((r)=>{const parts=keyFn(r);if(!parts)return;const key=JSON.stringify(parts);if(!map.has(key))map.set(key,{parts,quantity:0,mw:0,containers:0,lines:0});const x=map.get(key);x.quantity+=r.quantity;x.mw+=r.mw;x.containers+=r.containers;x.lines++;});return[...map.values()];}
+function groupRows(source,keyFn){const map=new Map();source.forEach((r)=>{const parts=keyFn(r);if(!parts)return;const key=JSON.stringify(parts);if(!map.has(key))map.set(key,{parts,quantity:0,mw:0,containers:0});const x=map.get(key);x.quantity+=r.quantity;x.mw+=r.mw;x.containers+=r.containers;});return[...map.values()];}
+function groupOrderRows(source){
+  const map=new Map();
+  source.forEach((r)=>{
+    const month=orderMonth(r);if(!month)return;
+    const destination=String(resolvePort(r.rawDestination,"DEST")||t("unknown")),sku=String(r.sku||t("unknown")),parts=[month,destination,sku],key=JSON.stringify(parts);
+    if(!map.has(key))map.set(key,{parts,quantity:0,mw:0,containers:0,plannedWeeks:new Set(),actualWeeks:new Set(),hasNoPlan:false});
+    const x=map.get(key),planned=plannedPickupWeek(r),actual=r.atd?isoWeek(r.atd):null;
+    x.quantity+=r.quantity;x.mw+=r.mw;x.containers+=r.containers;
+    if(planned)x.plannedWeeks.add(planned);else if(r.status.toUpperCase()==="PO FIRM")x.hasNoPlan=true;
+    if(actual)x.actualWeeks.add(actual);
+  });
+  return[...map.values()];
+}
+function joinedWeeks(values){return[...values].sort().join(", ");}
 function renderTable(id,headers,rows){const head=`<thead><tr>${headers.map((h)=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`,body=rows.length?rows.map((row)=>`<tr>${row.map((v)=>`<td>${v?.html??escapeHtml(v)}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;byId(id).innerHTML=head+`<tbody>${body}</tbody>`;}
 
 function renderBusinessViews(){
   const allMain=records.filter((r)=>r.source==="PV SUPPLY DATA"),main=allMain.filter((r)=>inMonthRange(orderMonth(r),"orderStartMonth","orderEndMonth"));
-  byId("orderQtyKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.quantity,0));byId("orderMwKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.mw,0),3);byId("orderContainerKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.containers,0),1);byId("orderLineKpi").textContent=fmtNumber(main.length);
-  const orders=groupRows(main,(r)=>{const om=orderMonth(r);if(!om)return null;const arrival=arrivalInfo(r);return[om,String(r.model||t("unknown")),plannedPickupWeek(r),actualPickupWeek(r),r.atd?isoWeek(r.atd):null,arrival.date?isoWeek(arrival.date):null,arrival.type,r.status];}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1]));
-  renderTable("orderTable",[t("hOrderMonth"),t("hModel"),t("hPlannedPickup"),t("hActualPickup"),t("hActualShip"),t("hArrivalWeek"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],orders.map((x)=>{const[p0,p1,p2,p3,p4,p5,p6,status]=x.parts;const noPlan=!p2&&status.toUpperCase()==="PO FIRM";return[p0,p1,p2||t(noPlan?"statusNoPlan":"unknown"),p3||"—",p4||"—",p5||"—",p6==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:p6==="forecast"?{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`}:"—",fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines];}));
-  const departures=groupRows(allMain,(r)=>{const d=departureInfo(r),month=monthKey(d.date);return month&&inMonthRange(month,"departureStartMonth","departureEndMonth")?[month,String(r.model||t("unknown")),d.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[2].localeCompare(b.parts[2])||a.parts[1].localeCompare(b.parts[1]));
-  renderTable("departureTable",[t("hDepartureMonth"),t("hModel"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines]));
-  const arrivals=groupRows(allMain,(r)=>{const a=arrivalInfo(r),month=monthKey(a.date);return month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,String(r.model||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[2].localeCompare(b.parts[2])||a.parts[1].localeCompare(b.parts[1]));
-  renderTable("arrivalTable",[t("hArrivalMonth"),t("hModel"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines]));
+  byId("orderQtyKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.quantity,0));byId("orderMwKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.mw,0),3);byId("orderContainerKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.containers,0),1);
+  const orders=groupOrderRows(main).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2]));
+  renderTable("orderTable",[t("hOrderMonth"),t("hDestination"),t("hSku"),t("hPlannedPickup"),t("hActualShip"),t("hQuantity"),t("hMw"),t("hContainers")],orders.map((x)=>{const planned=joinedWeeks(x.plannedWeeks);return[x.parts[0],x.parts[1],x.parts[2],planned||(x.hasNoPlan?t("statusNoPlan"):""),joinedWeeks(x.actualWeeks),fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)];}));
+  const departures=groupRows(allMain,(r)=>{const d=departureInfo(r),month=monthKey(d.date);return month&&inMonthRange(month,"departureStartMonth","departureEndMonth")?[month,String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),d.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3]));
+  renderTable("departureTable",[t("hDepartureMonth"),t("hDestination"),t("hSku"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
+  const arrivals=groupRows(allMain,(r)=>{const a=arrivalInfo(r),month=monthKey(a.date);return month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3]));
+  renderTable("arrivalTable",[t("hArrivalMonth"),t("hDestination"),t("hSku"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
 }
 
 function nearestRank(values,rate){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.max(0,Math.ceil(rate*sorted.length)-1)];}
