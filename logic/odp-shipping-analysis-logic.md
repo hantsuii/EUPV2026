@@ -29,6 +29,24 @@
 
 - 订单月份：从 `TCL REFERENCE` 解析订单年月，按 Model 展示计划提货周、实际提货周、实际发货周和到达周。
 - 计划提货周：优先读取 `STATUS` 中的 `Wxx`；无法读取时使用 `ETD On S/O - 7天`。
-- 发货日历月：按 `ATD PORT` 所在月份和 Model 汇总。
+- 发货日历月：有 `ATD PORT` 时标记为实际；没有 ATD 时依次使用 `ETD Update`、`ETD On S/O` 并标记为预测。
 - 到货日历月：优先按 `ATA PORT`；没有 ATA 时按 `ETA Update`，再按 `ETA On S/O`，并区分实际与预测。
 - 三个业务视角只使用当前 `PV SUPPLY DATA`，历史工作表只用于航线 P90。
+- 三个月度视角均支持独立的开始月份和结束月份筛选。
+- Model 优先按 `New Ark SKU` 从库存分析 `SKU` 工作表的 `Sku No -> Product Model` 映射；未匹配时保留 ODP Model。
+
+## Assumption ATP P90 输出
+
+- 仅输出当前日期区间、柜量门槛和航次门槛下达标的航线。
+- `in Weeks = CEILING(P90天数 / 7)`，`in Days = in Weeks * 7`，用于保守的整周预测。
+- `New Ark WH` 与 `Customs+Leg3` 优先沿用源文件 `Assumption ATP` 中相同港口组合的值。
+- 输出列为 Index、PORT OF LOADING、PORT DESTINATION、New Ark WH、in Days、in Weeks、Customs+Leg3、Comments。
+
+## 运营绩效
+
+- 按独立航次统计，避免同船多个 TCL Reference 重复计数。
+- 发货准时：`ATD - ETD On S/O <= 0`。
+- 发货延迟不超过7天：`ATD - ETD On S/O <= 7`。
+- 到港延迟不超过7天：`ATA - ETA On S/O <= 7`。
+- 最新 ETA 准确率：`ABS(ATA - ETA Update) <= 7`。
+- 展示实际运输周期的中位数和 P90。

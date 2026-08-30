@@ -1,8 +1,12 @@
 const PORT_MAPPING_KEY = "eupv2026_port_mappings_v1";
 const byId = (id) => document.getElementById(id);
 const fileEl = byId("odpFile");
+const stockFileEl = byId("stockFile");
 const statusEl = byId("status");
 let records = [];
+let assumptionRows = [];
+let skuModelMatched = 0;
+let mainRecordCount = 0;
 let quantityZeroCount = 0;
 let invalidQuantityCount = 0;
 let hasLoadedWorkbook = false;
@@ -53,6 +57,11 @@ function plannedPickupWeek(record){
 }
 function actualPickupWeek(record){if(record.pickupDate)return isoWeek(record.pickupDate);const w=toNumber(record.pickupWeek);if(!w)return null;const order=orderMonth(record);return weekWithBestYear(w,order?Number(order.slice(0,4)):new Date().getFullYear(),record.atd);}
 function arrivalInfo(record){if(record.ata)return{date:record.ata,type:"actual"};if(record.etaUpdate)return{date:record.etaUpdate,type:"forecast"};if(record.etaSO)return{date:record.etaSO,type:"forecast"};return{date:null,type:"missing"};}
+function departureInfo(record){if(record.atd)return{date:record.atd,type:"actual"};if(record.etdUpdate)return{date:record.etdUpdate,type:"forecast"};if(record.etdSO)return{date:record.etdSO,type:"forecast"};return{date:null,type:"missing"};}
+function inMonthRange(value,startId,endId){if(!value)return false;const start=byId(startId).value,end=byId(endId).value;return(!start||value>=start)&&(!end||value<=end);}
+function setMonthRange(startId,endId,values){const months=[...new Set(values.filter(Boolean))].sort();if(!months.length)return;byId(startId).value=months[0];byId(endId).value=months.at(-1);}
+function median(values){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b),mid=Math.floor(sorted.length/2);return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;}
+function percent(count,total){return total?`${(count/total*100).toFixed(1)}%`:"—";}
 
 function saveMappings(){mappings=mappings.map((x)=>({type:x.type==="POL"?"POL":"DEST",raw:normalizeText(x.raw),standard:normalizeText(x.standard),country:String(x.country||"").trim(),note:String(x.note||"").trim()})).filter((x)=>x.raw&&x.standard);localStorage.setItem(PORT_MAPPING_KEY,JSON.stringify(mappings));}
 function mappingIndex(){return new Map(mappings.map((x)=>[`${x.type}|${normalizeText(x.raw)}`,x]));}
@@ -67,15 +76,51 @@ function readSheet(workbook,sheetName,headerRow){
   return grid.slice(headerRow).flatMap((row)=>{
     const ref=clean(row[index[refField]]);if(ref==null)return[];
     let rawPol=index.POL!=null?clean(row[index.POL]):null;if(rawPol==null&&index["PORT OF LOADING"]!=null)rawPol=clean(row[index["PORT OF LOADING"]]);
-    return[{source:sheetName,reference:String(ref).trim(),quantity:toNumber(row[index.QUANTITY]),mw:toNumber(row[index.MW])||0,containers:toNumber(row[index.CONTAINERS])||0,model:index.Model!=null?clean(row[index.Model]):index.DESCRIPTION!=null?clean(row[index.DESCRIPTION]):null,status:index.STATUS!=null?String(clean(row[index.STATUS])||""):"",pickupDate:index["Pick-Up Date"]!=null?toDate(row[index["Pick-Up Date"]]):index["PICK-UP DATE"]!=null?toDate(row[index["PICK-UP DATE"]]):null,pickupWeek:index["Pick-Up Week"]!=null?row[index["Pick-Up Week"]]:null,rawPol,rawDestination:clean(row[index["PORT DESTINATION"]]),etdSO:toDate(row[index["ETD On S/O"]]),etdUpdate:toDate(row[index["ETD Update"]]),atd:toDate(row[index["ATD PORT"]]),etaSO:toDate(row[index["ETA On S/O"]]),etaUpdate:toDate(row[index["ETA Update"]]),ata:toDate(row[index["ATA PORT"]]),vessel:index["REFERENCE V.V"]!=null?clean(row[index["REFERENCE V.V"]]):null,booking:index[bookingField]!=null?clean(row[index[bookingField]]):null}];
+    return[{source:sheetName,reference:String(ref).trim(),quantity:toNumber(row[index.QUANTITY]),mw:toNumber(row[index.MW])||0,containers:toNumber(row[index.CONTAINERS])||0,sku:index["New Ark SKU"]!=null?clean(row[index["New Ark SKU"]]):index["PN"]!=null?clean(row[index.PN]):null,model:index.Model!=null?clean(row[index.Model]):index.DESCRIPTION!=null?clean(row[index.DESCRIPTION]):null,factory:index["Factory Location"]!=null?clean(row[index["Factory Location"]]):null,carrier:index.Carrier!=null?clean(row[index.Carrier]):null,status:index.STATUS!=null?String(clean(row[index.STATUS])||""):"",pickupDate:index["Pick-Up Date"]!=null?toDate(row[index["Pick-Up Date"]]):index["PICK-UP DATE"]!=null?toDate(row[index["PICK-UP DATE"]]):null,pickupWeek:index["Pick-Up Week"]!=null?row[index["Pick-Up Week"]]:null,rawPol,rawDestination:clean(row[index["PORT DESTINATION"]]),etdSO:toDate(row[index["ETD On S/O"]]),etdUpdate:toDate(row[index["ETD Update"]]),atd:toDate(row[index["ATD PORT"]]),etaSO:toDate(row[index["ETA On S/O"]]),etaUpdate:toDate(row[index["ETA Update"]]),ata:toDate(row[index["ATA PORT"]]),vessel:index["REFERENCE V.V"]!=null?clean(row[index["REFERENCE V.V"]]):null,booking:index[bookingField]!=null?clean(row[index[bookingField]]):null}];
   });
 }
 
-function parseWorkbook(workbook){
+function parseSkuModelMap(workbook){
+  const result=new Map(),preferred=["SKU","stock","Legacy Mapping Product"];
+  for(const sheetName of [...preferred,...workbook.SheetNames.filter((x)=>!preferred.includes(x))]){
+    const ws=workbook.Sheets[sheetName];if(!ws)continue;
+    const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+    let headerRow=-1,skuIndex=-1,modelIndex=-1;
+    for(let r=0;r<Math.min(10,grid.length);r++){
+      const headers=(grid[r]||[]).map(headerName),skuNames=["Sku No","SKU","SKU no.","SKU No","New Ark SKU","SKU no."],modelNames=["Product Model","Model","Item Description"];
+      skuIndex=skuNames.map((x)=>headers.indexOf(x)).find((x)=>x>=0)??-1;modelIndex=modelNames.map((x)=>headers.indexOf(x)).find((x)=>x>=0)??-1;
+      if(skuIndex>=0&&modelIndex>=0){headerRow=r;break;}
+    }
+    if(headerRow<0)continue;
+    grid.slice(headerRow+1).forEach((row)=>{const sku=normalizeText(row[skuIndex]),model=clean(row[modelIndex]);if(sku&&model&&!result.has(sku))result.set(sku,String(model).trim());});
+    if(result.size)break;
+  }
+  return result;
+}
+
+function parseAssumptionRows(workbook){
+  const ws=workbook.Sheets["Assumption ATP"];if(!ws)return[];
+  const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}),headers=(grid[2]||[]).map(headerName);
+  const pol=headers.indexOf("PORT OF LOADING"),dest=headers.indexOf("PORT DESTINATION"),wh=headers.indexOf("New Ark WH"),customs=headers.indexOf("Customs+Leg3"),comments=headers.indexOf("Comments");
+  if(pol<0||dest<0)return[];
+  return grid.slice(3).flatMap((row)=>clean(row[pol])&&clean(row[dest])?[{rawPol:row[pol],rawDestination:row[dest],warehouse:wh>=0?clean(row[wh]):null,customs:customs>=0?toNumber(row[customs]):null,comments:comments>=0?clean(row[comments]):null}]:[]);
+}
+
+async function loadSkuModelMap(){
+  let buffer;
+  if(stockFileEl.files[0])buffer=await stockFileEl.files[0].arrayBuffer();
+  else{const response=await fetch("../../templates/stock_template.xlsx",{cache:"no-store"});if(!response.ok)throw new Error(`Stock template HTTP ${response.status}`);buffer=await response.arrayBuffer();}
+  return parseSkuModelMap(XLSX.read(buffer,{type:"array",cellDates:true}));
+}
+
+function parseWorkbook(workbook,skuModelMap){
   const sources=[["PV SUPPLY DATA",1],["H2-2025 PV DATA",1],["H1-2025 PV DATA",3]],unique=new Map();quantityZeroCount=0;invalidQuantityCount=0;
   sources.flatMap(([name,row])=>readSheet(workbook,name,row)).forEach((record)=>{if(record.quantity==null){invalidQuantityCount++;return;}if(record.quantity<=0){quantityZeroCount++;return;}if(!unique.has(record.reference))unique.set(record.reference,record);});
-  records=[...unique.values()];hasLoadedWorkbook=true;ensureDiscoveredMappings();renderMappingTable();
-  const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){byId("startDate").value=isoDate(dates[0]);byId("endDate").value=isoDate(dates.at(-1));}
+  records=[...unique.values()];assumptionRows=parseAssumptionRows(workbook);skuModelMatched=0;
+  records.forEach((record)=>{const mapped=skuModelMap.get(normalizeText(record.sku));if(mapped){record.model=mapped;if(record.source==="PV SUPPLY DATA")skuModelMatched++;}});
+  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;ensureDiscoveredMappings();renderMappingTable();
+  setMonthRange("orderStartMonth","orderEndMonth",main.map(orderMonth));setMonthRange("departureStartMonth","departureEndMonth",main.map((r)=>monthKey(departureInfo(r).date)));setMonthRange("arrivalStartMonth","arrivalEndMonth",main.map((r)=>monthKey(arrivalInfo(r).date)));
+  const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
   renderAll();
 }
 
@@ -83,28 +128,53 @@ function groupRows(source,keyFn){const map=new Map();source.forEach((r)=>{const 
 function renderTable(id,headers,rows){const head=`<thead><tr>${headers.map((h)=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`,body=rows.length?rows.map((row)=>`<tr>${row.map((v)=>`<td>${v?.html??escapeHtml(v)}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;byId(id).innerHTML=head+`<tbody>${body}</tbody>`;}
 
 function renderBusinessViews(){
-  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");
+  const allMain=records.filter((r)=>r.source==="PV SUPPLY DATA"),main=allMain.filter((r)=>inMonthRange(orderMonth(r),"orderStartMonth","orderEndMonth"));
   byId("orderQtyKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.quantity,0));byId("orderMwKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.mw,0),3);byId("orderContainerKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.containers,0),1);byId("orderLineKpi").textContent=fmtNumber(main.length);
   const orders=groupRows(main,(r)=>{const om=orderMonth(r);if(!om)return null;const arrival=arrivalInfo(r);return[om,String(r.model||t("unknown")),plannedPickupWeek(r),actualPickupWeek(r),r.atd?isoWeek(r.atd):null,arrival.date?isoWeek(arrival.date):null,arrival.type,r.status];}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1]));
   renderTable("orderTable",[t("hOrderMonth"),t("hModel"),t("hPlannedPickup"),t("hActualPickup"),t("hActualShip"),t("hArrivalWeek"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],orders.map((x)=>{const[p0,p1,p2,p3,p4,p5,p6,status]=x.parts;const noPlan=!p2&&status.toUpperCase()==="PO FIRM";return[p0,p1,p2||t(noPlan?"statusNoPlan":"unknown"),p3||"—",p4||"—",p5||"—",p6==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:p6==="forecast"?{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`}:"—",fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines];}));
-  const departures=groupRows(main.filter((r)=>r.atd),(r)=>[monthKey(r.atd),String(r.model||t("unknown"))]).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1]));
-  renderTable("departureTable",[t("hDepartureMonth"),t("hModel"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],departures.map((x)=>[...x.parts,fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines]));
-  const arrivals=groupRows(main,(r)=>{const a=arrivalInfo(r);return a.date?[monthKey(a.date),String(r.model||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[2].localeCompare(b.parts[2])||a.parts[1].localeCompare(b.parts[1]));
+  const departures=groupRows(allMain,(r)=>{const d=departureInfo(r),month=monthKey(d.date);return month&&inMonthRange(month,"departureStartMonth","departureEndMonth")?[month,String(r.model||t("unknown")),d.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[2].localeCompare(b.parts[2])||a.parts[1].localeCompare(b.parts[1]));
+  renderTable("departureTable",[t("hDepartureMonth"),t("hModel"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines]));
+  const arrivals=groupRows(allMain,(r)=>{const a=arrivalInfo(r),month=monthKey(a.date);return month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,String(r.model||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[2].localeCompare(b.parts[2])||a.parts[1].localeCompare(b.parts[1]));
   renderTable("arrivalTable",[t("hArrivalMonth"),t("hModel"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers"),t("hLines")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1),x.lines]));
 }
 
 function nearestRank(values,rate){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.max(0,Math.ceil(rate*sorted.length)-1)];}
 function buildVoyages(){const start=byId("startDate").value?new Date(`${byId("startDate").value}T00:00:00`):null,end=byId("endDate").value?new Date(`${byId("endDate").value}T23:59:59`):null,voyages=new Map();records.forEach((r)=>{if(!r.atd||!r.ata||!r.rawPol||!r.rawDestination||start&&r.atd<start||end&&r.atd>end)return;const lead=Math.round((r.ata-r.atd)/86400000);if(lead<=0||lead>180)return;const pol=resolvePort(r.rawPol,"POL"),destination=resolvePort(r.rawDestination,"DEST"),identity=normalizeText(r.vessel)||normalizeText(r.booking)||"NO-ID",key=[pol,destination,isoDate(r.atd),isoDate(r.ata),identity].join("|");if(!voyages.has(key))voyages.set(key,{pol,destination,atd:r.atd,lead,containers:0,references:0});const v=voyages.get(key);v.containers+=r.containers;v.references++;});return[...voyages.values()];}
 function routeStats(voyages){const groups=new Map();voyages.forEach((v)=>{const key=`${v.pol}|${v.destination}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(v);});const minC=Math.max(1,Number(byId("minContainers").value)||10),minV=Math.max(1,Number(byId("minVoyages").value)||5);return[...groups.values()].map((g)=>{const leads=g.map((x)=>x.lead),containers=g.reduce((s,x)=>s+x.containers,0);return{pol:g[0].pol,destination:g[0].destination,voyages:g.length,references:g.reduce((s,x)=>s+x.references,0),containers,min:Math.min(...leads),average:leads.reduce((s,x)=>s+x,0)/leads.length,max:Math.max(...leads),p90:nearestRank(leads,.9),first:new Date(Math.min(...g.map((x)=>x.atd))),last:new Date(Math.max(...g.map((x)=>x.atd))),eligible:containers>=minC&&g.length>=minV};}).filter((x)=>x.eligible).sort((a,b)=>b.containers-a.containers);}
-function renderRoutes(){const voyages=buildVoyages(),routes=routeStats(voyages);byId("recordKpi").textContent=fmtNumber(records.length);byId("voyageKpi").textContent=fmtNumber(voyages.length);byId("routeKpi").textContent=fmtNumber(routes.length);byId("zeroKpi").textContent=fmtNumber(quantityZeroCount);renderTable("routeTable",[t("hPol"),t("hDestination"),t("hVoyages"),t("hReferences"),t("hContainers"),t("hMin"),t("hAverage"),t("hMax"),t("hP90"),t("hHistory")],routes.map((x)=>[x.pol,x.destination,x.voyages,x.references,fmtNumber(x.containers,1),x.min,x.average.toFixed(1),x.max,x.p90,`${isoDate(x.first)} ～ ${isoDate(x.last)}`]));if(hasLoadedWorkbook)statusEl.textContent=t("done",{records:fmtNumber(records.length),zero:quantityZeroCount,invalid:invalidQuantityCount,voyages:fmtNumber(voyages.length)});}
+function renderRoutes(){const voyages=buildVoyages(),routes=routeStats(voyages);byId("recordKpi").textContent=fmtNumber(records.length);byId("voyageKpi").textContent=fmtNumber(voyages.length);byId("routeKpi").textContent=fmtNumber(routes.length);byId("zeroKpi").textContent=fmtNumber(quantityZeroCount);renderTable("routeTable",[t("hPol"),t("hDestination"),t("hVoyages"),t("hReferences"),t("hContainers"),t("hMin"),t("hAverage"),t("hMax"),t("hP90"),t("hHistory")],routes.map((x)=>[x.pol,x.destination,x.voyages,x.references,fmtNumber(x.containers,1),x.min,x.average.toFixed(1),x.max,x.p90,`${isoDate(x.first)} ～ ${isoDate(x.last)}`]));if(hasLoadedWorkbook)statusEl.textContent=t("done",{records:fmtNumber(records.length),zero:quantityZeroCount,invalid:invalidQuantityCount,voyages:fmtNumber(voyages.length),mapped:skuModelMatched,main:mainRecordCount});}
+
+function findAssumptionMeta(pol,destination){return assumptionRows.find((x)=>resolvePort(x.rawPol,"POL")===pol&&resolvePort(x.rawDestination,"DEST")===destination)||{};}
+function exportAssumptionATP(){
+  const routes=routeStats(buildVoyages());if(!routes.length)return;
+  const rows=[[],[],["Index","PORT OF LOADING","PORT DESTINATION","New Ark WH","in Days","in Weeks","Customs+Leg3","Comments"]];
+  routes.forEach((route)=>{const meta=findAssumptionMeta(route.pol,route.destination),weeks=Math.ceil(route.p90/7),comment=`P90 ${route.p90} days | ${route.voyages} voyages | ${route.containers.toFixed(1)} containers | ATD ${isoDate(route.first)} to ${isoDate(route.last)}`;rows.push([`${route.pol}${route.destination}`,route.pol,route.destination,meta.warehouse||"",weeks*7,weeks,meta.customs??0,comment]);});
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:28},{wch:18},{wch:24},{wch:24},{wch:12},{wch:12},{wch:16},{wch:70}];ws["!autofilter"]={ref:`A3:H${rows.length}`};
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Assumption ATP P90");XLSX.writeFile(wb,`Assumption_ATP_P90_${isoDate(new Date()).replaceAll("-","")}.xlsx`);statusEl.textContent=t("assumptionDownloaded");
+}
+
+function buildPerformanceVoyages(){
+  const start=byId("performanceStartDate").value?new Date(`${byId("performanceStartDate").value}T00:00:00`):null,end=byId("performanceEndDate").value?new Date(`${byId("performanceEndDate").value}T23:59:59`):null,map=new Map();
+  records.forEach((r)=>{if(!r.atd||!r.rawPol||!r.rawDestination||start&&r.atd<start||end&&r.atd>end)return;const pol=resolvePort(r.rawPol,"POL"),destination=resolvePort(r.rawDestination,"DEST"),identity=normalizeText(r.vessel)||normalizeText(r.booking)||"NO-ID",key=[pol,destination,isoDate(r.atd),isoDate(r.ata),identity].join("|");if(!map.has(key))map.set(key,{pol,destination,containers:0,ship:[],arrival:[],eta:[],transit:[]});const v=map.get(key);v.containers+=r.containers;if(r.etdSO)v.ship.push(Math.round((r.atd-r.etdSO)/86400000));if(r.ata&&r.etaSO)v.arrival.push(Math.round((r.ata-r.etaSO)/86400000));if(r.ata&&r.etaUpdate)v.eta.push(Math.round((r.ata-r.etaUpdate)/86400000));if(r.ata)v.transit.push(Math.round((r.ata-r.atd)/86400000));});
+  return[...map.values()].map((v)=>({...v,shipDelay:median(v.ship),arrivalDelay:median(v.arrival),etaError:median(v.eta),transitDays:median(v.transit)}));
+}
+function renderPerformance(){
+  const voyages=buildPerformanceVoyages(),ship=voyages.map((x)=>x.shipDelay).filter((x)=>x!=null),arrival=voyages.map((x)=>x.arrivalDelay).filter((x)=>x!=null),eta=voyages.map((x)=>x.etaError).filter((x)=>x!=null),transit=voyages.map((x)=>x.transitDays).filter((x)=>x!=null);
+  byId("shipOnTimeKpi").textContent=percent(ship.filter((x)=>x<=0).length,ship.length);byId("shipWithin7Kpi").textContent=percent(ship.filter((x)=>x<=7).length,ship.length);byId("arrivalWithin7Kpi").textContent=percent(arrival.filter((x)=>x<=7).length,arrival.length);byId("etaAccuracyKpi").textContent=percent(eta.filter((x)=>Math.abs(x)<=7).length,eta.length);byId("medianTransitKpi").textContent=transit.length?`${median(transit).toFixed(1)} ${t("days")}`:"—";byId("p90TransitKpi").textContent=transit.length?`${nearestRank(transit,.9)} ${t("days")}`:"—";
+  const groups=new Map();voyages.forEach((v)=>{const key=`${v.pol}|${v.destination}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(v);});
+  const rows=[...groups.values()].map((g)=>{const s=g.map((x)=>x.shipDelay).filter((x)=>x!=null),a=g.map((x)=>x.arrivalDelay).filter((x)=>x!=null),e=g.map((x)=>x.etaError).filter((x)=>x!=null),tr=g.map((x)=>x.transitDays).filter((x)=>x!=null);return{pol:g[0].pol,destination:g[0].destination,voyages:g.length,containers:g.reduce((sum,x)=>sum+x.containers,0),shipOn:percent(s.filter((x)=>x<=0).length,s.length),ship7:percent(s.filter((x)=>x<=7).length,s.length),arrival7:percent(a.filter((x)=>x<=7).length,a.length),eta7:percent(e.filter((x)=>Math.abs(x)<=7).length,e.length),median:tr.length?median(tr).toFixed(1):"—",p90:tr.length?nearestRank(tr,.9):"—"};}).sort((a,b)=>b.containers-a.containers);
+  renderTable("performanceTable",[t("hPol"),t("hDestination"),t("hVoyages"),t("hContainers"),t("hShipOnTime"),t("hShipWithin7"),t("hArrivalWithin7"),t("hEtaAccuracy"),t("hMedianTransit"),t("hP90")],rows.map((x)=>[x.pol,x.destination,x.voyages,fmtNumber(x.containers,1),x.shipOn,x.ship7,x.arrival7,x.eta7,x.median,x.p90]));
+}
 
 function mappingUsage(){const counts=new Map();records.forEach((r)=>[["POL",r.rawPol],["DEST",r.rawDestination]].forEach(([type,raw])=>{const key=`${type}|${normalizeText(raw)}`;counts.set(key,(counts.get(key)||0)+1);}));return counts;}
 function renderMappingTable(){const counts=mappingUsage(),sorted=[...mappings].sort((a,b)=>a.type.localeCompare(b.type)||a.raw.localeCompare(b.raw)),head=`<thead><tr>${[t("hType"),t("hRaw"),t("hStandard"),t("hCountry"),t("hNote"),t("hCurrentRows"),t("hAction")].map((x)=>`<th>${escapeHtml(x)}</th>`).join("")}</tr></thead>`,body=sorted.map((item)=>{const i=mappings.indexOf(item),count=counts.get(`${item.type}|${normalizeText(item.raw)}`)||0;return`<tr data-index="${i}"${item.note?.includes("AUTO-DISCOVERED")?' class="warning"':""}><td><select data-field="type"><option value="POL"${item.type==="POL"?" selected":""}>POL</option><option value="DEST"${item.type==="DEST"?" selected":""}>${escapeHtml(t("destination"))}</option></select></td><td><input data-field="raw" value="${escapeHtml(item.raw)}"></td><td><input data-field="standard" value="${escapeHtml(item.standard)}"></td><td><input data-field="country" value="${escapeHtml(item.country)}"></td><td><input data-field="note" value="${escapeHtml(item.note)}"></td><td><span class="pill">${count}</span></td><td><button class="danger delete-mapping" type="button">${escapeHtml(t("delete"))}</button></td></tr>`;}).join("");byId("mappingTable").innerHTML=head+`<tbody>${body}</tbody>`;}
 function collectMappingEdits(){byId("mappingTable").querySelectorAll("tbody tr").forEach((row)=>{const i=Number(row.dataset.index);if(!mappings[i])return;row.querySelectorAll("[data-field]").forEach((input)=>{mappings[i][input.dataset.field]=input.value;});});}
-function renderAll(){renderBusinessViews();renderRoutes();renderMappingTable();}
+function renderAll(){renderBusinessViews();renderRoutes();renderPerformance();renderMappingTable();}
 
-byId("runBtn").addEventListener("click",async()=>{if(!fileEl.files[0]){statusEl.textContent=t("selectFile");return;}try{statusEl.textContent=t("reading");const data=await fileEl.files[0].arrayBuffer(),workbook=XLSX.read(data,{type:"array",cellDates:true});parseWorkbook(workbook);}catch(error){statusEl.textContent=t("readFailed",{error:error.message||error});}});
+byId("runBtn").addEventListener("click",async()=>{if(!fileEl.files[0]){statusEl.textContent=t("selectFile");return;}try{statusEl.textContent=t("reading");const data=await fileEl.files[0].arrayBuffer(),workbook=XLSX.read(data,{type:"array",cellDates:true});let skuModelMap=new Map();try{skuModelMap=await loadSkuModelMap();}catch(_){skuModelMap=new Map();}parseWorkbook(workbook,skuModelMap);}catch(error){statusEl.textContent=t("readFailed",{error:error.message||error});}});
 byId("applyBtn").addEventListener("click",renderRoutes);
+byId("performanceApplyBtn").addEventListener("click",renderPerformance);
+byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
+document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",renderBusinessViews));
 byId("saveMappingBtn").addEventListener("click",()=>{collectMappingEdits();saveMappings();renderAll();});
 byId("addMappingBtn").addEventListener("click",()=>{collectMappingEdits();mappings.push({type:"DEST",raw:"",standard:"",country:"",note:""});renderMappingTable();});
 byId("resetMappingBtn").addEventListener("click",()=>{if(!confirm(t("resetConfirm")))return;mappings=copyDefaults();saveMappings();ensureDiscoveredMappings();renderAll();});
