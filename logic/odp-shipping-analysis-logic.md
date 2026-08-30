@@ -14,7 +14,7 @@
 - Lead Time：`ATA PORT - ATD PORT`，单位为日历天。
 - 同一航次按 `POL + 目的港 + ATD + ATA + 船名/航次` 合并；船名缺失时使用 Booking。
 - 航线需同时满足累计至少 10 柜、至少 5 个独立航次才展示统计值。
-- P70/P85/P90 使用独立航次 Lead Time 的经验最近秩百分位。
+- P90 使用独立航次 Lead Time 的经验最近秩百分位。
 - 用户选择的历史区间按 ATD 日期过滤。
 
 ## 港口映射
@@ -25,3 +25,10 @@
 - 用户维护结果保存在当前浏览器，并可通过 JSON 导出、导入。
 - 仓库默认映射维护在 `modules/odp/port-mapping.js`。
 
+## 三个业务时间视角
+
+- 订单月份：从 `TCL REFERENCE` 解析订单年月，按 Model 展示计划提货周、实际提货周、实际发货周和到达周。
+- 计划提货周：优先读取 `STATUS` 中的 `Wxx`；无法读取时使用 `ETD On S/O - 7天`。
+- 发货日历月：按 `ATD PORT` 所在月份和 Model 汇总。
+- 到货日历月：优先按 `ATA PORT`；没有 ATA 时按 `ETA Update`，再按 `ETA On S/O`，并区分实际与预测。
+- 三个业务视角只使用当前 `PV SUPPLY DATA`，历史工作表只用于航线 P90。

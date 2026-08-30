@@ -24,11 +24,11 @@ window.DEFAULT_PORT_MAPPINGS = [
   { type: "DEST", raw: "LIMASSOL", standard: "LIMASSOL", country: "Cyprus", note: "" },
   { type: "DEST", raw: "MANILA NORTH", standard: "MANILA NORTH", country: "Philippines", note: "" },
   { type: "DEST", raw: "NAPLES", standard: "NAPLES", country: "Italy", note: "" },
-  { type: "DEST", raw: "PIRAEUS-THESSALONIKI", standard: "THESSALONIKI", country: "Greece", note: "复合目的港取后段" },
+  { type: "DEST", raw: "PIRAEUS-THESSALONIKI", standard: "THESSALONIKI", country: "Greece", note: "取后段 / Use final port" },
   { type: "DEST", raw: "POINTE DES GALETS", standard: "POINTE DES GALETS", country: "France (Réunion)", note: "" },
   { type: "DEST", raw: "RIJEKA", standard: "RIJEKA", country: "Croatia", note: "" },
   { type: "DEST", raw: "ROTTERDAM", standard: "ROTTERDAM", country: "Netherlands", note: "" },
-  { type: "DEST", raw: "ROTTERDAM-CORK", standard: "CORK", country: "Ireland", note: "按业务确认取后段 CORK" },
+  { type: "DEST", raw: "ROTTERDAM-CORK", standard: "CORK", country: "Ireland", note: "取后段 CORK / Use final port" },
   { type: "DEST", raw: "THESSALONIKI", standard: "THESSALONIKI", country: "Greece", note: "" },
   { type: "DEST", raw: "VALENCIA", standard: "VALENCIA", country: "Spain", note: "" },
 ];
