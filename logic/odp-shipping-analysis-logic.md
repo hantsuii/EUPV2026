@@ -27,8 +27,9 @@
 
 ## 三个业务时间视角
 
-- 订单月份：从 `TCL REFERENCE` 解析订单年月，按 `订单月 + Model + 标准目的港 + SKU` 汇总 MW 和 Containers，并在订单月内优先按 Model 名排序；订单表不展示 Quantity。
-- 订单月的计划提货周与实际开船周采用两行展示：第一行按顺序列周数，第二行列该周汇总的 Containers；尚未开船时实际开船周留空。
+- 订单月份：从 `TCL REFERENCE` 解析订单年月，按 `订单月 + Model + 标准起始港 + 标准目的港 + SKU` 汇总 MW 和 Containers；按订单月份、起始港、目的港、Model、SKU 排序，订单表不展示 Quantity。
+- 订单月的列顺序为订单月份、Model、起始港、目的港、SKU、计划提货周、实际开船周、MW、Containers。
+- 计划提货周与实际开船周采用两行展示：第一行按顺序列周数，第二行列该周汇总的 Containers；同一组内 `PO FIRM` 的无发运计划柜量追加在计划周之后，不另起数据行；尚未开船时实际开船周留空。
 - 计划提货周：优先读取 `STATUS` 中的 `Wxx`；无法读取时使用 `ETD On S/O - 7天`。
 - 发货日历月：按 `月份 + 标准目的港 + SKU + 实际/预测` 汇总；有 `ATD PORT` 时标记为实际，没有 ATD 时依次使用 `ETD Update`、`ETD On S/O` 并标记为预测。
 - 到货日历月：按 `月份 + 标准目的港 + SKU + 实际/预测` 汇总；优先按 `ATA PORT`，没有 ATA 时按 `ETA Update`，再按 `ETA On S/O`，并区分实际与预测。
