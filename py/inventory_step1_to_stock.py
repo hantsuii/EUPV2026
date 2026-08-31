@@ -300,6 +300,7 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict
         "sku no",
         "product model",
         "category",
+        "brand",
         "level2",
         "level3",
         "billable watts(w)",
@@ -318,6 +319,7 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict
             continue
         lookup[sku_key] = {
             "Category": normalize_text(row[idx["category"]]),
+            "Brand": normalize_text(row[idx["brand"]]),
             "Product TCL Report": normalize_text(row[idx["level2"]]),
             "Family": normalize_text(row[idx["level3"]]),
             "Model": normalize_text(row[idx["product model"]]),
@@ -538,6 +540,7 @@ def write_output_sheet(
     base_headers = [
         "WH",
         "Category",
+        "Brand",
         "Product TCL Report",
         "Family",
         "SKU",
@@ -564,6 +567,7 @@ def write_output_sheet(
             return mapped, False
         return {
             "Category": UNMATCHED_SKU_MARK,
+            "Brand": UNMATCHED_SKU_MARK,
             "Product TCL Report": UNMATCHED_SKU_MARK,
             "Family": UNMATCHED_SKU_MARK,
             "Model": UNMATCHED_SKU_MARK,
@@ -582,6 +586,7 @@ def write_output_sheet(
             [
                 wh,
                 mapped.get("Category"),
+                mapped.get("Brand"),
                 mapped.get("Product TCL Report"),
                 mapped.get("Family"),
                 sku,

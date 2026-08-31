@@ -230,6 +230,7 @@ function buildSkuLookup(workbook, sheetName) {
     "sku no",
     "product model",
     "category",
+    "brand",
     "level2",
     "level3",
     "billable watts(w)",
@@ -245,6 +246,7 @@ function buildSkuLookup(workbook, sheetName) {
     if (!key || lookup.has(key)) continue;
     lookup.set(key, {
       Category: normalizeText(row[index.category]),
+      Brand: normalizeText(row[index.brand]),
       "Product TCL Report": normalizeText(row[index.level2]),
       Family: normalizeText(row[index.level3]),
       Model: normalizeText(row[index["product model"]]),
@@ -393,6 +395,7 @@ function extractAllocatedOrders(workbook) {
 function makeUnmatchedMapping() {
   return {
     Category: UNMATCHED_SKU_MARK,
+    Brand: UNMATCHED_SKU_MARK,
     "Product TCL Report": UNMATCHED_SKU_MARK,
     Family: UNMATCHED_SKU_MARK,
     Model: UNMATCHED_SKU_MARK,
@@ -407,6 +410,7 @@ function createStockRecord(wh, sku, mapped, stock = 0) {
     WH: wh,
     SKU: sku,
     Category: mapped.Category,
+    Brand: mapped.Brand,
     ProductTCLReport: mapped["Product TCL Report"],
     Family: mapped.Family,
     Model: mapped.Model,
@@ -453,7 +457,7 @@ function columnName(number) {
 
 function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, keyMeta) {
   const marker = UNMATCHED_SKU_MARK.toLowerCase();
-  if ([record.Category, record.ProductTCLReport, record.Family, record.Model].some((value) => normalizeLower(value) === marker)) return null;
+  if ([record.Category, record.Brand, record.ProductTCLReport, record.Family, record.Model].some((value) => normalizeLower(value) === marker)) return null;
   const productKey = `${record.SKU}||${record.Model || ""}`;
   const parts = [record.Model, record.SKU, record.Connector].map(normalizeText).filter(Boolean);
   const productLabel = parts.join(" | ") || record.SKU;
@@ -471,6 +475,7 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
   const item = {
     WH: record.WH,
     Category: record.Category,
+    Brand: record.Brand,
     ProductTCLReport: record.ProductTCLReport,
     Family: record.Family,
     SKU: record.SKU,
@@ -493,6 +498,7 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
   keyMeta[`${record.SKU}||${record.WH}`] = {
     WH: item.WH,
     Category: item.Category,
+    Brand: item.Brand,
     ProductTCLReport: item.ProductTCLReport,
     Family: item.Family,
     Connector: item.Connector,
@@ -528,7 +534,7 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet("stock");
   const baseHeaders = [
-    "WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
+    "WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
     "To be allocated", "Total QTY", "Total MW", "MW", "Stock",
   ];
   const dateHeaders = dateKeys.map(dateKeyToHeader);
@@ -567,7 +573,7 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
     record.MW = mw == null ? null : Number(mw.toFixed(3));
 
     const row = ws.addRow([
-      record.WH, record.Category, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
+      record.WH, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
       record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock,
       ...dateKeys.map((dateKey) => (record.Transit[dateKey] ? record.Transit[dateKey] : null)),
     ]);

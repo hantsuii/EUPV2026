@@ -24,11 +24,12 @@ Inventory 和 Daily Supply Plan 必须提供；ODP 和 Orderfile Base 可选。�
 
 SKU 主键为 `Sku No`，匹配前执行 trim 和 upper；同一 SKU 重复时保留第一条。
 
-必须存在：`Sku No`、`Product Model`、`Category`、`Level2`、`Level3`、`Billable Watts(W)`、`Connector`、`Total PCS per 40HQ Container`。
+必须存在：`Sku No`、`Product Model`、`Category`、`Brand`、`Level2`、`Level3`、`Billable Watts(W)`、`Connector`、`Total PCS per 40HQ Container`。
 
 | 输出字段 | SKU sheet 来源 |
 | --- | --- |
 | Category | Category |
+| Brand | Brand |
 | Product TCL Report | Level2 |
 | Family | Level3 |
 | Model | Product Model |
@@ -97,7 +98,7 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 每次运行删除并重建 `stock`、`To be allocated`、`_Transit Source Map`。stock 基础列顺序为：
 
-`WH | Category | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock`
+`WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock`
 
 后面追加起止日期内每日列，表头为 `YYYY.M.D`。
 
@@ -116,13 +117,14 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 可视化对象要求存在 `WH`、`Category`、`Product TCL Report`、`Family`、`SKU`、`Model`、`Connector`、`Stock`、`To be allocated`。格式为三段数字的列识别为日期列。
 
-每行包含 WH、Category、Product TCL Report、Family、SKU、Model、Connector、Bin、Stock、StockMW、StatusQuantity、To be allocated、日期在途数量和日期来源。PV 的 `StockMW = Stock × Bin / 1,000,000`，ESS、HP 的 StockMW 为 0。`StatusQuantity` 仅服务总库存统计，分别保留 Inventory、Daily Supply Plan、ODP 数量。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
+每行包含 WH、Category、Brand、Product TCL Report、Family、SKU、Model、Connector、Bin、Stock、StockMW、StatusQuantity、To be allocated、日期在途数量和日期来源。PV 的 `StockMW = Stock × Bin / 1,000,000`，ESS、HP 的 StockMW 为 0。`StatusQuantity` 仅服务总库存统计，分别保留 Inventory、Daily Supply Plan、ODP 数量。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
 
 筛选级联顺序为：`WH → Category → Product TCL Report → Family → Product`。下级选项只从上级当前选择范围重建。
 
 ## 7. 图表和明细表
 
 - 总库存概览按当前维度筛选结果统计 Inventory 在库、Daily Supply Plan 在途、ODP 国内未发货三种状态。PV 将三种状态的 Quantity 分别乘以 Bin 后换算为 MW；ESS、HP 保持 Quantity。顶部总数为三种状态之和，三个环形图分别展示各状态的数值和占比。DSP 与 ODP 使用生成库存文件时选择的日期范围；待分配不进入总库存概览。
+- 总库存概览提供 Brand 和 Family（系列）多选筛选，仅列出 PV/ESS 且三种状态合计不为零的数据。筛选结果为零的品类会同时隐藏顶部指标和状态图，剩余卡片自动重排。
 - `_Transit Source Map` 除来源标签外，分别保存 `Daily Supply Plan Qty` 和 `ODP Qty`，确保同一 SKU/WH/日期同时存在两个来源时仍可准确拆分状态。
 - 现货曲线从 Stock 开始，每个日期累加当日及之前的在途数量。
 - Daily 直接按日；Weekly 按 ISO 周；Monthly 按月份。

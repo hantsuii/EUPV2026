@@ -44,6 +44,11 @@ const pvStatusChartEl = document.getElementById("pvStatusChart");
 const essStatusChartEl = document.getElementById("essStatusChart");
 const hpStatusChartEl = document.getElementById("hpStatusChart");
 const inventoryStatusTableEl = document.getElementById("inventoryStatusTable");
+const inventoryBrandFilterEl = document.getElementById("inventoryBrandFilter");
+const inventorySeriesFilterEl = document.getElementById("inventorySeriesFilter");
+const inventoryBrandSummaryEl = document.getElementById("inventoryBrandSummary");
+const inventorySeriesSummaryEl = document.getElementById("inventorySeriesSummary");
+const clearInventoryOverviewFiltersEl = document.getElementById("clearInventoryOverviewFilters");
 
 let pyodide = null;
 let pyReady = false;
@@ -413,6 +418,7 @@ function initializeCascadeFilters() {
 
   // Explicitly keep all filters unselected at initial load
   clearAllFilterSelections();
+  clearOverviewFilterSelections();
   refreshFilterSummaries();
 
   const validDates = vizState.dateHeaders.map(parseDateLabel).filter(Boolean);
@@ -584,6 +590,43 @@ function inventoryCategoryGroup(value) {
   return "";
 }
 
+function rowOverviewQuantity(row) {
+  return ["Inventory", "DailySupplyPlan", "ODP"]
+    .reduce((sum, status) => sum + Number(row.StatusQuantity?.[status] || 0), 0);
+}
+
+function buildOverviewFilterOptions(rows, key) {
+  return Array.from(new Set(rows.map((row) => String(row[key] || "").trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: value }));
+}
+
+function refreshOverviewFilterOptions(baseRows) {
+  const eligibleRows = baseRows.filter((row) => ["PV", "ESS"].includes(inventoryCategoryGroup(row.Category)) && rowOverviewQuantity(row) !== 0);
+  const currentBrands = selectedSet(inventoryBrandFilterEl);
+  setSelectOptions(inventoryBrandFilterEl, buildOverviewFilterOptions(eligibleRows, "Brand"), currentBrands, false);
+
+  const selectedBrands = selectedSet(inventoryBrandFilterEl);
+  const seriesRows = selectedBrands.size
+    ? eligibleRows.filter((row) => selectedBrands.has(String(row.Brand || "")))
+    : eligibleRows;
+  const currentSeries = selectedSet(inventorySeriesFilterEl);
+  setSelectOptions(inventorySeriesFilterEl, buildOverviewFilterOptions(seriesRows, "Family"), currentSeries, false);
+
+  applySelectVisualState(inventoryBrandFilterEl);
+  applySelectVisualState(inventorySeriesFilterEl);
+  updateSelectionSummary(inventoryBrandFilterEl, inventoryBrandSummaryEl);
+  updateSelectionSummary(inventorySeriesFilterEl, inventorySeriesSummaryEl);
+}
+
+function matchOverviewFilters(row) {
+  const brands = selectedSet(inventoryBrandFilterEl);
+  const series = selectedSet(inventorySeriesFilterEl);
+  if (brands.size && !brands.has(String(row.Brand || ""))) return false;
+  if (series.size && !series.has(String(row.Family || ""))) return false;
+  return true;
+}
+
 function renderStatusChart(chartInstance, values, unit, useMw) {
   const statusDefs = [
     { key: "Inventory", name: t("statusInventory"), color: "#2f6fed" },
@@ -628,13 +671,15 @@ function renderStatusChart(chartInstance, values, unit, useMw) {
 
 function renderInventoryOverview(filteredRows) {
   ensureInventoryOverviewCharts();
+  refreshOverviewFilterOptions(filteredRows);
+  const overviewRows = filteredRows.filter(matchOverviewFilters);
   const totals = {
     PV: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
     ESS: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
     HP: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
   };
 
-  for (const row of filteredRows) {
+  for (const row of overviewRows) {
     const group = inventoryCategoryGroup(row.Category);
     if (!group) continue;
     const factor = group === "PV" ? Number(row.Bin || 0) / 1000000 : 1;
@@ -645,6 +690,12 @@ function renderInventoryOverview(filteredRows) {
   }
 
   const categoryTotal = (group) => Object.values(totals[group]).reduce((sum, value) => sum + Number(value || 0), 0);
+  for (const group of ["PV", "ESS", "HP"]) {
+    const visible = Math.abs(categoryTotal(group)) > 0.0000001;
+    document.querySelectorAll(`[data-inventory-group="${group}"]`).forEach((element) => {
+      element.style.display = visible ? "" : "none";
+    });
+  }
   pvInventoryTotalEl.innerHTML = `${fmtMw(categoryTotal("PV"))} <span class="unit">MW</span>`;
   essInventoryTotalEl.innerHTML = `${fmtNumber(categoryTotal("ESS"))} <span class="unit">${escapeHtml(t("quantityUnit"))}</span>`;
   hpInventoryTotalEl.innerHTML = `${fmtNumber(categoryTotal("HP"))} <span class="unit">${escapeHtml(t("quantityUnit"))}</span>`;
@@ -1266,7 +1317,7 @@ if '_Transit Source Map' in wb.sheetnames:
                 if "ODP Qty" in src_idx:
                     status_qty_map[status_key]["ODP"] += _num(src_row[src_idx["ODP Qty"]])
 
-required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Stock", "To be allocated"]
+required = ["WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Stock", "To be allocated"]
 for col in required:
     if col not in header_to_idx:
         raise ValueError(f"Missing expected column in stock sheet: {col}")
@@ -1309,13 +1360,14 @@ for row in stock_rows:
         continue
 
     category = _text(row[header_to_idx['Category']])
+    brand = _text(row[header_to_idx['Brand']])
     product_report = _text(row[header_to_idx['Product TCL Report']])
     family = _text(row[header_to_idx['Family']])
     model = _text(row[header_to_idx['Model']])
     connector = _text(row[header_to_idx['Connector']])
 
     marker = "sku not matched"
-    if any(v.lower() == marker for v in (category, product_report, family, model)):
+    if any(v.lower() == marker for v in (category, brand, product_report, family, model)):
         continue
 
     transit = {}
@@ -1340,6 +1392,7 @@ for row in stock_rows:
     item = {
         "WH": wh,
         "Category": category,
+        "Brand": brand,
         "ProductTCLReport": product_report,
         "Family": family,
         "SKU": sku,
@@ -1363,6 +1416,7 @@ for row in stock_rows:
     key_meta[f"{sku}||{wh}"] = {
         "WH": item["WH"],
         "Category": item["Category"],
+        "Brand": item["Brand"],
         "ProductTCLReport": item["ProductTCLReport"],
         "Family": item["Family"],
         "Connector": item["Connector"],
@@ -1600,6 +1654,15 @@ function clearAllFilterSelections() {
   refreshFilterSummaries();
 }
 
+function clearOverviewFilterSelections() {
+  for (const selectEl of [inventoryBrandFilterEl, inventorySeriesFilterEl]) {
+    for (const option of selectEl.options) option.selected = false;
+    applySelectVisualState(selectEl);
+  }
+  updateSelectionSummary(inventoryBrandFilterEl, inventoryBrandSummaryEl);
+  updateSelectionSummary(inventorySeriesFilterEl, inventorySeriesSummaryEl);
+}
+
 function resetForm() {
   inventoryInput.value = "";
   dailySupplyInput.value = "";
@@ -1621,6 +1684,9 @@ function resetForm() {
   vizState.dateHeaders = [];
   vizState.keyMeta = new Map();
   vizState.dateSourceTags = {};
+  inventoryBrandFilterEl.innerHTML = "";
+  inventorySeriesFilterEl.innerHTML = "";
+  clearOverviewFilterSelections();
   if (chart) {
     chart.clear();
   }
@@ -1639,6 +1705,27 @@ for (let i = 0; i < levelDefs.length; i += 1) {
     }
   });
 }
+
+for (const selectEl of [inventoryBrandFilterEl, inventorySeriesFilterEl]) {
+  enableClickToggleMultiSelect(selectEl);
+  selectEl.addEventListener("change", () => {
+    if (vizPanelEl.style.display === "none") return;
+    try {
+      renderChartAndTable();
+    } catch (err) {
+      setStatus("visualizationFailed", { message: err?.message || err });
+    }
+  });
+}
+
+clearInventoryOverviewFiltersEl.addEventListener("click", () => {
+  try {
+    clearOverviewFilterSelections();
+    renderChartAndTable();
+  } catch (err) {
+    setStatus("visualizationFailed", { message: err?.message || err });
+  }
+});
 
 applyVizBtn.addEventListener("click", () => {
   try {
