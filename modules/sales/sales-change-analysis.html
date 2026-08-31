@@ -402,8 +402,14 @@
           <div class="filter-grid compact product-hierarchy-grid">
             <div><label for="productCategorySel" data-i18n="category">类别</label><select id="productCategorySel" multiple size="4"></select></div>
             <div><label for="productBrandSel" data-i18n="brand">品牌</label><select id="productBrandSel" multiple size="4"></select></div>
-            <div><label for="productLevel1Sel" data-i18n="level1">一级分类</label><select id="productLevel1Sel" multiple size="4"></select></div>
-            <div><label for="productLevel2Sel" data-i18n="level2">二级分类</label><select id="productLevel2Sel" multiple size="4"></select></div>
+            <div>
+              <label for="productLevelSel" data-i18n="analysisLevel">分析层级</label>
+              <select id="productLevelSel">
+                <option value="level1" data-i18n="level1">一级分类</option>
+                <option value="level2" data-i18n="level2" selected>二级分类</option>
+              </select>
+            </div>
+            <div><label for="productLevelValuesSel" data-i18n="analysisProducts">分析分类</label><select id="productLevelValuesSel" multiple size="4"></select></div>
           </div>
           <div class="filter-section-title" data-i18n="productControlTitle">分析条件</div>
           <div class="filter-grid product-control-grid">

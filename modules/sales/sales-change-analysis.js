@@ -10,7 +10,8 @@ const essAspFilters = { region: byId("essAspRegionSel"), brand: byId("essAspBran
 const detailPvAspFilters = { region: byId("detailPvAspRegionSel"), brand: byId("detailPvAspBrandSel"), level1: byId("detailPvAspLevel1Sel"), level2: byId("detailPvAspLevel2Sel") };
 const detailEssAspFilters = { region: byId("detailEssAspRegionSel"), brand: byId("detailEssAspBrandSel"), level1: byId("detailEssAspLevel1Sel"), level2: byId("detailEssAspLevel2Sel") };
 const regionDetailModal = byId("regionDetailModal"), regionDetailClose = byId("regionDetailClose"), regionDetailTitle = byId("regionDetailTitle");
-const productHierarchyFilters = { category: byId("productCategorySel"), brand: byId("productBrandSel"), level1: byId("productLevel1Sel"), level2: byId("productLevel2Sel") };
+const productHierarchyFilters = { category: byId("productCategorySel"), brand: byId("productBrandSel") };
+const productLevelSel = byId("productLevelSel"), productLevelValuesSel = byId("productLevelValuesSel");
 const productMetricSel = byId("productMetricSel"), productIncomeSel = byId("productIncomeSel");
 const productRegionSel = byId("productRegionSel"), productStartMonthSel = byId("productStartMonthSel"), productEndMonthSel = byId("productEndMonthSel");
 let currentLang = ["zh", "en"].includes(localStorage.getItem(APP_LANG_KEY)) ? localStorage.getItem(APP_LANG_KEY) : "zh";
@@ -31,7 +32,7 @@ function mapRegionForStats(region) {
 const I18N = {
   zh: {
     pageTitle: "销售分析看板（PV / ESS）", pageSubtitle: "展示销售、目标达成、ASP 与产品结构趋势。", backHome: "← 返回主页",
-    sourceLabel: "Sales 工作簿来源", sourceUpload: "上传本地文件", sourceRepo: "使用仓库文件", uploadLabel: "上传 Sales 工作簿 (.xlsx)", repoPathLabel: "仓库文件路径", repoPathTip: "例如：../../templates/sales_workbook.xlsx", runBtn: "运行分析", statusInit: "请选择文件来源并点击运行。", category: "类别", brand: "品牌", level1: "一级分类", level2: "二级分类", close: "关闭",
+    sourceLabel: "Sales 工作簿来源", sourceUpload: "上传本地文件", sourceRepo: "使用仓库文件", uploadLabel: "上传 Sales 工作簿 (.xlsx)", repoPathLabel: "仓库文件路径", repoPathTip: "例如：../../templates/sales_workbook.xlsx", runBtn: "运行分析", statusInit: "请选择文件来源并点击运行。", category: "类别", brand: "品牌", level1: "一级分类", level2: "二级分类", analysisLevel: "分析层级", analysisProducts: "分析分类", close: "关闭",
     tabTotal: "总计 Dashboard", tabRegion: "各地区看板", tabProduct: "产品销售分析", overviewTitle: "2026年总览", row1Title: "全年核心指标", futureTitle: "未来销售指标（2027+）", row2Title: "H1 销售数据", row3Title: "未结束季度进度",
     filterIncome: "收入类型", filterYear: "年份", filterQuarter: "季度", filterMonth: "月份", filterRegion: "地区", incomeTotal: "总计", incomeInvoiced: "开票收入", incomeConfirm: "待确认收入", all: "全部",
     statusReadRepo: "读取仓库文件：{path}", statusReadUpload: "读取上传文件：{name}", statusNoPath: "请输入仓库文件路径。", statusNoFile: "请先上传销售工作簿文件。", statusNoRows: "Order details 中没有可用的 Month / Quartely 数据。", statusDone: "完成：销售 {allRows} 行，Target {targetRows} 行。", statusFail: "失败：{msg}", statusNoRegion: "当前筛选下无地区数据。", ordersMissing: "工作簿中未找到“Order details”工作表。", targetMissing: "工作簿中未找到“Target”工作表。", repoMissing: "未找到仓库文件：{path}（HTTP {status}）",
@@ -39,11 +40,11 @@ const I18N = {
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
-    productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets，避免不同单位相加；图表和排名默认按 Level2 展示。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
+    productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
   },
   en: {
     pageTitle: "Sales Analytics Dashboard (PV / ESS)", pageSubtitle: "Sales, target achievement, ASP and product-mix trends.", backHome: "← Back to Home",
-    sourceLabel: "Sales Workbook Source", sourceUpload: "Upload local file", sourceRepo: "Use repository file", uploadLabel: "Upload Sales Workbook (.xlsx)", repoPathLabel: "Repository file path", repoPathTip: "Example: ../../templates/sales_workbook.xlsx", runBtn: "Run Analysis", statusInit: "Choose a source and click Run Analysis.", category: "Category", brand: "Brand", level1: "Level 1", level2: "Level 2", close: "Close",
+    sourceLabel: "Sales Workbook Source", sourceUpload: "Upload local file", sourceRepo: "Use repository file", uploadLabel: "Upload Sales Workbook (.xlsx)", repoPathLabel: "Repository file path", repoPathTip: "Example: ../../templates/sales_workbook.xlsx", runBtn: "Run Analysis", statusInit: "Choose a source and click Run Analysis.", category: "Category", brand: "Brand", level1: "Level 1", level2: "Level 2", analysisLevel: "Analysis Level", analysisProducts: "Categories", close: "Close",
     tabTotal: "Total Dashboard", tabRegion: "Regional Dashboard", tabProduct: "Product Analysis", overviewTitle: "2026 Overview", row1Title: "Full-Year Core Metrics", futureTitle: "Future Sales Metrics (2027+)", row2Title: "H1 Sales Metrics", row3Title: "Open Quarter Progress",
     filterIncome: "Income Type", filterYear: "Year", filterQuarter: "Quarter", filterMonth: "Month", filterRegion: "Region", incomeTotal: "Total", incomeInvoiced: "Invoiced", incomeConfirm: "Pending Confirmation", all: "All",
     statusReadRepo: "Loading repository file: {path}", statusReadUpload: "Reading uploaded file: {name}", statusNoPath: "Please enter the repository file path.", statusNoFile: "Please upload the sales workbook first.", statusNoRows: "No usable Month / Quartely data in Order details.", statusDone: "Done: {allRows} sales rows, {targetRows} target rows.", statusFail: "Failed: {msg}", statusNoRegion: "No regional data under current filters.", ordersMissing: "Sheet 'Order details' was not found in the workbook.", targetMissing: "Sheet 'Target' was not found in the workbook.", repoMissing: "Repository file not found: {path} (HTTP {status})",
@@ -51,7 +52,7 @@ const I18N = {
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Pending Confirmation (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
-    productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; charts and ranking are shown by Level2.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
+    productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
   },
 };
 
@@ -137,15 +138,13 @@ function refreshProductCascade(reset = false) {
   let scope = filterMulti(allRows, selected(productHierarchyFilters.category), (r) => r.category);
   fillSelect(productHierarchyFilters.brand, [allOption, ...optionsForRows(scope, "brand")], reset ? ["__ALL__"] : selected(productHierarchyFilters.brand));
   scope = filterMulti(scope, selected(productHierarchyFilters.brand), (r) => r.brand);
-  fillSelect(productHierarchyFilters.level1, [allOption, ...optionsForRows(scope, "level1")], reset ? ["__ALL__"] : selected(productHierarchyFilters.level1));
-  scope = filterMulti(scope, selected(productHierarchyFilters.level1), (r) => r.level1);
-  fillSelect(productHierarchyFilters.level2, [allOption, ...optionsForRows(scope, "level2")], reset ? ["__ALL__"] : selected(productHierarchyFilters.level2));
+  const dimension = productLevelSel.value || "level1";
+  fillSelect(productLevelValuesSel, [allOption, ...optionsForRows(scope, dimension)], reset ? ["__ALL__"] : selected(productLevelValuesSel));
 }
 function applyProductHierarchyFilters(rows) {
   let result = filterMulti(rows, selected(productHierarchyFilters.category), (r) => r.category);
   result = filterMulti(result, selected(productHierarchyFilters.brand), (r) => r.brand);
-  result = filterMulti(result, selected(productHierarchyFilters.level1), (r) => r.level1);
-  return filterMulti(result, selected(productHierarchyFilters.level2), (r) => r.level2);
+  return filterMulti(result, selected(productLevelValuesSel), (r) => r[productLevelSel.value || "level1"]);
 }
 function initFilters() {
   const allOption = { value: "__ALL__", label: t("all") }, years = [...new Set(allRows.map((r) => r.year))].sort((a, b) => a - b), months = [...new Set(allRows.map((r) => r.month))].sort(), regions = [...new Set(allRows.map((r) => r.region))].sort();
@@ -237,7 +236,7 @@ function productValue(row, metric) { return metric === "pvQty" ? row.pvQty : met
 function formatProductValue(value, metric) { return metric === "revenue" ? fmtWanInt(value) : metric === "pvQty" ? fmtOne(value) : fmtInt(value); }
 function renderProduct() {
   if (!allRows.length) return;
-  const metric = productMetricSel.value, dimension = "level2";
+  const metric = productMetricSel.value, dimension = productLevelSel.value || "level1";
   let start = productStartMonthSel.value, end = productEndMonthSel.value;
   if (start > end) [start, end] = [end, start];
   let rows = filterIncome([...allRows], productIncomeSel.value).filter((r) => r.month >= start && r.month <= end); if (productRegionSel.value !== "__ALL__") rows = rows.filter((r) => r.region === productRegionSel.value); rows = applyProductHierarchyFilters(rows); if (metric === "pvQty") rows = rows.filter((r) => r.isPV); if (metric === "essQty") rows = rows.filter((r) => r.isESS);
@@ -293,8 +292,10 @@ Object.values(essAspFilters).forEach((el) => el.addEventListener("change", () =>
 Object.values(detailPvAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailPvAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isPV)); renderRegionDetails(false); }));
 Object.values(detailEssAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailEssAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isESS)); renderRegionDetails(false); }));
 [productMetricSel, productIncomeSel, productRegionSel, productStartMonthSel, productEndMonthSel].forEach((el) => el.addEventListener("change", renderProduct));
+productLevelSel.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); });
+productLevelValuesSel.addEventListener("change", renderProduct);
 Object.values(productHierarchyFilters).forEach((el) => el.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); }));
-[incomeTypeSel, yearSel, quarterSel, monthSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters), ...Object.values(productHierarchyFilters)].forEach(bindMultiSelectToggle);
+[incomeTypeSel, yearSel, quarterSel, monthSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters), ...Object.values(productHierarchyFilters), productLevelValuesSel].forEach(bindMultiSelectToggle);
 byId("regionGrid").addEventListener("click", (event) => { const button = event.target.closest("button[data-region]"); if (button) openRegionDetails(button.dataset.region); });
 regionDetailClose.addEventListener("click", closeRegionDetails);
 regionDetailModal.addEventListener("click", (event) => { if (event.target === regionDetailModal) closeRegionDetails(); });
