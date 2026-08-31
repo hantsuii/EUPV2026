@@ -116,12 +116,13 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 可视化对象要求存在 `WH`、`Category`、`Product TCL Report`、`Family`、`SKU`、`Model`、`Connector`、`Stock`、`To be allocated`。格式为三段数字的列识别为日期列。
 
-每行包含 WH、Category、Product TCL Report、Family、SKU、Model、Connector、Stock、To be allocated、日期在途数量和日期来源。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
+每行包含 WH、Category、Product TCL Report、Family、SKU、Model、Connector、Bin、Stock、StockMW、To be allocated、日期在途数量和日期来源。`StockMW = Stock × Bin / 1,000,000`。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
 
 筛选级联顺序为：`WH → Category → Product TCL Report → Family → Product`。下级选项只从上级当前选择范围重建。
 
 ## 7. 图表和明细表
 
+- 总库存概览按当前维度筛选结果统计现货，不受可视化日期范围影响；不包含在途和待分配。总库存为各行 `StockMW` 之和，按类型使用 `Product TCL Report` 聚合，并展示柱状图和占比环形图。类型超过 10 个时，其余类型合并为“其他”。
 - 现货曲线从 Stock 开始，每个日期累加当日及之前的在途数量。
 - Daily 直接按日；Weekly 按 ISO 周；Monthly 按月份。
 - `total` 展示全部选中产品；`split` 按 Product 分线，最多显示结束值最高的 12 条；`warehouse` 按 WH 分线。

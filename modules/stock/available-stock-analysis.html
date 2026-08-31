@@ -173,6 +173,67 @@
     }
     .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
 
+    .inventory-overview {
+      margin: 16px 0 18px;
+      padding: 16px;
+      border: 1px solid #c8dcf6;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+    }
+    .overview-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .overview-heading h3 { margin: 0; color: #173d6c; }
+    .overview-heading .small-tip { margin: 0; text-align: right; }
+    .overview-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .overview-kpi {
+      min-height: 92px;
+      padding: 14px 16px;
+      border: 1px solid #d2e2f7;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 6px 16px rgba(52, 97, 161, 0.07);
+    }
+    .overview-kpi-label { color: #5a769e; font-size: 13px; }
+    .overview-kpi-value {
+      margin-top: 8px;
+      color: #173f74;
+      font-size: 28px;
+      font-weight: 750;
+      letter-spacing: -0.4px;
+    }
+    .overview-kpi-value .unit { margin-left: 4px; color: #5477a5; font-size: 14px; font-weight: 650; }
+    .overview-charts {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+    .overview-chart-card {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid #d2e2f7;
+      border-radius: 12px;
+      background: #ffffff;
+    }
+    .overview-chart-title {
+      margin: 0 0 4px;
+      padding-left: 9px;
+      border-left: 3px solid #3f8bff;
+      color: #274c78;
+      font-size: 15px;
+    }
+    #inventoryTypeBarChart,
+    #inventoryTypeDonutChart { width: 100%; height: 320px; }
+
     .source-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
     .source-chip {
       display: inline-flex;
@@ -288,11 +349,15 @@
     @media (max-width: 1100px) {
       .filters-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
       .product-col, .controls-col { grid-column: span 2; }
+      .overview-charts { grid-template-columns: 1fr; }
     }
     @media (max-width: 700px) {
       .filters-grid { grid-template-columns: 1fr; }
       .product-col, .controls-col { grid-column: span 1; }
       .engine-row { grid-template-columns: 1fr; }
+      .overview-heading { display: block; }
+      .overview-heading .small-tip { margin-top: 5px; text-align: left; }
+      .overview-kpis { grid-template-columns: 1fr; }
       #stockChart { height: 380px; }
     }
   </style>
@@ -380,6 +445,37 @@
         <span class="source-chip"><span class="source-dot dot-odp"></span> <span data-i18n="sourceOdp">ODP 文件</span></span>
         <span class="source-chip"><span class="source-dot dot-mixed"></span> <span data-i18n="sourceMixed">混合（两个来源）</span></span>
       </div>
+
+      <section class="inventory-overview" aria-labelledby="inventoryOverviewTitle">
+        <div class="overview-heading">
+          <h3 id="inventoryOverviewTitle" data-i18n="inventoryOverview">总库存概览</h3>
+          <p class="small-tip" data-i18n="inventoryOverviewTip">统计当前现货库存，并随维度筛选联动；不包含在途和待分配。</p>
+        </div>
+        <div class="overview-kpis">
+          <div class="overview-kpi">
+            <div class="overview-kpi-label" data-i18n="totalInventoryMw">总库存</div>
+            <div id="totalInventoryMw" class="overview-kpi-value">0.000 <span class="unit">MW</span></div>
+          </div>
+          <div class="overview-kpi">
+            <div class="overview-kpi-label" data-i18n="matchedInventoryRows">匹配行数</div>
+            <div id="matchedInventoryRows" class="overview-kpi-value">0 <span class="unit" data-i18n="rowsUnit">行</span></div>
+          </div>
+          <div class="overview-kpi">
+            <div class="overview-kpi-label" data-i18n="inventoryTypeCount">库存类型</div>
+            <div id="inventoryTypeCount" class="overview-kpi-value">0 <span class="unit" data-i18n="typesUnit">类</span></div>
+          </div>
+        </div>
+        <div class="overview-charts">
+          <div class="overview-chart-card">
+            <h4 class="overview-chart-title" data-i18n="inventoryByType">按类型</h4>
+            <div id="inventoryTypeBarChart"></div>
+          </div>
+          <div class="overview-chart-card">
+            <h4 class="overview-chart-title" data-i18n="inventoryTypeShare">类型占比</h4>
+            <div id="inventoryTypeDonutChart"></div>
+          </div>
+        </div>
+      </section>
 
       <div class="filters-grid">
         <div>

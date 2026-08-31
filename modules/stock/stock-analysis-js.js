@@ -473,6 +473,8 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
     Connector: record.Connector,
     ProductKey: productKey,
     ProductKeyLabel: productLabel,
+    Bin: safeFloat(record.Bin),
+    StockMW: (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000,
     Stock: safeFloat(record.Stock),
     ToBeAllocated: safeFloat(record.ToBeAllocated),
     Transit: transit,

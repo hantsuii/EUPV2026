@@ -37,10 +37,17 @@ const applyVizBtn = document.getElementById("applyVizBtn");
 const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 const detailTableEl = document.getElementById("detailTable");
 const tableSummaryEl = document.getElementById("tableSummary");
+const totalInventoryMwEl = document.getElementById("totalInventoryMw");
+const matchedInventoryRowsEl = document.getElementById("matchedInventoryRows");
+const inventoryTypeCountEl = document.getElementById("inventoryTypeCount");
+const inventoryTypeBarChartEl = document.getElementById("inventoryTypeBarChart");
+const inventoryTypeDonutChartEl = document.getElementById("inventoryTypeDonutChart");
 
 let pyodide = null;
 let pyReady = false;
 let chart = null;
+let inventoryTypeBarChart = null;
+let inventoryTypeDonutChart = null;
 let lastStatus = { key: "waiting", params: {} };
 
 function t(key, params = {}) {
@@ -107,6 +114,11 @@ function selectedSet(selectEl) {
 function fmtNumber(value) {
   const num = Number(value || 0);
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(num);
+}
+
+function fmtMw(value) {
+  const num = Number(value || 0);
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(num);
 }
 
 function normalizeDateLabel(dateObj) {
@@ -540,8 +552,119 @@ function mapAllocationToBuckets(monthMap, granularity, bucketLabels, bucketValue
 function ensureChart() {
   if (!chart) {
     chart = echarts.init(document.getElementById("stockChart"), null, { renderer: "canvas" });
-    window.addEventListener("resize", () => chart && chart.resize());
+    window.addEventListener("resize", () => {
+      chart && chart.resize();
+      inventoryTypeBarChart && inventoryTypeBarChart.resize();
+      inventoryTypeDonutChart && inventoryTypeDonutChart.resize();
+    });
   }
+}
+
+function ensureInventoryOverviewCharts() {
+  if (!inventoryTypeBarChart && inventoryTypeBarChartEl) {
+    inventoryTypeBarChart = echarts.init(inventoryTypeBarChartEl, null, { renderer: "canvas" });
+  }
+  if (!inventoryTypeDonutChart && inventoryTypeDonutChartEl) {
+    inventoryTypeDonutChart = echarts.init(inventoryTypeDonutChartEl, null, { renderer: "canvas" });
+  }
+}
+
+function collapseInventoryTypes(entries, maxTypes = 10) {
+  if (entries.length <= maxTypes) return entries;
+  const shown = entries.slice(0, maxTypes);
+  const remainder = entries.slice(maxTypes).reduce((sum, item) => sum + item.value, 0);
+  if (Math.abs(remainder) > 0.0000001) shown.push({ name: t("otherTypes"), value: remainder });
+  return shown;
+}
+
+function renderInventoryOverview(filteredRows) {
+  ensureInventoryOverviewCharts();
+
+  const inventoryRows = filteredRows.filter((row) => Number(row.Stock || 0) !== 0 && Number(row.Bin || 0) > 0);
+  const totalMw = inventoryRows.reduce((sum, row) => sum + Number(row.StockMW || 0), 0);
+  const byType = new Map();
+
+  for (const row of inventoryRows) {
+    const name = String(row.ProductTCLReport || "").trim() || t("otherTypes");
+    byType.set(name, (byType.get(name) || 0) + Number(row.StockMW || 0));
+  }
+
+  const allEntries = Array.from(byType, ([name, value]) => ({ name, value }))
+    .filter((item) => Math.abs(item.value) > 0.0000001)
+    .sort((a, b) => b.value - a.value);
+  const entries = collapseInventoryTypes(allEntries);
+
+  totalInventoryMwEl.innerHTML = `${fmtMw(totalMw)} <span class="unit">MW</span>`;
+  matchedInventoryRowsEl.innerHTML = `${fmtNumber(inventoryRows.length)} <span class="unit">${escapeHtml(t("rowsUnit"))}</span>`;
+  inventoryTypeCountEl.innerHTML = `${fmtNumber(allEntries.length)} <span class="unit">${escapeHtml(t("typesUnit"))}</span>`;
+
+  const palette = ["#2f6fed", "#0f9d75", "#e57a00", "#7a38e8", "#19a6b4", "#e04f72", "#7e9b24", "#5d72c9", "#a5673f", "#7f8da8", "#b9c6d8"];
+
+  if (!entries.length) {
+    const emptyOption = {
+      animation: false,
+      title: { text: t("noInventoryData"), left: "center", top: "middle", textStyle: { color: "#6b83a5", fontSize: 14, fontWeight: 500 } },
+      xAxis: { show: false },
+      yAxis: { show: false },
+      series: [],
+    };
+    inventoryTypeBarChart?.setOption(emptyOption, true);
+    inventoryTypeDonutChart?.setOption({
+      animation: false,
+      title: emptyOption.title,
+      series: [],
+    }, true);
+    return;
+  }
+
+  inventoryTypeBarChart?.setOption({
+    animation: false,
+    color: [palette[0]],
+    grid: { left: 58, right: 18, top: 24, bottom: 68 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (value) => `${fmtMw(value)} MW` },
+    xAxis: {
+      type: "category",
+      data: entries.map((item) => item.name),
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: "#aac0dc" } },
+      axisLabel: { color: "#516f96", interval: 0, rotate: entries.length > 6 ? 28 : 0, fontSize: 11 },
+    },
+    yAxis: {
+      type: "value",
+      name: "MW",
+      nameTextStyle: { color: "#6b83a5" },
+      axisLabel: { color: "#6b83a5" },
+      splitLine: { lineStyle: { color: "#e6eef8" } },
+    },
+    series: [{
+      type: "bar",
+      data: entries.map((item) => Number(item.value.toFixed(6))),
+      barMaxWidth: 42,
+      label: { show: true, position: "top", color: "#516f96", formatter: ({ value }) => fmtMw(value) },
+      itemStyle: { color: palette[0], borderRadius: [6, 6, 0, 0] },
+    }],
+  }, true);
+
+  const donutEntries = entries.filter((item) => item.value > 0);
+  inventoryTypeDonutChart?.setOption({
+    animation: false,
+    color: palette,
+    tooltip: { trigger: "item", formatter: ({ name, value, percent }) => `${escapeHtml(name)}<br>${fmtMw(value)} MW (${percent}%)` },
+    legend: { type: "scroll", bottom: 0, left: "center", textStyle: { color: "#516f96", fontSize: 11 } },
+    series: [{
+      type: "pie",
+      radius: ["43%", "67%"],
+      center: ["50%", "44%"],
+      avoidLabelOverlap: true,
+      itemStyle: { borderColor: "#ffffff", borderWidth: 3, borderRadius: 5 },
+      label: { color: "#435f86", formatter: "{b}\n{d}%", fontSize: 11 },
+      labelLine: { length: 10, length2: 8, lineStyle: { color: "#b7c8dc" } },
+      data: donutEntries.map((item) => ({ name: item.name, value: Number(item.value.toFixed(6)) })),
+    }],
+  }, true);
+
+  inventoryTypeBarChart?.resize();
+  inventoryTypeDonutChart?.resize();
 }
 
 function dayLabelShort(dayLabel) {
@@ -640,6 +763,7 @@ function renderChartAndTable() {
 
   const matchedRows = vizState.rows.filter((row) => matchByFilters(row, filters));
   ensureChart();
+  renderInventoryOverview(matchedRows);
 
   if (!matchedRows.length) {
     chart.clear();
@@ -1197,6 +1321,8 @@ for row in stock_rows:
         "Connector": connector,
         "ProductKey": product_key,
         "ProductKeyLabel": product_label,
+        "Bin": _num(row[header_to_idx['Bin']]) if 'Bin' in header_to_idx else 0,
+        "StockMW": (_num(row[header_to_idx['Stock']]) * _num(row[header_to_idx['Bin']]) / 1000000) if 'Bin' in header_to_idx else 0,
         "Stock": _num(row[header_to_idx['Stock']]),
         "ToBeAllocated": _num(row[header_to_idx['To be allocated']]),
         "Transit": transit,
