@@ -106,8 +106,8 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 - `To be allocated` = 同 SKU/WH 的 Ordered Qty 汇总。
 - `Transit Total` = 所有日期列在途数量之和。
 - `Total QTY = Stock + Transit Total`。
-- `MW = Stock × Bin / 1,000,000`。
-- `Total MW = Total QTY × Bin / 1,000,000`。
+- 仅 PV 产品计算 `MW = Stock × Bin / 1,000,000` 和 `Total MW = Total QTY × Bin / 1,000,000`。
+- ESS、HP 产品的 `MW`、`Total MW` 留空，只保留 Quantity。
 - To be allocated 不从 Total QTY 或 Total MW 中扣除。
 
 现货列使用 Inventory/Daily Supply 的蓝色标记；日期列按 INV_DSP、ODP、MIXED 使用来源颜色。
@@ -116,13 +116,14 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 可视化对象要求存在 `WH`、`Category`、`Product TCL Report`、`Family`、`SKU`、`Model`、`Connector`、`Stock`、`To be allocated`。格式为三段数字的列识别为日期列。
 
-每行包含 WH、Category、Product TCL Report、Family、SKU、Model、Connector、Bin、Stock、StockMW、To be allocated、日期在途数量和日期来源。`StockMW = Stock × Bin / 1,000,000`。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
+每行包含 WH、Category、Product TCL Report、Family、SKU、Model、Connector、Bin、Stock、StockMW、StatusQuantity、To be allocated、日期在途数量和日期来源。PV 的 `StockMW = Stock × Bin / 1,000,000`，ESS、HP 的 StockMW 为 0。`StatusQuantity` 仅服务总库存统计，分别保留 Inventory、Daily Supply Plan、ODP 数量。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
 
 筛选级联顺序为：`WH → Category → Product TCL Report → Family → Product`。下级选项只从上级当前选择范围重建。
 
 ## 7. 图表和明细表
 
-- 总库存概览按当前维度筛选结果统计现货，不受可视化日期范围影响；不包含在途和待分配。总库存为各行 `StockMW` 之和，按类型使用 `Product TCL Report` 聚合，并展示柱状图和占比环形图。类型超过 10 个时，其余类型合并为“其他”。
+- 总库存概览按当前维度筛选结果统计 Inventory 在库、Daily Supply Plan 在途、ODP 国内未发货三种状态。PV 将三种状态的 Quantity 分别乘以 Bin 后换算为 MW；ESS、HP 保持 Quantity。顶部总数为三种状态之和，三个环形图分别展示各状态的数值和占比。DSP 与 ODP 使用生成库存文件时选择的日期范围；待分配不进入总库存概览。
+- `_Transit Source Map` 除来源标签外，分别保存 `Daily Supply Plan Qty` 和 `ODP Qty`，确保同一 SKU/WH/日期同时存在两个来源时仍可准确拆分状态。
 - 现货曲线从 Stock 开始，每个日期累加当日及之前的在途数量。
 - Daily 直接按日；Weekly 按 ISO 周；Monthly 按月份。
 - `total` 展示全部选中产品；`split` 按 Product 分线，最多显示结束值最高的 12 条；`warehouse` 按 WH 分线。

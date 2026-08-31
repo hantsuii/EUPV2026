@@ -37,17 +37,20 @@ const applyVizBtn = document.getElementById("applyVizBtn");
 const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 const detailTableEl = document.getElementById("detailTable");
 const tableSummaryEl = document.getElementById("tableSummary");
-const totalInventoryMwEl = document.getElementById("totalInventoryMw");
-const matchedInventoryRowsEl = document.getElementById("matchedInventoryRows");
-const inventoryTypeCountEl = document.getElementById("inventoryTypeCount");
-const inventoryTypeBarChartEl = document.getElementById("inventoryTypeBarChart");
-const inventoryTypeDonutChartEl = document.getElementById("inventoryTypeDonutChart");
+const pvInventoryTotalEl = document.getElementById("pvInventoryTotal");
+const essInventoryTotalEl = document.getElementById("essInventoryTotal");
+const hpInventoryTotalEl = document.getElementById("hpInventoryTotal");
+const pvStatusChartEl = document.getElementById("pvStatusChart");
+const essStatusChartEl = document.getElementById("essStatusChart");
+const hpStatusChartEl = document.getElementById("hpStatusChart");
+const inventoryStatusTableEl = document.getElementById("inventoryStatusTable");
 
 let pyodide = null;
 let pyReady = false;
 let chart = null;
-let inventoryTypeBarChart = null;
-let inventoryTypeDonutChart = null;
+let pvStatusChart = null;
+let essStatusChart = null;
+let hpStatusChart = null;
 let lastStatus = { key: "waiting", params: {} };
 
 function t(key, params = {}) {
@@ -554,117 +557,126 @@ function ensureChart() {
     chart = echarts.init(document.getElementById("stockChart"), null, { renderer: "canvas" });
     window.addEventListener("resize", () => {
       chart && chart.resize();
-      inventoryTypeBarChart && inventoryTypeBarChart.resize();
-      inventoryTypeDonutChart && inventoryTypeDonutChart.resize();
+      pvStatusChart && pvStatusChart.resize();
+      essStatusChart && essStatusChart.resize();
+      hpStatusChart && hpStatusChart.resize();
     });
   }
 }
 
 function ensureInventoryOverviewCharts() {
-  if (!inventoryTypeBarChart && inventoryTypeBarChartEl) {
-    inventoryTypeBarChart = echarts.init(inventoryTypeBarChartEl, null, { renderer: "canvas" });
+  if (!pvStatusChart && pvStatusChartEl) {
+    pvStatusChart = echarts.init(pvStatusChartEl, null, { renderer: "canvas" });
   }
-  if (!inventoryTypeDonutChart && inventoryTypeDonutChartEl) {
-    inventoryTypeDonutChart = echarts.init(inventoryTypeDonutChartEl, null, { renderer: "canvas" });
+  if (!essStatusChart && essStatusChartEl) {
+    essStatusChart = echarts.init(essStatusChartEl, null, { renderer: "canvas" });
+  }
+  if (!hpStatusChart && hpStatusChartEl) {
+    hpStatusChart = echarts.init(hpStatusChartEl, null, { renderer: "canvas" });
   }
 }
 
-function collapseInventoryTypes(entries, maxTypes = 10) {
-  if (entries.length <= maxTypes) return entries;
-  const shown = entries.slice(0, maxTypes);
-  const remainder = entries.slice(maxTypes).reduce((sum, item) => sum + item.value, 0);
-  if (Math.abs(remainder) > 0.0000001) shown.push({ name: t("otherTypes"), value: remainder });
-  return shown;
+function inventoryCategoryGroup(value) {
+  const text = String(value || "").trim().toUpperCase();
+  if (text.startsWith("PV")) return "PV";
+  if (text.startsWith("ESS")) return "ESS";
+  if (text.startsWith("HP")) return "HP";
+  return "";
 }
 
-function renderInventoryOverview(filteredRows) {
-  ensureInventoryOverviewCharts();
+function renderStatusChart(chartInstance, values, unit, useMw) {
+  const statusDefs = [
+    { key: "Inventory", name: t("statusInventory"), color: "#2f6fed" },
+    { key: "DailySupplyPlan", name: t("statusDailySupply"), color: "#0f9d75" },
+    { key: "ODP", name: t("statusOdp"), color: "#e57a00" },
+  ];
+  const data = statusDefs
+    .map((item) => ({ name: item.name, value: Number(values[item.key] || 0), itemStyle: { color: item.color } }))
+    .filter((item) => item.value > 0);
 
-  const inventoryRows = filteredRows.filter((row) => Number(row.Stock || 0) !== 0 && Number(row.Bin || 0) > 0);
-  const totalMw = inventoryRows.reduce((sum, row) => sum + Number(row.StockMW || 0), 0);
-  const byType = new Map();
-
-  for (const row of inventoryRows) {
-    const name = String(row.ProductTCLReport || "").trim() || t("otherTypes");
-    byType.set(name, (byType.get(name) || 0) + Number(row.StockMW || 0));
-  }
-
-  const allEntries = Array.from(byType, ([name, value]) => ({ name, value }))
-    .filter((item) => Math.abs(item.value) > 0.0000001)
-    .sort((a, b) => b.value - a.value);
-  const entries = collapseInventoryTypes(allEntries);
-
-  totalInventoryMwEl.innerHTML = `${fmtMw(totalMw)} <span class="unit">MW</span>`;
-  matchedInventoryRowsEl.innerHTML = `${fmtNumber(inventoryRows.length)} <span class="unit">${escapeHtml(t("rowsUnit"))}</span>`;
-  inventoryTypeCountEl.innerHTML = `${fmtNumber(allEntries.length)} <span class="unit">${escapeHtml(t("typesUnit"))}</span>`;
-
-  const palette = ["#2f6fed", "#0f9d75", "#e57a00", "#7a38e8", "#19a6b4", "#e04f72", "#7e9b24", "#5d72c9", "#a5673f", "#7f8da8", "#b9c6d8"];
-
-  if (!entries.length) {
-    const emptyOption = {
+  if (!data.length) {
+    chartInstance?.setOption({
       animation: false,
-      title: { text: t("noInventoryData"), left: "center", top: "middle", textStyle: { color: "#6b83a5", fontSize: 14, fontWeight: 500 } },
-      xAxis: { show: false },
-      yAxis: { show: false },
-      series: [],
-    };
-    inventoryTypeBarChart?.setOption(emptyOption, true);
-    inventoryTypeDonutChart?.setOption({
-      animation: false,
-      title: emptyOption.title,
+      title: { text: t("noInventoryData"), left: "center", top: "middle", textStyle: { color: "#6b83a5", fontSize: 13, fontWeight: 500 } },
       series: [],
     }, true);
     return;
   }
 
-  inventoryTypeBarChart?.setOption({
+  const formatValue = (value) => useMw ? fmtMw(value) : fmtNumber(value);
+  chartInstance?.setOption({
     animation: false,
-    color: [palette[0]],
-    grid: { left: 58, right: 18, top: 24, bottom: 68 },
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (value) => `${fmtMw(value)} MW` },
-    xAxis: {
-      type: "category",
-      data: entries.map((item) => item.name),
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: "#aac0dc" } },
-      axisLabel: { color: "#516f96", interval: 0, rotate: entries.length > 6 ? 28 : 0, fontSize: 11 },
-    },
-    yAxis: {
-      type: "value",
-      name: "MW",
-      nameTextStyle: { color: "#6b83a5" },
-      axisLabel: { color: "#6b83a5" },
-      splitLine: { lineStyle: { color: "#e6eef8" } },
-    },
-    series: [{
-      type: "bar",
-      data: entries.map((item) => Number(item.value.toFixed(6))),
-      barMaxWidth: 42,
-      label: { show: true, position: "top", color: "#516f96", formatter: ({ value }) => fmtMw(value) },
-      itemStyle: { color: palette[0], borderRadius: [6, 6, 0, 0] },
-    }],
-  }, true);
-
-  const donutEntries = entries.filter((item) => item.value > 0);
-  inventoryTypeDonutChart?.setOption({
-    animation: false,
-    color: palette,
-    tooltip: { trigger: "item", formatter: ({ name, value, percent }) => `${escapeHtml(name)}<br>${fmtMw(value)} MW (${percent}%)` },
-    legend: { type: "scroll", bottom: 0, left: "center", textStyle: { color: "#516f96", fontSize: 11 } },
+    tooltip: { trigger: "item", formatter: ({ name, value, percent }) => `${escapeHtml(name)}<br>${formatValue(value)} ${unit} (${percent}%)` },
+    legend: { type: "scroll", bottom: 0, left: "center", textStyle: { color: "#516f96", fontSize: 10 } },
     series: [{
       type: "pie",
-      radius: ["43%", "67%"],
-      center: ["50%", "44%"],
+      radius: ["40%", "64%"],
+      center: ["50%", "42%"],
+      minAngle: 3,
       avoidLabelOverlap: true,
       itemStyle: { borderColor: "#ffffff", borderWidth: 3, borderRadius: 5 },
-      label: { color: "#435f86", formatter: "{b}\n{d}%", fontSize: 11 },
-      labelLine: { length: 10, length2: 8, lineStyle: { color: "#b7c8dc" } },
-      data: donutEntries.map((item) => ({ name: item.name, value: Number(item.value.toFixed(6)) })),
+      label: {
+        color: "#435f86",
+        fontSize: 10,
+        formatter: ({ name, value, percent }) => `${name}\n${formatValue(value)} ${unit}\n${percent}%`,
+      },
+      labelLine: { length: 8, length2: 6, lineStyle: { color: "#b7c8dc" } },
+      data,
     }],
   }, true);
+}
 
-  inventoryTypeBarChart?.resize();
-  inventoryTypeDonutChart?.resize();
+function renderInventoryOverview(filteredRows) {
+  ensureInventoryOverviewCharts();
+  const totals = {
+    PV: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
+    ESS: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
+    HP: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
+  };
+
+  for (const row of filteredRows) {
+    const group = inventoryCategoryGroup(row.Category);
+    if (!group) continue;
+    const factor = group === "PV" ? Number(row.Bin || 0) / 1000000 : 1;
+    if (group === "PV" && factor <= 0) continue;
+    for (const status of ["Inventory", "DailySupplyPlan", "ODP"]) {
+      totals[group][status] += Number(row.StatusQuantity?.[status] || 0) * factor;
+    }
+  }
+
+  const categoryTotal = (group) => Object.values(totals[group]).reduce((sum, value) => sum + Number(value || 0), 0);
+  pvInventoryTotalEl.innerHTML = `${fmtMw(categoryTotal("PV"))} <span class="unit">MW</span>`;
+  essInventoryTotalEl.innerHTML = `${fmtNumber(categoryTotal("ESS"))} <span class="unit">${escapeHtml(t("quantityUnit"))}</span>`;
+  hpInventoryTotalEl.innerHTML = `${fmtNumber(categoryTotal("HP"))} <span class="unit">${escapeHtml(t("quantityUnit"))}</span>`;
+
+  renderStatusChart(pvStatusChart, totals.PV, "MW", true);
+  renderStatusChart(essStatusChart, totals.ESS, t("quantityUnit"), false);
+  renderStatusChart(hpStatusChart, totals.HP, t("quantityUnit"), false);
+
+  const statusLabels = {
+    Inventory: t("statusInventory"),
+    DailySupplyPlan: t("statusDailySupply"),
+    ODP: t("statusOdp"),
+  };
+  const tableRows = [];
+  for (const group of ["PV", "ESS", "HP"]) {
+    const total = categoryTotal(group);
+    const unit = group === "PV" ? "MW" : t("quantityUnit");
+    for (const status of ["Inventory", "DailySupplyPlan", "ODP"]) {
+      const value = Number(totals[group][status] || 0);
+      if (value === 0) continue;
+      const formatted = group === "PV" ? fmtMw(value) : fmtNumber(value);
+      const share = total ? `${((value / total) * 100).toFixed(2)}%` : "0.00%";
+      tableRows.push(`<tr><td>${group}</td><td>${escapeHtml(statusLabels[status])}</td><td>${formatted} ${escapeHtml(unit)}</td><td>${share}</td></tr>`);
+    }
+  }
+  inventoryStatusTableEl.innerHTML = tableRows.length
+    ? `<table><thead><tr><th>${escapeHtml(t("statusCategory"))}</th><th>${escapeHtml(t("statusName"))}</th><th>${escapeHtml(t("statusValue"))}</th><th>${escapeHtml(t("statusShare"))}</th></tr></thead><tbody>${tableRows.join("")}</tbody></table>`
+    : `<div class="small-tip" style="padding:12px;">${escapeHtml(t("noInventoryData"))}</div>`;
+
+  pvStatusChart?.resize();
+  essStatusChart?.resize();
+  hpStatusChart?.resize();
 }
 
 function dayLabelShort(dayLabel) {
@@ -1232,6 +1244,7 @@ headers = [cell.value for cell in ws[1]]
 header_to_idx = {str(h).strip(): i for i, h in enumerate(headers) if h is not None}
 
 source_map = {}
+status_qty_map = {}
 if '_Transit Source Map' in wb.sheetnames:
     ws_src = wb['_Transit Source Map']
     src_headers = [cell.value for cell in ws_src[1]]
@@ -1245,6 +1258,13 @@ if '_Transit Source Map' in wb.sheetnames:
             source = _text(src_row[src_idx["Source"]])
             if sku and wh and d_header and source:
                 source_map[f"{sku}||{wh}||{d_header}"] = source
+                status_key = f"{sku}||{wh}"
+                if status_key not in status_qty_map:
+                    status_qty_map[status_key] = {"DailySupplyPlan": 0.0, "ODP": 0.0}
+                if "Daily Supply Plan Qty" in src_idx:
+                    status_qty_map[status_key]["DailySupplyPlan"] += _num(src_row[src_idx["Daily Supply Plan Qty"]])
+                if "ODP Qty" in src_idx:
+                    status_qty_map[status_key]["ODP"] += _num(src_row[src_idx["ODP Qty"]])
 
 required = ["WH", "Category", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Stock", "To be allocated"]
 for col in required:
@@ -1269,6 +1289,7 @@ key_meta = {}
 date_source_tags = {}
 stock_rows = list(ws.iter_rows(min_row=2, values_only=True))
 active_sku_keys = set()
+status_assigned_keys = set()
 for row in stock_rows:
     sku = _text(row[header_to_idx['SKU']])
     if not sku:
@@ -1310,6 +1331,11 @@ for row in stock_rows:
     product_key = f"{sku}||{model}" if model else f"{sku}||"
     product_parts = [part for part in (model, sku, connector) if part]
     product_label = " | ".join(product_parts) if product_parts else sku
+    status_key = f"{sku}||{wh}"
+    transit_status = status_qty_map.get(status_key, {}) if status_key not in status_assigned_keys else {}
+    status_assigned_keys.add(status_key)
+    bin_value = _num(row[header_to_idx['Bin']]) if 'Bin' in header_to_idx else 0
+    stock_value = _num(row[header_to_idx['Stock']])
 
     item = {
         "WH": wh,
@@ -1321,10 +1347,15 @@ for row in stock_rows:
         "Connector": connector,
         "ProductKey": product_key,
         "ProductKeyLabel": product_label,
-        "Bin": _num(row[header_to_idx['Bin']]) if 'Bin' in header_to_idx else 0,
-        "StockMW": (_num(row[header_to_idx['Stock']]) * _num(row[header_to_idx['Bin']]) / 1000000) if 'Bin' in header_to_idx else 0,
-        "Stock": _num(row[header_to_idx['Stock']]),
+        "Bin": bin_value,
+        "StockMW": (stock_value * bin_value / 1000000) if category.upper().startswith("PV") else 0,
+        "Stock": stock_value,
         "ToBeAllocated": _num(row[header_to_idx['To be allocated']]),
+        "StatusQuantity": {
+            "Inventory": stock_value,
+            "DailySupplyPlan": _num(transit_status.get("DailySupplyPlan")),
+            "ODP": _num(transit_status.get("ODP")),
+        },
         "Transit": transit,
         "TransitSource": transit_source,
     }

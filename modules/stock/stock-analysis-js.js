@@ -40,6 +40,10 @@ function normalizeLower(value) {
   return normalizeText(value).toLowerCase();
 }
 
+function isPvCategory(value) {
+  return normalizeText(value).toUpperCase().startsWith("PV");
+}
+
 function normalizeSkuKey(value) {
   return normalizeText(value).toUpperCase();
 }
@@ -413,6 +417,7 @@ function createStockRecord(wh, sku, mapped, stock = 0) {
     ToBeAllocated: 0,
     Transit: {},
     TransitSource: {},
+    StatusQuantity: { Inventory: stock, DailySupplyPlan: 0, ODP: 0 },
   };
 }
 
@@ -474,9 +479,14 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
     ProductKey: productKey,
     ProductKeyLabel: productLabel,
     Bin: safeFloat(record.Bin),
-    StockMW: (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000,
+    StockMW: isPvCategory(record.Category) ? (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000 : 0,
     Stock: safeFloat(record.Stock),
     ToBeAllocated: safeFloat(record.ToBeAllocated),
+    StatusQuantity: {
+      Inventory: safeFloat(record.StatusQuantity?.Inventory ?? record.Stock),
+      DailySupplyPlan: safeFloat(record.StatusQuantity?.DailySupplyPlan),
+      ODP: safeFloat(record.StatusQuantity?.ODP),
+    },
     Transit: transit,
     TransitSource: transitSource,
   };
@@ -549,11 +559,12 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
   for (const record of records) {
     const transitTotal = dateKeys.reduce((sum, dateKey) => sum + safeFloat(record.Transit[dateKey]), 0);
     const totalQty = safeFloat(record.Stock) + transitTotal;
-    const mw = (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000;
-    const totalMw = (totalQty * safeFloat(record.Bin)) / 1000000;
+    const pv = isPvCategory(record.Category);
+    const mw = pv ? (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000 : null;
+    const totalMw = pv ? (totalQty * safeFloat(record.Bin)) / 1000000 : null;
     record.TotalQTY = Number(totalQty.toFixed(3));
-    record.TotalMW = Number(totalMw.toFixed(3));
-    record.MW = Number(mw.toFixed(3));
+    record.TotalMW = totalMw == null ? null : Number(totalMw.toFixed(3));
+    record.MW = mw == null ? null : Number(mw.toFixed(3));
 
     const row = ws.addRow([
       record.WH, record.Category, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
@@ -597,14 +608,22 @@ function writeAllocationWorksheet(workbook, orders, skuLookup) {
   return ws;
 }
 
-function writeTransitSourceWorksheet(workbook, transitSourceTag) {
+function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty, odpTransitQty) {
   const old = workbook.getWorksheet(TRANSIT_SOURCE_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(TRANSIT_SOURCE_SHEET_NAME);
-  ws.addRow(["SKU", "WH", "Date", "Source"]);
-  for (const [key, source] of [...transitSourceTag.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  ws.addRow(["SKU", "WH", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"]);
+  const sourceKeys = new Set([...transitSourceTag.keys(), ...dailyTransitQty.keys(), ...odpTransitQty.keys()]);
+  for (const key of [...sourceKeys].sort((a, b) => a.localeCompare(b))) {
     const [sku, wh, dateKey] = splitKey3(key);
-    ws.addRow([sku, wh, dateKeyToHeader(dateKey), source]);
+    ws.addRow([
+      sku,
+      wh,
+      dateKeyToHeader(dateKey),
+      transitSourceTag.get(key) || SOURCE_INV_DSP,
+      safeFloat(dailyTransitQty.get(key)),
+      safeFloat(odpTransitQty.get(key)),
+    ]);
   }
   ws.getRow(1).font = { bold: true };
   ws.columns.forEach((column) => { column.width = 16; });
@@ -652,14 +671,18 @@ export async function buildStockOutputJs({
   const skuLookup = buildSkuLookup(templateWorkbook, skuSheetName);
   const inventoryRows = extractInventoryRows(inventoryWorkbook);
   const transitQty = new Map();
+  const dailyTransitQty = new Map();
+  const odpTransitQty = new Map();
   const transitSourceTag = new Map();
   if (dailySupplyWorkbook) {
     const daily = extractTransitData(dailySupplyWorkbook, startDate, endDate);
+    mergeMapValues(dailyTransitQty, daily.qty);
     mergeMapValues(transitQty, daily.qty);
     for (const key of daily.qty.keys()) transitSourceTag.set(key, mergeSourceTag(transitSourceTag.get(key), SOURCE_INV_DSP));
   }
   if (odpWorkbook) {
     const odp = extractOdpTransitData(odpWorkbook, startDate, endDate);
+    mergeMapValues(odpTransitQty, odp.qty);
     mergeMapValues(transitQty, odp.qty);
     for (const key of odp.qty.keys()) transitSourceTag.set(key, mergeSourceTag(transitSourceTag.get(key), SOURCE_ODP));
   }
@@ -713,6 +736,8 @@ export async function buildStockOutputJs({
     }
     record.Transit[dateKey] = (record.Transit[dateKey] || 0) + qty;
     record.TransitSource[dateKey] = mergeSourceTag(record.TransitSource[dateKey], transitSourceTag.get(key) || SOURCE_INV_DSP);
+    record.StatusQuantity.DailySupplyPlan += safeFloat(dailyTransitQty.get(key));
+    record.StatusQuantity.ODP += safeFloat(odpTransitQty.get(key));
   }
   for (const record of records) {
     record.ToBeAllocated = safeFloat(allocationData.need.get(recordKey(record.SKU, record.WH)) || 0);
@@ -730,7 +755,7 @@ export async function buildStockOutputJs({
 
   writeStockWorksheet(templateWorkbook, records, dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
-  writeTransitSourceWorksheet(templateWorkbook, transitSourceTag);
+  writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty);
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
   const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders);
 

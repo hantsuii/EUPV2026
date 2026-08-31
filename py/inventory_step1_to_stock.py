@@ -515,6 +515,8 @@ def write_output_sheet(
     transit_qty: dict[tuple[str, str, str], float] | None = None,
     transit_category: dict[tuple[str, str], str] | None = None,
     transit_source_tag: dict[tuple[str, str, str], str] | None = None,
+    daily_transit_qty: dict[tuple[str, str, str], float] | None = None,
+    odp_transit_qty: dict[tuple[str, str, str], float] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = TRANSIT_START_DATE,
@@ -599,6 +601,8 @@ def write_output_sheet(
     transit_qty = transit_qty or {}
     transit_category = transit_category or {}
     transit_source_tag = transit_source_tag or {}
+    daily_transit_qty = daily_transit_qty or {}
+    odp_transit_qty = odp_transit_qty or {}
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
 
@@ -684,18 +688,20 @@ def write_output_sheet(
 
         bin_qty = safe_float(ws.cell(r, header_col["Bin"]).value)
         stock_qty = safe_float(ws.cell(r, header_col["Stock"]).value)
+        category_value = normalize_text(ws.cell(r, header_col["Category"]).value).upper()
+        is_pv = category_value.startswith("PV")
 
         transit_total = 0.0
         for d_col_name in transit_headers:
             transit_total += safe_float(ws.cell(r, header_col[d_col_name]).value)
 
         total_qty = stock_qty + transit_total
-        mw = (stock_qty * bin_qty) / 1_000_000
-        total_mw = (total_qty * bin_qty) / 1_000_000
+        mw = (stock_qty * bin_qty) / 1_000_000 if is_pv else None
+        total_mw = (total_qty * bin_qty) / 1_000_000 if is_pv else None
 
         ws.cell(r, header_col["Total QTY"]).value = round(total_qty, 3)
-        ws.cell(r, header_col["MW"]).value = round(mw, 3)
-        ws.cell(r, header_col["Total MW"]).value = round(total_mw, 3)
+        ws.cell(r, header_col["MW"]).value = round(mw, 3) if mw is not None else None
+        ws.cell(r, header_col["Total MW"]).value = round(total_mw, 3) if total_mw is not None else None
 
     total_rows = ws.max_row - 1
 
@@ -730,11 +736,20 @@ def write_output_sheet(
         )
 
     ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
-    ws_source.append(["SKU", "WH", "Date", "Source"])
-    for (sku, wh, d_header), src in sorted(transit_source_tag.items()):
+    ws_source.append(["SKU", "WH", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
+    source_keys = set(transit_source_tag) | set(daily_transit_qty) | set(odp_transit_qty)
+    for sku, wh, d_header in sorted(source_keys):
         if d_header not in header_col:
             continue
-        ws_source.append([sku, wh, d_header, normalize_source_tag(src)])
+        src = transit_source_tag.get((sku, wh, d_header), SOURCE_INV_DSP)
+        ws_source.append([
+            sku,
+            wh,
+            d_header,
+            normalize_source_tag(src),
+            round(safe_float(daily_transit_qty.get((sku, wh, d_header), 0)), 3),
+            round(safe_float(odp_transit_qty.get((sku, wh, d_header), 0)), 3),
+        ])
 
     wb.save(stock_wb_path)
     wb.close()
@@ -767,6 +782,8 @@ def run(
     transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
     transit_source_tag: dict[tuple[str, str, str], str] = {}
+    daily_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
+    odp_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
 
     if daily_supply_plan_path:
         d_qty, d_category = extract_transit_data(
@@ -775,6 +792,7 @@ def run(
             end_date=transit_end_date,
         )
         merge_transit_payload(transit_qty, transit_category, d_qty, d_category)
+        daily_transit_qty.update(d_qty)
         for key in d_qty:
             transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_INV_DSP)
 
@@ -785,6 +803,7 @@ def run(
             end_date=transit_end_date,
         )
         merge_transit_payload(transit_qty, transit_category, o_qty, o_category)
+        odp_transit_qty.update(o_qty)
         for key in o_qty:
             transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_ODP)
 
@@ -800,6 +819,8 @@ def run(
         transit_qty=transit_qty,
         transit_category=transit_category,
         transit_source_tag=transit_source_tag,
+        daily_transit_qty=daily_transit_qty,
+        odp_transit_qty=odp_transit_qty,
         allocated_orders=allocated_orders,
         allocated_need=allocated_need,
         start_date=transit_start_date,
