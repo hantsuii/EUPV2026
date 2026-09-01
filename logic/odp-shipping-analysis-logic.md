@@ -34,7 +34,7 @@
 - 发货日历月：按 `月份 + Model + 标准目的港 + SKU + 实际/预测` 汇总；有 `ATD PORT` 时标记为实际，没有 ATD 时依次使用 `ETD Update`、`ETD On S/O` 并标记为预测。
 - 到货日历月：按 `月份 + Model + 标准目的港 + SKU + 实际/预测` 汇总；优先按 `ATA PORT`，没有 ATA 时按 `ETA Update`，再按 `ETA On S/O`，并区分实际与预测。
 - 三个业务视角只使用当前 `PV SUPPLY DATA`，历史工作表只用于航线 P90。
-- 三个月度视角均支持独立的开始月份、结束月份和 Excel 式 Model 搜索多选筛选。
+- 三个月度视角均支持独立的开始月份、结束月份和 Excel 式 Model 搜索多选筛选；每次进入页面或读取新文件时，开始月份和结束月份均默认为当前月。
 - 月度业务表使用 ODP 的 `New Ark SKU` 作为产品维度，并均展示 Model。Model 优先按库存分析 `SKU` 工作表的 `Sku No -> Product Model` 映射，未匹配时使用 ODP Model。
 - 月度业务表不展示记录数列；订单页顶部仅保留 Quantity、MW 和 Containers 汇总指标。
 

@@ -60,7 +60,7 @@ function actualPickupWeek(record){if(record.pickupDate)return isoWeek(record.pic
 function arrivalInfo(record){if(record.ata)return{date:record.ata,type:"actual"};if(record.etaUpdate)return{date:record.etaUpdate,type:"forecast"};if(record.etaSO)return{date:record.etaSO,type:"forecast"};return{date:null,type:"missing"};}
 function departureInfo(record){if(record.atd)return{date:record.atd,type:"actual"};if(record.etdUpdate)return{date:record.etdUpdate,type:"forecast"};if(record.etdSO)return{date:record.etdSO,type:"forecast"};return{date:null,type:"missing"};}
 function inMonthRange(value,startId,endId){if(!value)return false;const start=byId(startId).value,end=byId(endId).value;return(!start||value>=start)&&(!end||value<=end);}
-function setMonthRange(startId,endId,values){const months=[...new Set(values.filter(Boolean))].sort();if(!months.length)return;byId(startId).value=months[0];byId(endId).value=months.at(-1);}
+function setDefaultMonthRanges(){const current=monthKey(new Date());["order","departure","arrival"].forEach((scope)=>{byId(`${scope}StartMonth`).value=current;byId(`${scope}EndMonth`).value=current;});}
 function median(values){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b),mid=Math.floor(sorted.length/2);return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;}
 function percent(count,total){return total?`${(count/total*100).toFixed(1)}%`:"—";}
 function modelKey(record){return record.model==null||String(record.model).trim()===""?"__UNKNOWN__":normalizeText(record.model);}
@@ -71,6 +71,11 @@ function availableModels(){
   return [...models].map(([key,label])=>({key,label})).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:"base"}));
 }
 function matchesModel(record,scope){const selected=modelFilters[scope];return selected===null||selected.has(modelKey(record));}
+function commitModelFilter(root){
+  if(!root)return;
+  const boxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')],chosen=new Set(boxes.filter((x)=>x.checked).map((x)=>x.value));
+  modelFilters[root.dataset.scope]=!boxes.length||chosen.size===boxes.length?null:chosen;
+}
 function renderModelFilters(){
   const options=availableModels();
   document.querySelectorAll(".model-filter").forEach((root)=>{
@@ -136,7 +141,7 @@ function parseWorkbook(workbook,skuModelMap){
   records=[...unique.values()];assumptionRows=parseAssumptionRows(workbook);skuModelMatched=0;
   records.forEach((record)=>{const mapped=skuModelMap.get(normalizeText(record.sku));if(mapped){record.model=mapped;if(record.source==="PV SUPPLY DATA")skuModelMatched++;}});
   const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});ensureDiscoveredMappings();renderMappingTable();
-  setMonthRange("orderStartMonth","orderEndMonth",main.map(orderMonth));setMonthRange("departureStartMonth","departureEndMonth",main.map((r)=>monthKey(departureInfo(r).date)));setMonthRange("arrivalStartMonth","arrivalEndMonth",main.map((r)=>monthKey(arrivalInfo(r).date)));
+  setDefaultMonthRanges();
   const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
   renderAll();
 }
@@ -212,7 +217,7 @@ byId("runBtn").addEventListener("click",async()=>{if(!fileEl.files[0]){statusEl.
 byId("applyBtn").addEventListener("click",renderRoutes);
 byId("performanceApplyBtn").addEventListener("click",renderPerformance);
 byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
-document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",renderBusinessViews));
+document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter"));renderBusinessViews();}));
 document.addEventListener("click",(event)=>{
   const root=event.target.closest(".model-filter");
   document.querySelectorAll(".model-filter.open").forEach((x)=>{if(x!==root)x.classList.remove("open");});
@@ -220,7 +225,7 @@ document.addEventListener("click",(event)=>{
   if(event.target.closest(".model-filter-toggle")){root.classList.toggle("open");return;}
   if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
   if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
-  if(event.target.closest(".model-filter-apply")){const boxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')],chosen=new Set(boxes.filter((x)=>x.checked).map((x)=>x.value));modelFilters[root.dataset.scope]=chosen.size===boxes.length?null:chosen;renderBusinessViews();}
+  if(event.target.closest(".model-filter-apply")){commitModelFilter(root);renderBusinessViews();}
 });
 document.addEventListener("input",(event)=>{if(!event.target.classList.contains("model-filter-search"))return;const query=normalizeText(event.target.value),root=event.target.closest(".model-filter");root.querySelectorAll(".model-filter-option[data-search]").forEach((x)=>{x.hidden=!x.dataset.search.includes(query);});});
 byId("saveMappingBtn").addEventListener("click",()=>{collectMappingEdits();saveMappings();renderAll();});
@@ -232,4 +237,4 @@ byId("importMappingBtn").addEventListener("click",()=>byId("importMappingFile").
 byId("importMappingFile").addEventListener("change",async(event)=>{try{if(!event.target.files[0])return;const incoming=JSON.parse(await event.target.files[0].text());if(!Array.isArray(incoming))throw new Error(t("jsonArray"));mappings=incoming;saveMappings();ensureDiscoveredMappings();renderAll();}catch(error){alert(t("importFailed",{error:error.message||error}));}finally{event.target.value="";}});
 document.querySelectorAll(".tab-btn").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll(".tab-btn").forEach((x)=>x.classList.toggle("active",x===button));document.querySelectorAll(".tab").forEach((x)=>x.classList.toggle("active",x.id===button.dataset.tab));}));
 window.addEventListener("app-language-change",()=>{renderAll();if(!hasLoadedWorkbook)statusEl.textContent=t("statusInitial");});
-renderModelFilters();renderMappingTable();
+setDefaultMonthRanges();renderModelFilters();renderMappingTable();
