@@ -11,6 +11,7 @@ let quantityZeroCount = 0;
 let invalidQuantityCount = 0;
 let hasLoadedWorkbook = false;
 let mappings = loadMappings();
+const modelFilters = { order: null, departure: null, arrival: null };
 
 function t(key, params = {}) { return window.appI18n?.text(key, params) ?? key; }
 function copyDefaults() { return (window.DEFAULT_PORT_MAPPINGS || []).map((x) => ({ ...x })); }
@@ -62,6 +63,22 @@ function inMonthRange(value,startId,endId){if(!value)return false;const start=by
 function setMonthRange(startId,endId,values){const months=[...new Set(values.filter(Boolean))].sort();if(!months.length)return;byId(startId).value=months[0];byId(endId).value=months.at(-1);}
 function median(values){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b),mid=Math.floor(sorted.length/2);return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;}
 function percent(count,total){return total?`${(count/total*100).toFixed(1)}%`:"—";}
+function modelKey(record){return record.model==null||String(record.model).trim()===""?"__UNKNOWN__":normalizeText(record.model);}
+function modelLabel(record){return modelKey(record)==="__UNKNOWN__"?t("unknown"):String(record.model).trim();}
+function availableModels(){
+  const models=new Map();
+  records.filter((r)=>r.source==="PV SUPPLY DATA").forEach((r)=>{const key=modelKey(r);if(!models.has(key))models.set(key,modelLabel(r));});
+  return [...models].map(([key,label])=>({key,label})).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:"base"}));
+}
+function matchesModel(record,scope){const selected=modelFilters[scope];return selected===null||selected.has(modelKey(record));}
+function renderModelFilters(){
+  const options=availableModels();
+  document.querySelectorAll(".model-filter").forEach((root)=>{
+    const scope=root.dataset.scope,selected=modelFilters[scope],selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
+    const summary=selected===null?t("allModels"):t("selectedModels",{count:selectedCount,total:options.length});
+    root.innerHTML=`<label>${escapeHtml(t("modelFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
+  });
+}
 
 function saveMappings(){mappings=mappings.map((x)=>({type:x.type==="POL"?"POL":"DEST",raw:normalizeText(x.raw),standard:normalizeText(x.standard),country:String(x.country||"").trim(),note:String(x.note||"").trim()})).filter((x)=>x.raw&&x.standard);localStorage.setItem(PORT_MAPPING_KEY,JSON.stringify(mappings));}
 function mappingIndex(){return new Map(mappings.map((x)=>[`${x.type}|${normalizeText(x.raw)}`,x]));}
@@ -118,7 +135,7 @@ function parseWorkbook(workbook,skuModelMap){
   sources.flatMap(([name,row])=>readSheet(workbook,name,row)).forEach((record)=>{if(record.quantity==null){invalidQuantityCount++;return;}if(record.quantity<=0){quantityZeroCount++;return;}if(!unique.has(record.reference))unique.set(record.reference,record);});
   records=[...unique.values()];assumptionRows=parseAssumptionRows(workbook);skuModelMatched=0;
   records.forEach((record)=>{const mapped=skuModelMap.get(normalizeText(record.sku));if(mapped){record.model=mapped;if(record.source==="PV SUPPLY DATA")skuModelMatched++;}});
-  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;ensureDiscoveredMappings();renderMappingTable();
+  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});ensureDiscoveredMappings();renderMappingTable();
   setMonthRange("orderStartMonth","orderEndMonth",main.map(orderMonth));setMonthRange("departureStartMonth","departureEndMonth",main.map((r)=>monthKey(departureInfo(r).date)));setMonthRange("arrivalStartMonth","arrivalEndMonth",main.map((r)=>monthKey(arrivalInfo(r).date)));
   const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
   renderAll();
@@ -146,14 +163,15 @@ function weekBreakdownCell(values,emptyText=""){
 function renderTable(id,headers,rows){const head=`<thead><tr>${headers.map((h)=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`,body=rows.length?rows.map((row)=>`<tr>${row.map((v)=>`<td>${v?.html??escapeHtml(v)}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;byId(id).innerHTML=head+`<tbody>${body}</tbody>`;}
 
 function renderBusinessViews(){
-  const allMain=records.filter((r)=>r.source==="PV SUPPLY DATA"),main=allMain.filter((r)=>inMonthRange(orderMonth(r),"orderStartMonth","orderEndMonth"));
+  renderModelFilters();
+  const allMain=records.filter((r)=>r.source==="PV SUPPLY DATA"),main=allMain.filter((r)=>matchesModel(r,"order")&&inMonthRange(orderMonth(r),"orderStartMonth","orderEndMonth"));
   byId("orderMwKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.mw,0),3);byId("orderContainerKpi").textContent=fmtNumber(main.reduce((s,r)=>s+r.containers,0),1);
   const orders=groupOrderRows(main).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[1].localeCompare(b.parts[1])||a.parts[4].localeCompare(b.parts[4]));
   renderTable("orderTable",[t("hOrderMonth"),t("hModel"),t("hPol"),t("hDestination"),t("hSku"),t("hPlannedPickup"),t("hActualShip"),t("hMw"),t("hContainers")],orders.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4],weekBreakdownCell(x.plannedWeeks),weekBreakdownCell(x.actualWeeks),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
-  const departures=groupRows(allMain,(r)=>{const d=departureInfo(r),month=monthKey(d.date);return month&&inMonthRange(month,"departureStartMonth","departureEndMonth")?[month,String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),d.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3]));
-  renderTable("departureTable",[t("hDepartureMonth"),t("hDestination"),t("hSku"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
-  const arrivals=groupRows(allMain,(r)=>{const a=arrivalInfo(r),month=monthKey(a.date);return month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3]));
-  renderTable("arrivalTable",[t("hArrivalMonth"),t("hDestination"),t("hSku"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
+  const departures=groupRows(allMain,(r)=>{const d=departureInfo(r),month=monthKey(d.date);return matchesModel(r,"departure")&&month&&inMonthRange(month,"departureStartMonth","departureEndMonth")?[month,modelLabel(r),String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),d.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[4].localeCompare(b.parts[4]));
+  renderTable("departureTable",[t("hDepartureMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
+  const arrivals=groupRows(allMain,(r)=>{const a=arrivalInfo(r),month=monthKey(a.date);return matchesModel(r,"arrival")&&month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,modelLabel(r),String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[4].localeCompare(b.parts[4]));
+  renderTable("arrivalTable",[t("hArrivalMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
 }
 
 function nearestRank(values,rate){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.max(0,Math.ceil(rate*sorted.length)-1)];}
@@ -195,6 +213,16 @@ byId("applyBtn").addEventListener("click",renderRoutes);
 byId("performanceApplyBtn").addEventListener("click",renderPerformance);
 byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
 document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",renderBusinessViews));
+document.addEventListener("click",(event)=>{
+  const root=event.target.closest(".model-filter");
+  document.querySelectorAll(".model-filter.open").forEach((x)=>{if(x!==root)x.classList.remove("open");});
+  if(!root)return;
+  if(event.target.closest(".model-filter-toggle")){root.classList.toggle("open");return;}
+  if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
+  if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
+  if(event.target.closest(".model-filter-apply")){const boxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')],chosen=new Set(boxes.filter((x)=>x.checked).map((x)=>x.value));modelFilters[root.dataset.scope]=chosen.size===boxes.length?null:chosen;renderBusinessViews();}
+});
+document.addEventListener("input",(event)=>{if(!event.target.classList.contains("model-filter-search"))return;const query=normalizeText(event.target.value),root=event.target.closest(".model-filter");root.querySelectorAll(".model-filter-option[data-search]").forEach((x)=>{x.hidden=!x.dataset.search.includes(query);});});
 byId("saveMappingBtn").addEventListener("click",()=>{collectMappingEdits();saveMappings();renderAll();});
 byId("addMappingBtn").addEventListener("click",()=>{collectMappingEdits();mappings.push({type:"DEST",raw:"",standard:"",country:"",note:""});renderMappingTable();});
 byId("resetMappingBtn").addEventListener("click",()=>{if(!confirm(t("resetConfirm")))return;mappings=copyDefaults();saveMappings();ensureDiscoveredMappings();renderAll();});
@@ -204,4 +232,4 @@ byId("importMappingBtn").addEventListener("click",()=>byId("importMappingFile").
 byId("importMappingFile").addEventListener("change",async(event)=>{try{if(!event.target.files[0])return;const incoming=JSON.parse(await event.target.files[0].text());if(!Array.isArray(incoming))throw new Error(t("jsonArray"));mappings=incoming;saveMappings();ensureDiscoveredMappings();renderAll();}catch(error){alert(t("importFailed",{error:error.message||error}));}finally{event.target.value="";}});
 document.querySelectorAll(".tab-btn").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll(".tab-btn").forEach((x)=>x.classList.toggle("active",x===button));document.querySelectorAll(".tab").forEach((x)=>x.classList.toggle("active",x.id===button.dataset.tab));}));
 window.addEventListener("app-language-change",()=>{renderAll();if(!hasLoadedWorkbook)statusEl.textContent=t("statusInitial");});
-renderMappingTable();
+renderModelFilters();renderMappingTable();

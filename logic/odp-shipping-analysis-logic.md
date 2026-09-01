@@ -31,11 +31,11 @@
 - 订单月的列顺序为订单月份、Model、起始港、目的港、SKU、计划提货周、实际开船周、MW、Containers。
 - 计划提货周与实际开船周采用两行展示：第一行按顺序列周数，第二行列该周汇总的 Containers；同一组内 `PO FIRM` 的无发运计划柜量追加在计划周之后，不另起数据行；尚未开船时实际开船周留空。
 - 计划提货周：优先读取 `STATUS` 中的 `Wxx`；无法读取时使用 `ETD On S/O - 7天`。
-- 发货日历月：按 `月份 + 标准目的港 + SKU + 实际/预测` 汇总；有 `ATD PORT` 时标记为实际，没有 ATD 时依次使用 `ETD Update`、`ETD On S/O` 并标记为预测。
-- 到货日历月：按 `月份 + 标准目的港 + SKU + 实际/预测` 汇总；优先按 `ATA PORT`，没有 ATA 时按 `ETA Update`，再按 `ETA On S/O`，并区分实际与预测。
+- 发货日历月：按 `月份 + Model + 标准目的港 + SKU + 实际/预测` 汇总；有 `ATD PORT` 时标记为实际，没有 ATD 时依次使用 `ETD Update`、`ETD On S/O` 并标记为预测。
+- 到货日历月：按 `月份 + Model + 标准目的港 + SKU + 实际/预测` 汇总；优先按 `ATA PORT`，没有 ATA 时按 `ETA Update`，再按 `ETA On S/O`，并区分实际与预测。
 - 三个业务视角只使用当前 `PV SUPPLY DATA`，历史工作表只用于航线 P90。
-- 三个月度视角均支持独立的开始月份和结束月份筛选。
-- 月度业务表使用 ODP 的 `New Ark SKU` 作为产品维度；订单月同时展示 Model。Model 优先按库存分析 `SKU` 工作表的 `Sku No -> Product Model` 映射，未匹配时使用 ODP Model。
+- 三个月度视角均支持独立的开始月份、结束月份和 Excel 式 Model 搜索多选筛选。
+- 月度业务表使用 ODP 的 `New Ark SKU` 作为产品维度，并均展示 Model。Model 优先按库存分析 `SKU` 工作表的 `Sku No -> Product Model` 映射，未匹配时使用 ODP Model。
 - 月度业务表不展示记录数列；订单页顶部仅保留 Quantity、MW 和 Containers 汇总指标。
 
 ## Assumption ATP P90 输出
