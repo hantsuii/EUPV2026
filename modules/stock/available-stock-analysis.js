@@ -49,10 +49,20 @@ const inventorySeriesFilterEl = document.getElementById("inventorySeriesFilter")
 const inventoryBrandSummaryEl = document.getElementById("inventoryBrandSummary");
 const inventorySeriesSummaryEl = document.getElementById("inventorySeriesSummary");
 const clearInventoryOverviewFiltersEl = document.getElementById("clearInventoryOverviewFilters");
+const githubRepoEl = document.getElementById("githubRepo");
+const githubBranchEl = document.getElementById("githubBranch");
+const githubTokenEl = document.getElementById("githubToken");
+const saveGithubBtn = document.getElementById("saveGithubBtn");
+const loadHistoryBtn = document.getElementById("loadHistoryBtn");
+const githubStatusEl = document.getElementById("githubStatus");
+const historyPanelEl = document.getElementById("historyPanel");
+const historyChartEl = document.getElementById("historyChart");
+const historyTableEl = document.getElementById("historyTable");
 
 let pyodide = null;
 let pyReady = false;
 let chart = null;
+let historyChart = null;
 let pvStatusChart = null;
 let essStatusChart = null;
 let hpStatusChart = null;
@@ -82,6 +92,71 @@ const DEFAULT_REPO_FILE = {
   odpMaster: "../../templates/odp.xlsx",
   orderfile: "../../templates/orderfile_base.xlsx",
 };
+
+const GITHUB_CONFIG_KEY = "eupv2026_stock_github_v1";
+function loadGithubConfig() {
+  try { return JSON.parse(localStorage.getItem(GITHUB_CONFIG_KEY)) || {}; } catch (_) { return {}; }
+}
+function saveGithubConfig() {
+  const config = { repo: githubRepoEl.value.trim(), branch: githubBranchEl.value.trim() || "main", token: githubTokenEl.value.trim() };
+  localStorage.setItem(GITHUB_CONFIG_KEY, JSON.stringify(config));
+  return config;
+}
+function setGithubStatus(key, params = {}) { githubStatusEl.textContent = t(key, params); }
+function githubConfig() { return { repo: githubRepoEl.value.trim(), branch: githubBranchEl.value.trim() || "main", token: githubTokenEl.value.trim() }; }
+function githubApiUrl(repo, path = "") { return `https://api.github.com/repos/${repo}/contents/${path}`; }
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(binary);
+}
+async function saveStockToGithub(bytes, fileName) {
+  const config = githubConfig();
+  if (!config.repo || !config.token) return false;
+  setGithubStatus("githubUploading");
+  const path = `stock-history/${fileName}`;
+  const headers = { Authorization: `Bearer ${config.token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+  const url = githubApiUrl(config.repo, path);
+  const existing = await fetch(`${url}?ref=${encodeURIComponent(config.branch)}`, { headers });
+  const sha = existing.ok ? (await existing.json()).sha : undefined;
+  const response = await fetch(url, { method: "PUT", headers, body: JSON.stringify({ message: `Update ${fileName}`, content: bytesToBase64(bytes), branch: config.branch, ...(sha ? { sha } : {}) }) });
+  if (!response.ok) throw new Error(`GitHub HTTP ${response.status}`);
+  setGithubStatus("githubUploaded", { file: path });
+  return true;
+}
+async function uploadGeneratedStock(bytes, fileName) {
+  try { await saveStockToGithub(bytes, fileName); } catch (error) { setGithubStatus("historyFailed", { message: error.message || error }); console.error(error); }
+}
+function stockHistoryRows(bytes, date) {
+  const workbook = XLSX.read(bytes, { type: "array", cellDates: true });
+  const sheet = workbook.Sheets.stock || workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) return null;
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
+  const find = (row, names) => { const key = Object.keys(row).find((x) => names.includes(String(x).trim().toLowerCase())); return Number(key ? row[key] : 0) || 0; };
+  const transitKeys = rows.length ? Object.keys(rows[0]).filter((key) => /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(String(key).trim()) || /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(String(key).trim())) : [];
+  return { date, stock: rows.reduce((s, r) => s + find(r, ["stock", "inventory"]), 0), transit: rows.reduce((s, r) => s + transitKeys.reduce((n, key) => n + (Number(r[key]) || 0), 0), 0), allocated: rows.reduce((s, r) => s + find(r, ["to be allocated", "allocated"]), 0) };
+}
+async function loadStockHistory() {
+  const config = githubConfig();
+  if (!config.repo || !config.token) { setGithubStatus("githubMissing"); return; }
+  setGithubStatus("historyLoading");
+  try {
+    const headers = { Authorization: `Bearer ${config.token}`, Accept: "application/vnd.github+json" };
+    const response = await fetch(`${githubApiUrl(config.repo, "stock-history")}?ref=${encodeURIComponent(config.branch)}`, { headers });
+    if (!response.ok) throw new Error(`GitHub HTTP ${response.status}`);
+    const files = (await response.json()).filter((x) => x.type === "file" && /^Stock_\d{8}\.xlsx$/i.test(x.name)).sort((a, b) => a.name.localeCompare(b.name));
+    const rows = [];
+    for (const file of files) { const bytes = new Uint8Array(await (await fetch(file.download_url, { headers })).arrayBuffer()); const date = file.name.match(/(\d{4})(\d{2})(\d{2})/); const row = stockHistoryRows(bytes, `${date[1]}-${date[2]}-${date[3]}`); if (row) rows.push(row); }
+    historyPanelEl.style.display = "block";
+    if (!rows.length) { historyChartEl.innerHTML = `<div class="small-tip">${escapeHtml(t("historyNoData"))}</div>`; historyTableEl.innerHTML = ""; setGithubStatus("historyReady", { count: 0 }); return; }
+    if (historyChart) historyChart.dispose();
+    historyChartEl.innerHTML = "";
+    historyChart = echarts.init(historyChartEl); historyChart.setOption({ tooltip: { trigger: "axis" }, legend: { data: [t("historyStock"), t("historyTransit"), t("historyAllocated")] }, xAxis: { type: "category", data: rows.map((x) => x.date) }, yAxis: { type: "value" }, series: [{ name: t("historyStock"), type: "line", data: rows.map((x) => x.stock) }, { name: t("historyTransit"), type: "line", data: rows.map((x) => x.transit) }, { name: t("historyAllocated"), type: "line", data: rows.map((x) => x.allocated) }] });
+    historyTableEl.innerHTML = `<table><thead><tr><th>${escapeHtml(t("historyDate"))}</th><th>${escapeHtml(t("historyStock"))}</th><th>${escapeHtml(t("historyTransit"))}</th><th>${escapeHtml(t("historyAllocated"))}</th></tr></thead><tbody>${rows.map((x) => `<tr><td>${x.date}</td><td>${fmtNumber(x.stock)}</td><td>${fmtNumber(x.transit)}</td><td>${fmtNumber(x.allocated)}</td></tr>`).join("")}</tbody></table>`;
+    setGithubStatus("historyReady", { count: rows.length });
+  } catch (error) { setGithubStatus("historyFailed", { message: error.message || error }); }
+}
 
 const levelDefs = [
   { key: "WH", el: whFilterEl },
@@ -1543,12 +1618,13 @@ run(
     const objectUrl = URL.createObjectURL(blob);
 
     const now = new Date();
-    const fileName = `stock_output_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
+    const fileName = `Stock_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
 
     downloadLinkEl.href = objectUrl;
     downloadLinkEl.download = fileName;
     downloadLinkEl.textContent = t("download", { file: fileName });
     downloadLinkEl.style.display = "inline-block";
+    await uploadGeneratedStock(outputBytes, fileName);
 
     setStatus("generatedBuilding");
 
@@ -1619,11 +1695,12 @@ async function runJavascriptAnalysis() {
     });
     const objectUrl = URL.createObjectURL(blob);
     const now = new Date();
-    const fileName = `stock_output_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
+    const fileName = `Stock_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
     downloadLinkEl.href = objectUrl;
     downloadLinkEl.download = fileName;
     downloadLinkEl.textContent = t("download", { file: fileName });
     downloadLinkEl.style.display = "inline-block";
+    await uploadGeneratedStock(result.outputBytes, fileName);
 
     applyVisualizationPayload(result.visualization);
     initializeCascadeFilters();
@@ -1758,6 +1835,12 @@ if (lineModeEl) {
 
 runBtn.addEventListener("click", runAnalysis);
 resetBtn.addEventListener("click", resetForm);
+const savedGithub = loadGithubConfig();
+if (savedGithub.repo) githubRepoEl.value = savedGithub.repo;
+if (savedGithub.branch) githubBranchEl.value = savedGithub.branch;
+if (savedGithub.token) githubTokenEl.value = savedGithub.token;
+saveGithubBtn.addEventListener("click", () => { saveGithubConfig(); setGithubStatus("githubSaved"); });
+loadHistoryBtn.addEventListener("click", loadStockHistory);
 
 window.addEventListener("app-language-change", () => {
   statusEl.textContent = t(lastStatus.key, lastStatus.params);

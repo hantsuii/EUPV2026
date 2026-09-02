@@ -479,6 +479,19 @@
       <a id="downloadLink" class="download-link" style="display:none;" download data-i18n="downloadGenerated">下载生成的文件</a>
     </section>
 
+    <section class="panel">
+      <h2 data-i18n="githubTitle">GitHub 历史库存</h2>
+      <p class="small-tip" data-i18n="githubTip">生成结果会保存为 stock-history/Stock_YYYYMMDD.xlsx。同一天再次分析会覆盖当天文件。</p>
+      <div class="form-grid">
+        <div><label for="githubRepo" data-i18n="githubRepo">仓库（owner/repository）</label><input id="githubRepo" type="text" placeholder="owner/repository" /></div>
+        <div><label for="githubBranch" data-i18n="githubBranch">分支</label><input id="githubBranch" type="text" value="main" /></div>
+        <div><label for="githubToken" data-i18n="githubToken">GitHub Token</label><input id="githubToken" type="password" autocomplete="off" placeholder="ghp_..." /></div>
+      </div>
+      <div class="actions"><button id="saveGithubBtn" class="btn-secondary" type="button" data-i18n="saveGithub">保存配置</button><button id="loadHistoryBtn" class="btn-primary" type="button" data-i18n="loadHistory">加载历史库存</button></div>
+      <div id="githubStatus" class="small-tip"></div>
+      <div id="historyPanel" style="display:none; margin-top:14px;"><div id="historyChart" style="height:360px;"></div><div id="historyTable" class="table-wrap"></div></div>
+    </section>
+
     <section id="vizPanel" class="panel viz-panel" style="display:none;">
       <h2 data-i18n="step2">步骤 2：可用库存可视化</h2>
       <p class="tip" data-i18n="formulaTip">可用库存公式：库存 + 累计在途到货。按 CRD 计算的待分配数量会按月标记在图表上。</p>
