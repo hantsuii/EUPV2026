@@ -73,8 +73,12 @@ function availableModels(){
 function matchesModel(record,scope){const selected=modelFilters[scope];return selected===null||selected.has(modelKey(record));}
 function commitModelFilter(root){
   if(!root)return;
-  const boxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')],chosen=new Set(boxes.filter((x)=>x.checked).map((x)=>x.value));
-  modelFilters[root.dataset.scope]=!boxes.length||chosen.size===boxes.length?null:chosen;
+  const query=normalizeText(root.querySelector('.model-filter-search')?.value),allBoxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')];
+  // With a search term, the visible matches are the submitted filter. This prevents
+  // previously checked, non-matching models from leaking into the result.
+  const boxes=query?allBoxes.filter((x)=>!x.closest('.model-filter-option')?.hidden):allBoxes;
+  const chosen=new Set((query?boxes:boxes.filter((x)=>x.checked)).map((x)=>x.value));
+  modelFilters[root.dataset.scope]=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
 }
 function renderModelFilters(){
   const options=availableModels();
