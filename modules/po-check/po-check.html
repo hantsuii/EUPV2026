@@ -63,6 +63,7 @@
       <div class="form-grid">
         <div><label for="purchaseFile" data-i18n="purchaseFile">采购单详情（必选）</label><input id="purchaseFile" type="file" accept=".xlsx,.xlsm" /><p class="small-tip" data-i18n="purchaseTip">需要包含 purchase order head 和 purchase order line。</p></div>
         <div><label for="odpFile" data-i18n="odpFile">EUPV ODP MASTER（必选）</label><input id="odpFile" type="file" accept=".xlsx,.xlsm" /><p class="small-tip" data-i18n="odpTip">使用其中的 PO Check 表。</p></div>
+        <div><label for="warehouseFile" data-i18n="warehouseFile">Logical Warehouse List（可选）</label><input id="warehouseFile" type="file" accept=".xlsx,.xlsm" /><p class="small-tip" data-i18n="warehouseTip">未上传时自动使用模板中的仓库清单。</p></div>
       </div>
       <div class="actions"><button id="runBtn" class="btn-primary" data-i18n="run">开始核验</button><button id="resetBtn" class="btn-secondary" type="button" data-i18n="reset">重置</button></div>
     </section>
@@ -91,7 +92,7 @@
       <div class="rules">
         <article class="rule"><h3 data-i18n="prerequisiteTitle">核验范围</h3><ul><li data-i18n="prerequisite1">所有采购单 Status 和 Approval Status 均进入核验。</li><li data-i18n="prerequisite2">每个 PO 都执行类型、两组 ETA、TCL Reference、SKU 和数量核验。</li></ul></article>
         <article class="rule"><h3 data-i18n="etaRuleTitle">ETA 与输出</h3><ul><li data-i18n="approved1">按采购单号匹配 PO Check 的 SPTN-PVHK New Ark PO#。</li><li data-i18n="approved2">核对采购单 ETA、NewArk ETA PO、ETA for New Ark update。</li><li data-i18n="approved3">下载文件 PO Details 的 ETA 始终使用原始采购单值，建议 ETA 只在核验结果中展示。</li></ul></article>
-        <article class="rule"><h3 data-i18n="detailRuleTitle">明细核验</h3><ul><li data-i18n="approving1">核对采购类型映射，并显示 ODP 的 SKU 和 Model。</li><li data-i18n="approving2">从 Customer Po 与 X 列清洗 TCL Reference，并比较完整集合。</li><li data-i18n="approving3">按 PO + SKU 汇总 Customer Model / Qty，与 PO Check 汇总数量核对。</li></ul></article>
+        <article class="rule"><h3 data-i18n="detailRuleTitle">明细核验</h3><ul><li data-i18n="approving1">核对采购类型映射，并显示 ODP 的 SKU 和 Model。</li><li data-i18n="approving2">从 Customer Po 与 X 列清洗 TCL Reference，并比较完整集合。</li><li data-i18n="approving3">按 PO + SKU 汇总 Customer Model / Qty，与 PO Check 汇总数量核对。</li><li data-i18n="warehouseRule">Storage Space 通过 Virtual warehouse name / code 映射后，与 PO Check 的 New Ark WH 按 PO 匹配核对。</li></ul></article>
       </div>
     </section>
   </main>

@@ -53,6 +53,10 @@ Webhook 优先于邮件。若服务端尚未配置，主页会提供发送到管
 - 浏览器端默认运行 JavaScript 库存分析引擎；保留 `py/inventory_step1_to_stock.py` 作为 Python Legacy 回退
 - 输出并下载 `stock_output_YYYYMMDD.xlsx`
 
+### 自动保存 GitHub 历史
+
+库存分析生成文件后，会自动将 `Stock_YYYYMMDD.xlsx` 上传到仓库的 `Stcok History` 目录；同一天重复生成会更新当天文件。页面中的仓库已预填为 `hantsuii/EUPV2026`，首次使用时填写 GitHub Token 并点击“保存配置”。Token 需要目标仓库的 Contents 读写权限（Fine-grained token 只需授予该仓库）。未填写 Token 时仍可正常下载本地文件。
+
 仓库内附带：
 - 处理代码：`py/inventory_step1_to_stock.py`
 - 模板文件：`templates/stock_template.xlsx`

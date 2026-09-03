@@ -94,6 +94,8 @@ const DEFAULT_REPO_FILE = {
 };
 
 const GITHUB_CONFIG_KEY = "eupv2026_stock_github_v1";
+// Keep this spelling in sync with the existing directory in the repository.
+const GITHUB_HISTORY_DIR = "Stcok History";
 function loadGithubConfig() {
   try { return JSON.parse(localStorage.getItem(GITHUB_CONFIG_KEY)) || {}; } catch (_) { return {}; }
 }
@@ -104,7 +106,10 @@ function saveGithubConfig() {
 }
 function setGithubStatus(key, params = {}) { githubStatusEl.textContent = t(key, params); }
 function githubConfig() { return { repo: githubRepoEl.value.trim(), branch: githubBranchEl.value.trim() || "main", token: githubTokenEl.value.trim() }; }
-function githubApiUrl(repo, path = "") { return `https://api.github.com/repos/${repo}/contents/${path}`; }
+function githubApiUrl(repo, path = "") {
+  const encodedPath = path.split("/").map((part) => encodeURIComponent(part)).join("/");
+  return `https://api.github.com/repos/${repo}/contents/${encodedPath}`;
+}
 function bytesToBase64(bytes) {
   let binary = "";
   const chunk = 0x8000;
@@ -115,7 +120,7 @@ async function saveStockToGithub(bytes, fileName) {
   const config = githubConfig();
   if (!config.repo || !config.token) return false;
   setGithubStatus("githubUploading");
-  const path = `stock-history/${fileName}`;
+  const path = `${GITHUB_HISTORY_DIR}/${fileName}`;
   const headers = { Authorization: `Bearer ${config.token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
   const url = githubApiUrl(config.repo, path);
   const existing = await fetch(`${url}?ref=${encodeURIComponent(config.branch)}`, { headers });
@@ -126,7 +131,13 @@ async function saveStockToGithub(bytes, fileName) {
   return true;
 }
 async function uploadGeneratedStock(bytes, fileName) {
-  try { await saveStockToGithub(bytes, fileName); } catch (error) { setGithubStatus("historyFailed", { message: error.message || error }); console.error(error); }
+  try {
+    const uploaded = await saveStockToGithub(bytes, fileName);
+    if (!uploaded) setGithubStatus("githubMissing");
+  } catch (error) {
+    setGithubStatus("historyFailed", { message: error.message || error });
+    console.error(error);
+  }
 }
 function stockHistoryRows(bytes, date) {
   const workbook = XLSX.read(bytes, { type: "array", cellDates: true });
@@ -143,7 +154,7 @@ async function loadStockHistory() {
   setGithubStatus("historyLoading");
   try {
     const headers = { Authorization: `Bearer ${config.token}`, Accept: "application/vnd.github+json" };
-    const response = await fetch(`${githubApiUrl(config.repo, "stock-history")}?ref=${encodeURIComponent(config.branch)}`, { headers });
+    const response = await fetch(`${githubApiUrl(config.repo, GITHUB_HISTORY_DIR)}?ref=${encodeURIComponent(config.branch)}`, { headers });
     if (!response.ok) throw new Error(`GitHub HTTP ${response.status}`);
     const files = (await response.json()).filter((x) => x.type === "file" && /^Stock_\d{8}\.xlsx$/i.test(x.name)).sort((a, b) => a.name.localeCompare(b.name));
     const rows = [];
