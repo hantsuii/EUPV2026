@@ -3,7 +3,6 @@
 
   const purchaseInput = document.getElementById("purchaseFile");
   const odpInput = document.getElementById("odpFile");
-  const warehouseInput = document.getElementById("warehouseFile");
   const runBtn = document.getElementById("runBtn");
   const resetBtn = document.getElementById("resetBtn");
   const statusEl = document.getElementById("status");
@@ -72,6 +71,12 @@
     if (!left || !right) return false;
     const days = Math.abs((excelDate(left) - excelDate(right)) / 86400000);
     return Number.isFinite(days) && days <= 1;
+  }
+  function etaValuesWithinOneDay(values) {
+    const dates = values.filter(Boolean).map(excelDate);
+    if (dates.some((date) => Number.isNaN(date.valueOf()))) return false;
+    if (dates.length < 2) return true;
+    return (Math.max(...dates) - Math.min(...dates)) / 86400000 <= 1;
   }
   function numbers(value) { const n = Number(String(value ?? "").replace(/,/g, "")); return Number.isFinite(n) ? n : 0; }
   function setEqual(a, b) { return a.length === b.length && a.every((v) => b.includes(v)); }
@@ -189,7 +194,7 @@
       } else {
         typeResult = expectedTypes.length === 1 ? (text(row[headIndex.type]) === expectedTypes[0] ? "通过" : "采购类型不一致") : "需复核：多种 PO 类型";
         etaPoResult = isApproving ? "不适用" : etaPo.length === 1 ? (etaWithinOneDay(etaPo[0], poEta) ? "通过" : "NewArk ETA PO 不一致") : (etaPo.length ? "需复核：多条 NewArk ETA PO" : "NewArk ETA PO 缺失");
-        const etaUpdateIsNormal = etaUpdate.length === 1 && (etaWithinOneDay(etaUpdate[0], poEta) || (etaPo.length === 1 && etaWithinOneDay(etaUpdate[0], etaPo[0])));
+        const etaUpdateIsNormal = etaUpdate.length === 1 && etaValuesWithinOneDay([poEta, ...etaPo, etaUpdate[0]]);
         etaUpdateResult = etaUpdate.length === 1 ? (etaUpdateIsNormal ? "通过" : "ETA 更新不一致") : (etaUpdate.length ? "需复核：多条 ETA 更新" : "ETA 更新缺失");
         refResult = setEqual(sourceRefs, odpRefs) ? "通过" : "TCL Reference 不一致";
         const purchaseWarehouses = unique((linesByPo.get(po) || []).map((line) => {
@@ -304,13 +309,13 @@
     if (!purchaseInput.files[0] || !odpInput.files[0]) { setStatus("selectBothFiles"); return; }
     runBtn.disabled = true; downloadLink.style.display = "none"; setStatus("running");
     try {
-      const [purchaseWb, odpWb, warehouseWb] = await Promise.all([loadWorkbook(purchaseInput.files[0]), loadWorkbook(odpInput.files[0]), warehouseInput.files[0] ? loadWorkbook(warehouseInput.files[0]) : loadDefaultWarehouseWorkbook()]);
+      const [purchaseWb, odpWb, warehouseWb] = await Promise.all([loadWorkbook(purchaseInput.files[0]), loadWorkbook(odpInput.files[0]), loadDefaultWarehouseWorkbook()]);
       report = buildReport(purchaseWb, odpWb, warehouseWb); renderSummary(); renderResults(); resultsPanel.style.display = "block"; await downloadReport();
       setStatus("done", { checked:report.results.length, issues:report.results.filter((r)=>r.overall!=="通过").length });
     } catch (err) { console.error(err); setStatus("failed", { message:err?.message || err }); }
     finally { runBtn.disabled = false; }
   }
-  function reset() { purchaseInput.value = ""; odpInput.value = ""; warehouseInput.value = ""; report = null; currentPage = 1; resultsPanel.style.display = "none"; downloadLink.style.display = "none"; if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = null; setStatus("waiting"); }
+  function reset() { purchaseInput.value = ""; odpInput.value = ""; report = null; currentPage = 1; resultsPanel.style.display = "none"; downloadLink.style.display = "none"; if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = null; setStatus("waiting"); }
   runBtn.addEventListener("click", run); resetBtn.addEventListener("click", reset);
   scopeFilter.addEventListener("change", () => { currentPage = 1; renderResults(); });
   resultFilter.addEventListener("change", () => { currentPage = 1; renderResults(); });
