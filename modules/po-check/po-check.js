@@ -62,6 +62,11 @@
     const [year, month, day] = iso.split("-").map(Number);
     return new Date(year, month - 1, day);
   }
+  function etaWithinOneDay(left, right) {
+    if (!left || !right) return false;
+    const days = Math.abs((excelDate(left) - excelDate(right)) / 86400000);
+    return Number.isFinite(days) && days <= 1;
+  }
   function numbers(value) { const n = Number(String(value ?? "").replace(/,/g, "")); return Number.isFinite(n) ? n : 0; }
   function setEqual(a, b) { return a.length === b.length && a.every((v) => b.includes(v)); }
   function valuesLabel(values) { return values.length ? values.join(" | ") : "（空）"; }
@@ -143,6 +148,7 @@
 
       const odp = poCheckByPo.get(po) || [];
       const poEta = dateIso(row[headIndex.eta]);
+      const isApproving = normalize(approval) === "APPROVING";
       const odpTypes = unique(odp.map((r) => text(r[pcIndex.type])));
       const expectedTypes = unique(odpTypes.map((v) => TYPE_MAP[normalize(v)] || "需定义映射"));
       const etaPo = unique(odp.map((r) => dateIso(r[pcIndex.etaPo])));
@@ -160,10 +166,11 @@
         action = "需人工核对"; notes.push("采购单号未在 PO Check 找到。");
       } else {
         typeResult = expectedTypes.length === 1 ? (text(row[headIndex.type]) === expectedTypes[0] ? "通过" : "采购类型不一致") : "需复核：多种 PO 类型";
-        etaPoResult = etaPo.length === 1 ? (etaPo[0] === poEta ? "通过" : "NewArk ETA PO 不一致") : (etaPo.length ? "需复核：多条 NewArk ETA PO" : "NewArk ETA PO 缺失");
-        etaUpdateResult = etaUpdate.length === 1 ? (etaUpdate[0] === poEta ? "通过" : "ETA 更新不一致") : (etaUpdate.length ? "需复核：多条 ETA 更新" : "ETA 更新缺失");
+        etaPoResult = isApproving ? "不适用" : etaPo.length === 1 ? (etaWithinOneDay(etaPo[0], poEta) ? "通过" : "NewArk ETA PO 不一致") : (etaPo.length ? "需复核：多条 NewArk ETA PO" : "NewArk ETA PO 缺失");
+        const etaUpdateIsNormal = etaUpdate.length === 1 && (etaWithinOneDay(etaUpdate[0], poEta) || (etaPo.length === 1 && etaWithinOneDay(etaUpdate[0], etaPo[0])));
+        etaUpdateResult = etaUpdate.length === 1 ? (etaUpdateIsNormal ? "通过" : "ETA 更新不一致") : (etaUpdate.length ? "需复核：多条 ETA 更新" : "ETA 更新缺失");
         refResult = setEqual(sourceRefs, odpRefs) ? "通过" : "TCL Reference 不一致";
-        if (etaUpdate.length === 1 && etaUpdate[0] !== poEta) { suggestedEta = etaUpdate[0]; action = "建议更新 ETA"; }
+        if (etaUpdate.length === 1 && etaUpdateResult === "ETA 更新不一致") { suggestedEta = etaUpdate[0]; action = "建议更新 ETA"; }
         else if (etaUpdate.length > 1) action = "需人工选择 ETA";
         else action = etaUpdateResult === "通过" ? "无需更新 ETA" : "需人工核对";
         const purchaseSku = new Map(); const odpSku = new Map();
@@ -176,7 +183,8 @@
       const checks = [typeResult, etaPoResult, etaUpdateResult, refResult, skuResult];
       const overall = checks.every((v) => v === "通过" || v === "不适用") ? "通过" : checks.some((v) => v.includes("需复核") || v.includes("未在")) ? "需复核" : "有差异";
       const etaNeedsAdjustment = etaUpdateResult === "ETA 更新不一致" && overall === "有差异";
-      results.push({ po, approval, purchaseStatus, skus:valuesLabel(skus), models:valuesLabel(models), purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
+      const poSkuDetails = skuResults.filter((item) => item.po === po).map((item) => `${item.sku}: ${item.purchaseQty} / ${item.odpQty} (${displayValue(item.result)})`).join("\n");
+      results.push({ po, approval, purchaseStatus, skus:valuesLabel(skus), models:valuesLabel(models), purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, skuQtyDetail:poSkuDetails || "（空）", suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
       poOutputRows.push(makeOutputRow(row, originalEta));
     }
     return { results:sortedResults(results), skuResults, poOutputRows, sourceRows:headData.length };
@@ -202,10 +210,10 @@
     tableNoteEl.textContent = t("tableNote", { start:shownStart, end:shownEnd, filtered:rows.length, total:report.results.length, hidden:hiddenInStock });
     pageInfoEl.textContent = t("pageInfo", { page:currentPage, pages:totalPages });
     prevPageBtn.disabled = currentPage <= 1; nextPageBtn.disabled = currentPage >= totalPages;
-    const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colSku","skus"],["colModel","models"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colAction","action"]];
+    const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colSku","skus"],["colModel","models"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colSkuQtyDetail","skuQtyDetail"],["colAction","action"]];
     const body = pageRows.map((r) => {
       const cls = r.overall === "需复核" ? "row-review" : r.etaNeedsAdjustment ? "row-eta-diff" : r.overall === "有差异" ? "row-issue" : "";
-      return `<tr class="${cls}">${cols.map(([,key]) => `<td>${key === "overall" ? resultPill(r) : escapeHtml(displayValue(r[key]))}</td>`).join("")}</tr>`;
+      return `<tr class="${cls}">${cols.map(([,key]) => `<td class="${key === "skuQtyDetail" ? "multiline" : ""}">${key === "overall" ? resultPill(r) : escapeHtml(displayValue(r[key]))}</td>`).join("")}</tr>`;
     }).join("");
     resultTableEl.innerHTML = `<table><thead><tr>${cols.map(([key]) => `<th>${escapeHtml(t(key))}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
   }
@@ -213,7 +221,7 @@
     const firstHeaders = ["Purchase order Number","Purchase Type","TMS bill Number / voucher bill Number","Customer Po","Category","Estimated time of arrival","Status","Approval Status","Note"];
     const ordered = sortedResults(data.results);
     const summary = [["Metric","Value"],["Checked POs",data.results.length],["Approved",data.results.filter((r)=>normalize(r.approval)==="APPROVED").length],["Approving",data.results.filter((r)=>normalize(r.approval)==="APPROVING").length],["Other approval status",data.results.filter((r)=>!APPROVAL_VALUES.has(normalize(r.approval))).length],["Issues / Review",data.results.filter((r)=>r.overall!=="通过").length],["ETA adjustments",data.results.filter((r)=>r.etaNeedsAdjustment).length],["Check scope","All PO statuses; all checks enabled"],["PO Details ETA","Original purchase-order ETA"],["Type mapping","Internal → Internal"],["Type mapping","Offshore → Offshore purchase"],["Type mapping","ongoing B/L change → Internal"]];
-    const poRows = [["PO","Approval status","Overall result","Purchase Status","SKU","Model","Purchase Type","Expected Purchase Type","ODP PO Type","Purchase ETA","NewArk ETA PO","NewArk ETA PO check","ETA for New Ark update","Update ETA check","Customer Po TCL Ref","X column TCL Ref","PO Check TCL Ref","TCL Ref check","SKU / Qty check","Suggested ETA","ETA action","Notes"], ...ordered.map((r) => [r.po,r.approval,displayValue(r.overall),r.purchaseStatus,r.skus,r.models,r.purchaseType,r.expectedType,r.odpTypes,r.purchaseEta,r.etaPo,displayValue(r.etaPoResult),r.etaUpdate,displayValue(r.etaUpdateResult),r.customerRefs,r.xRefs,r.odpRefs,displayValue(r.refResult),displayValue(r.skuResult),r.suggestedEta,displayValue(r.action),r.notes])];
+    const poRows = [["PO","Approval status","Overall result","Purchase Status","SKU","Model","Purchase Type","Expected Purchase Type","ODP PO Type","Purchase ETA","NewArk ETA PO","NewArk ETA PO check","ETA for New Ark update","Update ETA check","Customer Po TCL Ref","X column TCL Ref","PO Check TCL Ref","TCL Ref check","SKU / Qty check","SKU / Qty detail","Suggested ETA","ETA action","Notes"], ...ordered.map((r) => [r.po,r.approval,displayValue(r.overall),r.purchaseStatus,r.skus,r.models,r.purchaseType,r.expectedType,r.odpTypes,r.purchaseEta,r.etaPo,displayValue(r.etaPoResult),r.etaUpdate,displayValue(r.etaUpdateResult),r.customerRefs,r.xRefs,r.odpRefs,displayValue(r.refResult),displayValue(r.skuResult),r.skuQtyDetail,r.suggestedEta,displayValue(r.action),r.notes])];
     const skuRows = [["PO","SKU","Purchase Qty","PO Check Qty","Result"], ...data.skuResults.map((r) => [r.po,r.sku,r.purchaseQty,r.odpQty,displayValue(r.result)])];
     return { "PO Details":[firstHeaders, ...data.poOutputRows], "PO Check Results":poRows, "SKU Qty Results":skuRows, "Summary":summary };
   }
