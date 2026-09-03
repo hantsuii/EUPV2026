@@ -67,6 +67,13 @@
     const [year, month, day] = iso.split("-").map(Number);
     return new Date(year, month - 1, day);
   }
+  function excelDateSerial(value) {
+    const iso = dateIso(value);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+    const [year, month, day] = iso.split("-").map(Number);
+    // Excel date serials are date-only values, so no browser or workbook timezone is involved.
+    return Math.round(Date.UTC(year, month - 1, day) / 86400000) + 25569;
+  }
   function etaWithinOneDay(left, right) {
     if (!left || !right) return false;
     const days = Math.abs((excelDate(left) - excelDate(right)) / 86400000);
@@ -280,7 +287,7 @@
       if (name === "PO Details") {
         ws.getColumn(6).numFmt = "yyyy-mm-dd";
         for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-          const iso = ws.getCell(rowNumber, 6).value; if (iso) ws.getCell(rowNumber, 6).value = excelDate(iso);
+          const iso = ws.getCell(rowNumber, 6).value; if (iso) ws.getCell(rowNumber, 6).value = excelDateSerial(iso);
           const po = text(ws.getCell(rowNumber, 1).value); const result = data.results.find((r) => r.po === po);
           if (result?.etaNeedsAdjustment) ws.getCell(rowNumber, 6).fill = etaFill;
         }
