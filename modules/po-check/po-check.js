@@ -3,6 +3,7 @@
 
   const purchaseInput = document.getElementById("purchaseFile");
   const odpInput = document.getElementById("odpFile");
+  const warehouseInput = document.getElementById("warehouseFile");
   const runBtn = document.getElementById("runBtn");
   const resetBtn = document.getElementById("resetBtn");
   const statusEl = document.getElementById("status");
@@ -46,6 +47,11 @@
     return XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:false, dateNF:"yyyy-mm-dd" });
   }
   async function loadWorkbook(file) { return XLSX.read(await file.arrayBuffer(), { type:"array", cellDates:true }); }
+  async function loadDefaultWarehouseWorkbook() {
+    const response = await fetch("../../templates/logical_warehouse_list.xlsx", { cache:"no-store" });
+    if (!response.ok) throw new Error(t("warehouseTemplateMissing", { status:response.status }));
+    return XLSX.read(await response.arrayBuffer(), { type:"array", cellDates:true });
+  }
   function headerIndex(headers, name) { return headers.findIndex((h) => normalize(h) === normalize(name)); }
   function dateIso(value) {
     const v = text(value);
@@ -100,7 +106,7 @@
       "ETA 更新不一致":"valueEtaUpdateMismatch", "需复核：多条 ETA 更新":"valueMultipleEtaUpdate", "ETA 更新缺失":"valueEtaUpdateMissing",
       "建议更新 ETA":"valueSuggestEta", "需人工选择 ETA":"valueChooseEta", "无需更新 ETA":"valueNoEtaUpdate", "核对后更新 ETA":"valueReviewThenEta",
       "采购类型不一致":"valueTypeMismatch", "需复核：多种 PO 类型":"valueMultipleTypes", "TCL Reference 不一致":"valueRefMismatch",
-      "采购单缺少 SKU":"valuePurchaseSkuMissing", "PO Check 缺少 SKU":"valueOdpSkuMissing", "数量不一致":"valueQtyMismatch", "（空）":"valueBlank"
+      "采购单缺少 SKU":"valuePurchaseSkuMissing", "PO Check 缺少 SKU":"valueOdpSkuMissing", "数量不一致":"valueQtyMismatch", "仓库映射缺失":"valueWarehouseMappingMissing", "仓库不一致":"valueWarehouseMismatch", "（空）":"valueBlank"
     };
     if (exact[value]) return t(exact[value]);
     const skuMatch = text(value).match(/^SKU\/数量有 (\d+) 项差异$/);
@@ -117,10 +123,26 @@
     const cls = row.overall === "通过" ? "ok" : row.overall === "需复核" ? "review" : row.etaNeedsAdjustment ? "eta" : "issue";
     return `<span class="pill ${cls}">${escapeHtml(displayValue(row.overall))}</span>`;
   }
-  function buildReport(purchaseWb, odpWb) {
+  function buildWarehouseMap(rows) {
+    if (rows.length < 2) throw new Error(t("warehouseNoData"));
+    const headers = rows[0];
+    const nameCol = headerIndex(headers, "Virtual warehouse name");
+    const codeCol = headerIndex(headers, "Virtual warehouse code");
+    if (nameCol < 0 || codeCol < 0) throw new Error(t("warehouseColumnsMissing"));
+    const map = new Map();
+    for (const row of rows.slice(1)) {
+      const name = text(row[nameCol]);
+      const code = text(row[codeCol]);
+      if (name) map.set(normalize(name), name);
+      if (code && name) map.set(normalize(code), name);
+    }
+    return map;
+  }
+  function buildReport(purchaseWb, odpWb, warehouseWb) {
     const headRows = getRows(purchaseWb, "purchase order head");
     const lineRows = getRows(purchaseWb, "purchase order line");
     const poCheckRows = getRows(odpWb, "PO Check");
+    const warehouseMap = buildWarehouseMap(getRows(warehouseWb, "Sheet1"));
     if (headRows.length < 2 || lineRows.length < 2 || poCheckRows.length < 2) throw new Error(t("noData"));
 
     const headHeaders = headRows[0]; const headData = headRows.slice(1).filter((r) => text(r[1]));
@@ -130,8 +152,8 @@
       po:headerIndex(headHeaders,"Purchase order Number"), type:headerIndex(headHeaders,"Purchase Type"), tms:headerIndex(headHeaders,"TMS bill Number / voucher bill Number"),
       customerPo:headerIndex(headHeaders,"Customer Po"), category:headerIndex(headHeaders,"Category"), eta:headerIndex(headHeaders,"Estimated time of arrival"), status:headerIndex(headHeaders,"Status")
     };
-    const lineIndex = { po:headerIndex(lineHeaders,"Purchase order Number"), sku:headerIndex(lineHeaders,"Customer Model"), qty:headerIndex(lineHeaders,"Qty") };
-    const pcIndex = { ref:headerIndex(pcHeaders,"TCL REFERENCE"), type:headerIndex(pcHeaders,"New Ark PO Type"), sku:headerIndex(pcHeaders,"New Ark SKU"), model:headerIndex(pcHeaders,"Model"), qty:headerIndex(pcHeaders,"QUANTITY"), po:headerIndex(pcHeaders,"SPTN-PVHK New Ark PO#"), etaPo:headerIndex(pcHeaders,"NewArk ETA PO"), etaUpdate:headerIndex(pcHeaders,"ETA for New Ark update") };
+    const lineIndex = { po:headerIndex(lineHeaders,"Purchase order Number"), sku:headerIndex(lineHeaders,"Customer Model"), qty:headerIndex(lineHeaders,"Qty"), storage:headerIndex(lineHeaders,"Storage Space") };
+    const pcIndex = { ref:headerIndex(pcHeaders,"TCL REFERENCE"), type:headerIndex(pcHeaders,"New Ark PO Type"), wh:headerIndex(pcHeaders,"New Ark WH"), sku:headerIndex(pcHeaders,"New Ark SKU"), model:headerIndex(pcHeaders,"Model"), qty:headerIndex(pcHeaders,"QUANTITY"), po:headerIndex(pcHeaders,"SPTN-PVHK New Ark PO#"), etaPo:headerIndex(pcHeaders,"NewArk ETA PO"), etaUpdate:headerIndex(pcHeaders,"ETA for New Ark update") };
     for (const [group, indexes] of Object.entries({ purchaseHead:headIndex, purchaseLine:lineIndex, poCheck:pcIndex })) if (Object.values(indexes).some((i) => i < 0)) throw new Error(t("missingColumns", { group:t(group) }));
     const approvalCol = chooseApprovalColumn(headData, headHeaders);
     const xCol = approvalCol + 1;
@@ -159,10 +181,10 @@
       const customerRefs = referencesFrom(row[headIndex.customerPo], odpRefs);
       const xRefs = referencesFrom(row[xCol], odpRefs);
       const sourceRefs = unique([...customerRefs, ...xRefs]).sort();
-      let typeResult = "不适用", etaPoResult = "不适用", etaUpdateResult = "不适用", refResult = "不适用", skuResult = "不适用", suggestedEta = "", action = "不适用";
+      let typeResult = "不适用", etaPoResult = "不适用", etaUpdateResult = "不适用", refResult = "不适用", skuResult = "不适用", warehouseResult = "不适用", suggestedEta = "", action = "不适用";
       const notes = [];
       if (!odp.length) {
-        typeResult = etaPoResult = etaUpdateResult = refResult = skuResult = "未在 PO Check 找到";
+        typeResult = etaPoResult = etaUpdateResult = refResult = skuResult = warehouseResult = "未在 PO Check 找到";
         action = "需人工核对"; notes.push("采购单号未在 PO Check 找到。");
       } else {
         typeResult = expectedTypes.length === 1 ? (text(row[headIndex.type]) === expectedTypes[0] ? "通过" : "采购类型不一致") : "需复核：多种 PO 类型";
@@ -170,6 +192,12 @@
         const etaUpdateIsNormal = etaUpdate.length === 1 && (etaWithinOneDay(etaUpdate[0], poEta) || (etaPo.length === 1 && etaWithinOneDay(etaUpdate[0], etaPo[0])));
         etaUpdateResult = etaUpdate.length === 1 ? (etaUpdateIsNormal ? "通过" : "ETA 更新不一致") : (etaUpdate.length ? "需复核：多条 ETA 更新" : "ETA 更新缺失");
         refResult = setEqual(sourceRefs, odpRefs) ? "通过" : "TCL Reference 不一致";
+        const purchaseWarehouses = unique((linesByPo.get(po) || []).map((line) => {
+          const storage = text(line[lineIndex.storage]);
+          return warehouseMap.get(normalize(storage)) || (storage ? `未映射：${storage}` : "");
+        })).sort();
+        const odpWarehouses = unique(odp.map((check) => text(check[pcIndex.wh]))).sort();
+        warehouseResult = purchaseWarehouses.length && !purchaseWarehouses.some((value) => value.startsWith("未映射：")) && odpWarehouses.length && setEqual(purchaseWarehouses.map(normalize), odpWarehouses.map(normalize)) ? "通过" : purchaseWarehouses.some((value) => value.startsWith("未映射：")) ? "仓库映射缺失" : "仓库不一致";
         if (etaUpdate.length === 1 && etaUpdateResult === "ETA 更新不一致") { suggestedEta = etaUpdate[0]; action = "建议更新 ETA"; }
         else if (etaUpdate.length > 1) action = "需人工选择 ETA";
         else action = etaUpdateResult === "通过" ? "无需更新 ETA" : "需人工核对";
@@ -180,11 +208,13 @@
         for (const sku of allSku) { const inPurchase = purchaseSku.has(sku), inOdp = odpSku.has(sku); const left = purchaseSku.get(sku) || 0, right = odpSku.get(sku) || 0; const result = !inPurchase ? "采购单缺少 SKU" : !inOdp ? "PO Check 缺少 SKU" : Math.abs(left-right) < 0.000001 ? "通过" : "数量不一致"; if (result !== "通过") skuIssues += 1; skuResults.push({ po, sku, purchaseQty:left, odpQty:right, result }); }
         skuResult = skuIssues ? `SKU/数量有 ${skuIssues} 项差异` : "通过";
       }
-      const checks = [typeResult, etaPoResult, etaUpdateResult, refResult, skuResult];
+      const checks = [typeResult, etaPoResult, etaUpdateResult, refResult, skuResult, warehouseResult];
       const overall = checks.every((v) => v === "通过" || v === "不适用") ? "通过" : checks.some((v) => v.includes("需复核") || v.includes("未在")) ? "需复核" : "有差异";
       const etaNeedsAdjustment = etaUpdateResult === "ETA 更新不一致" && overall === "有差异";
       const poSkuDetails = skuResults.filter((item) => item.po === po).map((item) => `${item.sku}: ${item.purchaseQty} / ${item.odpQty} (${displayValue(item.result)})`).join("\n");
-      results.push({ po, approval, purchaseStatus, skus:valuesLabel(skus), models:valuesLabel(models), purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, skuQtyDetail:poSkuDetails || "（空）", suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
+      const purchaseWarehouses = unique((linesByPo.get(po) || []).map((line) => warehouseMap.get(normalize(text(line[lineIndex.storage]))) || (text(line[lineIndex.storage]) ? `未映射：${text(line[lineIndex.storage])}` : ""))).sort();
+      const odpWarehouses = unique(odp.map((check) => text(check[pcIndex.wh]))).sort();
+      results.push({ po, approval, purchaseStatus, skus:valuesLabel(skus), models:valuesLabel(models), purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, skuQtyDetail:poSkuDetails || "（空）", purchaseWarehouses:valuesLabel(purchaseWarehouses), odpWarehouses:valuesLabel(odpWarehouses), warehouseResult, suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
       poOutputRows.push(makeOutputRow(row, originalEta));
     }
     return { results:sortedResults(results), skuResults, poOutputRows, sourceRows:headData.length };
@@ -210,7 +240,7 @@
     tableNoteEl.textContent = t("tableNote", { start:shownStart, end:shownEnd, filtered:rows.length, total:report.results.length, hidden:hiddenInStock });
     pageInfoEl.textContent = t("pageInfo", { page:currentPage, pages:totalPages });
     prevPageBtn.disabled = currentPage <= 1; nextPageBtn.disabled = currentPage >= totalPages;
-    const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colSku","skus"],["colModel","models"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colSkuQtyDetail","skuQtyDetail"],["colAction","action"]];
+    const cols = [["colPo","po"],["colApproval","approval"],["colOverall","overall"],["colPurchaseStatus","purchaseStatus"],["colSku","skus"],["colModel","models"],["colPurchaseType","purchaseType"],["colExpectedType","expectedType"],["colTypeCheck","typeResult"],["colPurchaseEta","purchaseEta"],["colNewArkEtaPo","etaPo"],["colNewArkEtaCheck","etaPoResult"],["colEtaUpdate","etaUpdate"],["colEtaUpdateCheck","etaUpdateResult"],["colCustomerRefs","customerRefs"],["colXRefs","xRefs"],["colOdpRefs","odpRefs"],["colRefCheck","refResult"],["colSkuCheck","skuResult"],["colSkuQtyDetail","skuQtyDetail"],["colPurchaseWarehouse","purchaseWarehouses"],["colOdpWarehouse","odpWarehouses"],["colWarehouseCheck","warehouseResult"],["colAction","action"]];
     const body = pageRows.map((r) => {
       const cls = r.overall === "需复核" ? "row-review" : r.etaNeedsAdjustment ? "row-eta-diff" : r.overall === "有差异" ? "row-issue" : "";
       return `<tr class="${cls}">${cols.map(([,key]) => `<td class="${key === "skuQtyDetail" ? "multiline" : ""}">${key === "overall" ? resultPill(r) : escapeHtml(displayValue(r[key]))}</td>`).join("")}</tr>`;
@@ -221,7 +251,7 @@
     const firstHeaders = ["Purchase order Number","Purchase Type","TMS bill Number / voucher bill Number","Customer Po","Category","Estimated time of arrival","Status","Approval Status","Note"];
     const ordered = sortedResults(data.results);
     const summary = [["Metric","Value"],["Checked POs",data.results.length],["Approved",data.results.filter((r)=>normalize(r.approval)==="APPROVED").length],["Approving",data.results.filter((r)=>normalize(r.approval)==="APPROVING").length],["Other approval status",data.results.filter((r)=>!APPROVAL_VALUES.has(normalize(r.approval))).length],["Issues / Review",data.results.filter((r)=>r.overall!=="通过").length],["ETA adjustments",data.results.filter((r)=>r.etaNeedsAdjustment).length],["Check scope","All PO statuses; all checks enabled"],["PO Details ETA","Original purchase-order ETA"],["Type mapping","Internal → Internal"],["Type mapping","Offshore → Offshore purchase"],["Type mapping","ongoing B/L change → Internal"]];
-    const poRows = [["PO","Approval status","Overall result","Purchase Status","SKU","Model","Purchase Type","Expected Purchase Type","ODP PO Type","Purchase ETA","NewArk ETA PO","NewArk ETA PO check","ETA for New Ark update","Update ETA check","Customer Po TCL Ref","X column TCL Ref","PO Check TCL Ref","TCL Ref check","SKU / Qty check","SKU / Qty detail","Suggested ETA","ETA action","Notes"], ...ordered.map((r) => [r.po,r.approval,displayValue(r.overall),r.purchaseStatus,r.skus,r.models,r.purchaseType,r.expectedType,r.odpTypes,r.purchaseEta,r.etaPo,displayValue(r.etaPoResult),r.etaUpdate,displayValue(r.etaUpdateResult),r.customerRefs,r.xRefs,r.odpRefs,displayValue(r.refResult),displayValue(r.skuResult),r.skuQtyDetail,r.suggestedEta,displayValue(r.action),r.notes])];
+    const poRows = [["PO","Approval status","Overall result","Purchase Status","SKU","Model","Purchase Type","Expected Purchase Type","ODP PO Type","Purchase ETA","NewArk ETA PO","NewArk ETA PO check","ETA for New Ark update","Update ETA check","Customer Po TCL Ref","X column TCL Ref","PO Check TCL Ref","TCL Ref check","SKU / Qty check","SKU / Qty detail","Purchase warehouse","PO Check New Ark WH","Warehouse check","Suggested ETA","ETA action","Notes"], ...ordered.map((r) => [r.po,r.approval,displayValue(r.overall),r.purchaseStatus,r.skus,r.models,r.purchaseType,r.expectedType,r.odpTypes,r.purchaseEta,r.etaPo,displayValue(r.etaPoResult),r.etaUpdate,displayValue(r.etaUpdateResult),r.customerRefs,r.xRefs,r.odpRefs,displayValue(r.refResult),displayValue(r.skuResult),r.skuQtyDetail,r.purchaseWarehouses,r.odpWarehouses,displayValue(r.warehouseResult),r.suggestedEta,displayValue(r.action),r.notes])];
     const skuRows = [["PO","SKU","Purchase Qty","PO Check Qty","Result"], ...data.skuResults.map((r) => [r.po,r.sku,r.purchaseQty,r.odpQty,displayValue(r.result)])];
     return { "PO Details":[firstHeaders, ...data.poOutputRows], "PO Check Results":poRows, "SKU Qty Results":skuRows, "Summary":summary };
   }
@@ -274,13 +304,13 @@
     if (!purchaseInput.files[0] || !odpInput.files[0]) { setStatus("selectBothFiles"); return; }
     runBtn.disabled = true; downloadLink.style.display = "none"; setStatus("running");
     try {
-      const [purchaseWb, odpWb] = await Promise.all([loadWorkbook(purchaseInput.files[0]), loadWorkbook(odpInput.files[0])]);
-      report = buildReport(purchaseWb, odpWb); renderSummary(); renderResults(); resultsPanel.style.display = "block"; await downloadReport();
+      const [purchaseWb, odpWb, warehouseWb] = await Promise.all([loadWorkbook(purchaseInput.files[0]), loadWorkbook(odpInput.files[0]), warehouseInput.files[0] ? loadWorkbook(warehouseInput.files[0]) : loadDefaultWarehouseWorkbook()]);
+      report = buildReport(purchaseWb, odpWb, warehouseWb); renderSummary(); renderResults(); resultsPanel.style.display = "block"; await downloadReport();
       setStatus("done", { checked:report.results.length, issues:report.results.filter((r)=>r.overall!=="通过").length });
     } catch (err) { console.error(err); setStatus("failed", { message:err?.message || err }); }
     finally { runBtn.disabled = false; }
   }
-  function reset() { purchaseInput.value = ""; odpInput.value = ""; report = null; currentPage = 1; resultsPanel.style.display = "none"; downloadLink.style.display = "none"; if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = null; setStatus("waiting"); }
+  function reset() { purchaseInput.value = ""; odpInput.value = ""; warehouseInput.value = ""; report = null; currentPage = 1; resultsPanel.style.display = "none"; downloadLink.style.display = "none"; if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = null; setStatus("waiting"); }
   runBtn.addEventListener("click", run); resetBtn.addEventListener("click", reset);
   scopeFilter.addEventListener("change", () => { currentPage = 1; renderResults(); });
   resultFilter.addEventListener("change", () => { currentPage = 1; renderResults(); });
