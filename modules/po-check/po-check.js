@@ -168,11 +168,10 @@
     for (const row of lineData) { const po = text(row[lineIndex.po]); if (!po) continue; if (!linesByPo.has(po)) linesByPo.set(po, []); linesByPo.get(po).push(row); }
 
     const results = []; const skuResults = []; const poOutputRows = [];
-    const makeOutputRow = (row, eta) => [text(row[headIndex.po]), text(row[headIndex.type]), text(row[headIndex.tms]), text(row[headIndex.customerPo]), text(row[headIndex.category]), dateIso(eta), text(row[headIndex.status]), text(row[approvalCol]), text(row[xCol])];
+    // PO Details is a purchase-order export. Its ETA must never be replaced by ODP data.
+    const makeOutputRow = (row) => [text(row[headIndex.po]), text(row[headIndex.type]), text(row[headIndex.tms]), text(row[headIndex.customerPo]), text(row[headIndex.category]), dateIso(row[headIndex.eta]), text(row[headIndex.status]), text(row[approvalCol]), text(row[xCol])];
     for (const row of headData) {
       const po = text(row[headIndex.po]); const approval = text(row[approvalCol]); const purchaseStatus = text(row[headIndex.status]);
-      const originalEta = dateIso(row[headIndex.eta]);
-
       const odp = poCheckByPo.get(po) || [];
       const poEta = dateIso(row[headIndex.eta]);
       const isApproving = normalize(approval) === "APPROVING";
@@ -220,7 +219,7 @@
       const purchaseWarehouses = unique((linesByPo.get(po) || []).map((line) => warehouseMap.get(normalize(text(line[lineIndex.storage]))) || (text(line[lineIndex.storage]) ? `未映射：${text(line[lineIndex.storage])}` : ""))).sort();
       const odpWarehouses = unique(odp.map((check) => text(check[pcIndex.wh]))).sort();
       results.push({ po, approval, purchaseStatus, skus:valuesLabel(skus), models:valuesLabel(models), purchaseType:text(row[headIndex.type]), expectedType:valuesLabel(expectedTypes), odpTypes:valuesLabel(odpTypes), purchaseEta:poEta, etaPo:valuesLabel(etaPo), etaUpdate:valuesLabel(etaUpdate), typeResult, etaPoResult, etaUpdateResult, customerRefs:valuesLabel(customerRefs), xRefs:valuesLabel(xRefs), odpRefs:valuesLabel(odpRefs), refResult, skuResult, skuQtyDetail:poSkuDetails || "（空）", purchaseWarehouses:valuesLabel(purchaseWarehouses), odpWarehouses:valuesLabel(odpWarehouses), warehouseResult, suggestedEta, action, overall, etaNeedsAdjustment, notes:notes.join(" ") });
-      poOutputRows.push(makeOutputRow(row, originalEta));
+      poOutputRows.push(makeOutputRow(row));
     }
     return { results:sortedResults(results), skuResults, poOutputRows, sourceRows:headData.length };
   }
