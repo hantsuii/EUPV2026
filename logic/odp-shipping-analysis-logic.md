@@ -56,3 +56,12 @@
 - 到港延迟不超过7天：`ATA - ETA On S/O <= 7`。
 - 最新 ETA 准确率：`ABS(ATA - ETA Update) <= 7`。
 - 展示实际运输周期的中位数和 P90。
+
+## POPV 合并检查
+
+- 仅检查当前 `PV SUPPLY DATA` 工作表。
+- `POPV` 列优先匹配名为 `POPV` 的表头；旧版文件没有该表头时，使用 `SPTN-PVHK New Ark PO#`。
+- 先筛选 POPV 为空且 `MBL/HBL#` 有值的行，再拉出 `MBL/HBL#` 完全相同且至少出现两次的组。
+- 组内逐项比较 `New Ark SKU`、`Model`、`B/L Consignee`、`POL`、`PORT DESTINATION`、`TCL REFERENCE`、`QUANTITY`。文本比较仅忽略首尾空格，大小写和内容差异均会提示；Quantity 按数值比较。
+- 所有比较字段一致时标记“可合并数量”，并展示组内 Quantity 合计；任一字段不一致时标记“请核对差异”并列出具体字段。
+- 页面保留每个重复组的全部来源行，并显示源表行号，便于回查。
