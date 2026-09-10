@@ -13,7 +13,8 @@ let hasLoadedWorkbook = false;
 let mergeReview = { blankPopvRows: 0, groups: [], missingHeaders: [] };
 let mappings = loadMappings();
 const modelFilters = { order: null, departure: null, arrival: null };
-const MERGE_COMPARE_FIELDS = ["New Ark SKU", "Model", "B/L Consignee", "POL", "PORT DESTINATION", "TCL REFERENCE", "QUANTITY"];
+const MERGE_COMPARE_FIELDS = ["New Ark SKU", "Model", "B/L Consignee", "POL", "PORT DESTINATION"];
+const MERGE_DISPLAY_FIELDS = [...MERGE_COMPARE_FIELDS, "TCL REFERENCE", "QUANTITY"];
 
 function t(key, params = {}) { return window.appI18n?.text(key, params) ?? key; }
 function copyDefaults() { return (window.DEFAULT_PORT_MAPPINGS || []).map((x) => ({ ...x })); }
@@ -122,13 +123,13 @@ function parseMergeReview(workbook){
   const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
   const headers=(grid[0]||[]).map(headerName),index=Object.fromEntries(headers.map((h,i)=>[h,i]).filter(([h])=>h));
   const popvField=index.POPV!=null?"POPV":index["SPTN-PVHK New Ark PO#"]!=null?"SPTN-PVHK New Ark PO#":null;
-  const required=["MBL/HBL#",...MERGE_COMPARE_FIELDS],missingHeaders=[...(popvField?[]:["POPV / SPTN-PVHK New Ark PO#"]),...required.filter((field)=>index[field]==null)];
+  const required=["MBL/HBL#",...MERGE_DISPLAY_FIELDS],missingHeaders=[...(popvField?[]:["POPV / SPTN-PVHK New Ark PO#"]),...required.filter((field)=>index[field]==null)];
   if(missingHeaders.length)return{blankPopvRows:0,groups:[],missingHeaders};
   const candidates=[];
   grid.slice(1).forEach((row,offset)=>{
     if(clean(row[index[popvField]])!=null)return;
     const bill=clean(row[index["MBL/HBL#"]]);
-    candidates.push({sourceRow:offset+2,popv:row[index[popvField]],bill,...Object.fromEntries(MERGE_COMPARE_FIELDS.map((field)=>[field,row[index[field]]]))});
+    candidates.push({sourceRow:offset+2,popv:row[index[popvField]],bill,...Object.fromEntries(MERGE_DISPLAY_FIELDS.map((field)=>[field,row[index[field]]]))});
   });
   const grouped=new Map();
   candidates.forEach((row)=>{
@@ -217,11 +218,11 @@ function renderMergeReview(){
   byId("mergeableKpi").textContent=fmtNumber(mergeable);
   byId("mergeWarningKpi").textContent=fmtNumber(warnings);
   byId("mergeReviewMessage").textContent=mergeReview.missingHeaders.length?t("mergeMissingHeaders",{headers:mergeReview.missingHeaders.join(", ")}):t("mergeReviewSummary",{groups:groups.length,rows:groups.reduce((sum,group)=>sum+group.rows.length,0)});
-  const headers=[t("hMergeAdvice"),t("hDifferences"),t("hGroupRows"),"POPV","MBL/HBL#",...MERGE_COMPARE_FIELDS,t("hMergedQuantity"),t("hSourceRow")];
+  const headers=[t("hMergeAdvice"),t("hDifferences"),t("hGroupRows"),"POPV","MBL/HBL#",...MERGE_DISPLAY_FIELDS,t("hMergedQuantity"),t("hSourceRow")];
   const head=`<thead><tr>${headers.map((header)=>`<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>`;
   const body=groups.length?groups.flatMap((group)=>group.rows.map((row)=>{
     const advice=group.mergeable?t("mergeQuantity"):t("reviewDifferences"),differences=group.differingFields.length?group.differingFields.join(", "):t("none"),total=group.mergeable&&group.quantityTotal!=null?fmtNumber(group.quantityTotal):"—";
-    return`<tr class="${group.mergeable?"merge-ready":"merge-warning"}"><td><span class="merge-badge ${group.mergeable?"ready":"review"}">${escapeHtml(advice)}</span></td><td>${escapeHtml(differences)}</td><td>${group.rows.length}</td><td>${escapeHtml(row.popv)}</td><td>${escapeHtml(row.bill)}</td>${MERGE_COMPARE_FIELDS.map((field)=>`<td>${field==="QUANTITY"&&toNumber(row[field])!=null?escapeHtml(fmtNumber(toNumber(row[field]))):escapeHtml(row[field])}</td>`).join("")}<td>${escapeHtml(total)}</td><td>${row.sourceRow}</td></tr>`;
+    return`<tr class="${group.mergeable?"merge-ready":"merge-warning"}"><td><span class="merge-badge ${group.mergeable?"ready":"review"}">${escapeHtml(advice)}</span></td><td>${escapeHtml(differences)}</td><td>${group.rows.length}</td><td>${escapeHtml(row.popv)}</td><td>${escapeHtml(row.bill)}</td>${MERGE_DISPLAY_FIELDS.map((field)=>`<td>${field==="QUANTITY"&&toNumber(row[field])!=null?escapeHtml(fmtNumber(toNumber(row[field]))):escapeHtml(row[field])}</td>`).join("")}<td>${escapeHtml(total)}</td><td>${row.sourceRow}</td></tr>`;
   } )).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;
   byId("mergeReviewTable").innerHTML=head+`<tbody>${body}</tbody>`;
 }
