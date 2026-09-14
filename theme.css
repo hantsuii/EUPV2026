@@ -75,6 +75,7 @@ body.light-ui .hero {
 .hero h1::before { display: inline-grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 13px; background: rgba(255,255,255,.14); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); font-size: 22px; }
 body[data-page="home"] .hero h1::before { content: "◇"; }
 body[data-page="sales"] .hero h1::before { content: "↗"; }
+body[data-page="forecast"] .hero h1::before { content: "◎"; }
 body[data-page="stock"] .hero h1::before { content: "▦"; }
 body[data-page="shipment"] .hero h1::before { content: "⇄"; }
 body[data-page="weekly"] .hero h1::before { content: "▤"; }

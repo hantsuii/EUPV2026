@@ -9,6 +9,12 @@
                         "badge":  "Interactive"
                     },
                     {
+                        "name":  "Sales Forecast Accuracy",
+                        "desc":  "Compare M+1, M+3, M+6 and cumulative forecasts with completed-month actuals.",
+                        "url":  "./modules/forecast/forecast-analysis.html",
+                        "badge":  "Interactive"
+                    },
+                    {
                         "name":  "Available Stock Analysis",
                         "desc":  "Upload source files and generate a downloadable stock workbook.",
                         "url":  "./modules/stock/available-stock-analysis.html",

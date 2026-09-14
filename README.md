@@ -78,3 +78,15 @@ Webhook 优先于邮件。若服务端尚未配置，主页会提供发送到管
 - 可下载与 Assumption ATP 列结构兼容的 P90 预测表
 - 提供航次级准时发货、到港延误、ETA 准确率和运输周期绩效
 - 提供可维护的港口标准名称映射，并支持 JSON 导入、导出
+
+## 销售预测分析模块
+
+新增页面：`modules/forecast/forecast-analysis.html`
+
+- 上传包含 `Data` 工作表的 FCST KPI `.xlsx` 或 `.xlsm` 文件并在浏览器本地分析
+- 将 Series 所在月份定义为 M+1，支持 M+1、M+3、M+6、M+1～M+3 和 M+1～M+6
+- 官方口径中，M+1 与 M+1～M+3 使用 MW，其余周期使用 MW Weighted
+- 仅评价已经完整结束的月份，并分别展示 WAPE、预测准确率、Bias 和 ±20% 命中率
+- 默认比较 PV、ESS、HP 的所有地区总计，可按 Sales Region 下钻
+- 对比 MW 与 MW Weighted 的 WAPE，显示样本数、缺失匹配及相同维度记录检查
+- 支持下载当前筛选条件下的分析明细 CSV

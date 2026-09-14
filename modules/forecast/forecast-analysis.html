@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN" data-i18n-title-key="pageTitle">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Sales forecast accuracy analysis for PV, ESS and HP" />
+  <title>销售预测分析</title>
+  <link rel="stylesheet" href="../../style.css" />
+  <link rel="stylesheet" href="../../theme.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body[data-page="forecast"] .hero h1::before { content: "◎"; }
+    .tool-wrap { max-width: 1460px; }
+    .hero .lang-switch { position: absolute; top: 18px; right: 22px; }
+    .panel { margin-bottom: 16px; }
+    .controls { display: grid; grid-template-columns: minmax(280px, 1.7fr) repeat(4, minmax(145px, .8fr)); gap: 12px; align-items: end; }
+    .field label { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 750; color: #496579; }
+    .field input, .field select { width: 100%; min-height: 42px; padding: 9px 10px; }
+    .field.actions-field { display: flex; gap: 8px; }
+    .field.actions-field button { flex: 1; min-height: 42px; }
+    .method-note { margin: 10px 0 0; color: #607889; font-size: 12px; line-height: 1.55; }
+    .dashboard { display: none; }
+    .dashboard.ready { display: block; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(145px, 1fr)); gap: 10px; }
+    .kpi-card { min-height: 112px; padding: 14px; border: 1px solid #d9e4eb; background: #fff; }
+    .kpi-name { color: #607889; font-size: 12px; }
+    .kpi-value { margin-top: 7px; color: #173a50; font-size: 25px; font-weight: 760; line-height: 1.2; }
+    .kpi-detail { margin-top: 7px; color: #728796; font-size: 11px; }
+    .positive { color: #a4531a; }
+    .negative { color: #177765; }
+    .section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 10px; }
+    .section-head h2 { margin-bottom: 0; }
+    .section-head p { margin: 0; color: #6b8190; font-size: 12px; text-align: right; }
+    .chart-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 12px; }
+    .chart-box { min-height: 360px; padding: 8px; border: 1px solid #dbe5ee; background: #fff; }
+    .chart { width: 100%; height: 350px; }
+    .table-wrap { overflow: auto; max-height: 480px; border: 1px solid #dbe5ee; background: #fff; }
+    table { width: 100%; border-collapse: collapse; min-width: 820px; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #e5edf2; text-align: right; white-space: nowrap; font-size: 12px; }
+    th { position: sticky; top: 0; z-index: 1; color: #29495d; background: #edf4f7; }
+    th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+    tbody tr[data-region] { cursor: pointer; }
+    tbody tr[data-region]:hover td { background: #eaf5f2; }
+    tbody tr.selected td { background: #e2f2ee; font-weight: 700; }
+    .metric-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #e6f2f6; color: #24576d; }
+    .quality-grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 10px; }
+    .quality-item { padding: 12px; border: 1px solid #dce7ed; border-radius: 12px; background: #f8fbfc; }
+    .quality-item span { display: block; color: #667d8c; font-size: 11px; }
+    .quality-item strong { display: block; margin-top: 5px; color: #203f52; font-size: 20px; }
+    .warning-note { margin-top: 10px; padding: 10px 12px; border-left: 4px solid #d69442; border-radius: 8px; background: #fff7eb; color: #725024; font-size: 12px; }
+    .empty-state { padding: 34px; text-align: center; color: #718695; }
+    @media (max-width: 1120px) { .controls { grid-template-columns: repeat(2, minmax(220px, 1fr)); } .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 800px) { .hero .lang-switch { position: static; margin-bottom: 10px; } .chart-grid { grid-template-columns: 1fr; } .quality-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .controls, .kpi-grid, .quality-grid { grid-template-columns: 1fr; } .tool-wrap { padding: 12px; } }
+  </style>
+</head>
+<body class="light-ui" data-page="forecast">
+  <main class="tool-wrap">
+    <header class="hero">
+      <div class="lang-switch"><button class="lang-btn" type="button" data-lang="zh">中文</button><button class="lang-btn" type="button" data-lang="en">EN</button></div>
+      <a class="btn-link" href="../../index.html" data-i18n="backHome">返回主页</a>
+      <h1 data-i18n="pageTitle">销售预测分析</h1>
+      <p data-i18n="pageSubtitle">比较月初预测与已结束月份的实际销量，识别预测偏差、时间错位和权重效果。</p>
+    </header>
+
+    <section class="panel">
+      <div class="section-head"><h2 data-i18n="sourceTitle">读取预测文件</h2><p data-i18n="sourcePrivacy">文件仅在当前浏览器中处理。</p></div>
+      <div class="controls">
+        <div class="field"><label for="forecastFile" data-i18n="fileLabel">FCST KPI 工作簿</label><input id="forecastFile" type="file" accept=".xlsx,.xlsm,.xls" /></div>
+        <div class="field"><label for="categorySel" data-i18n="categoryLabel">产品类别</label><select id="categorySel" disabled></select></div>
+        <div class="field"><label for="regionSel" data-i18n="regionLabel">销售地区</label><select id="regionSel" disabled></select></div>
+        <div class="field"><label for="horizonSel" data-i18n="horizonLabel">预测周期</label><select id="horizonSel" disabled></select></div>
+        <div class="field"><label for="basisSel" data-i18n="basisLabel">预测口径</label><select id="basisSel" disabled></select></div>
+      </div>
+      <div class="actions"><button id="runBtn" class="btn-primary" type="button" data-i18n="runButton">读取并分析</button><button id="exportBtn" class="btn-secondary" type="button" data-i18n="exportButton" disabled>下载分析明细</button></div>
+      <div id="status" class="status" role="status" aria-live="polite" data-i18n="statusInitial">请选择包含 Data 工作表的 FCST KPI 文件。</div>
+      <p class="method-note" data-i18n="methodNote">官方口径：M+1及M+1～M+3使用MW；M+3、M+6及M+1～M+6使用MW Weighted。只评价已完整结束月份。</p>
+    </section>
+
+    <div id="dashboard" class="dashboard">
+      <section class="panel">
+        <div class="section-head"><h2 data-i18n="categoryOverviewTitle">产品类别总览</h2><p id="categoryOverviewNote"></p></div>
+        <div class="table-wrap"><table id="categoryTable"></table></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><h2 data-i18n="selectedSummaryTitle">当前筛选结果</h2><p id="scopeNote"></p></div>
+        <div id="kpiGrid" class="kpi-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="chart-grid">
+          <div class="chart-box"><div id="trendChart" class="chart"></div></div>
+          <div class="chart-box"><div id="horizonChart" class="chart"></div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><h2 data-i18n="weightTitle">MW 与 MW Weighted 效果</h2><p data-i18n="weightNote">在相同样本上比较 WAPE，数值越低越好。</p></div>
+        <div id="weightChart" class="chart"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><h2 data-i18n="regionTitle">Sales Region 对比</h2><p data-i18n="regionNote">点击地区行可切换到该地区的详细结果。</p></div>
+        <div class="chart-grid">
+          <div class="chart-box"><div id="regionChart" class="chart"></div></div>
+          <div class="table-wrap"><table id="regionTable"></table></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><h2 data-i18n="detailTitle">月份与预测版本明细</h2><p id="detailNote"></p></div>
+        <div class="table-wrap"><table id="detailTable"></table></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><h2 data-i18n="qualityTitle">数据检查</h2><p data-i18n="qualityNote">重复维度记录参与求和，不会自动删除。</p></div>
+        <div id="qualityGrid" class="quality-grid"></div>
+        <div id="qualityWarning" class="warning-note"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="../../module-i18n.js"></script>
+  <script src="./forecast-core.js"></script>
+  <script src="./forecast-analysis.js"></script>
+</body>
+</html>
