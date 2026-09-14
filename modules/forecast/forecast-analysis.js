@@ -68,6 +68,11 @@ window.PAGE_I18N = {
     horizonTitle: "各预测周期准确率",
     horizonAccuracy: "准确率",
     horizonBias: "Bias",
+    accuracyTrendSectionTitle: "月度预测准确率趋势",
+    accuracyTrendNote: "按实际销售月份对齐 M+1、M+3、M+6，观察预测质量是否改善。",
+    accuracyTrendTitle: "M+1、M+3、M+6 单月准确率",
+    actualMonth: "实际销售月份",
+    seriesLabel: "预测 Series",
     weightChartTitle: "权重调整前后 WAPE",
     mwWape: "MW WAPE",
     weightedWape: "MW Weighted WAPE",
@@ -158,6 +163,11 @@ window.PAGE_I18N = {
     horizonTitle: "Accuracy by forecast horizon",
     horizonAccuracy: "Accuracy",
     horizonBias: "Bias",
+    accuracyTrendSectionTitle: "Monthly forecast accuracy trend",
+    accuracyTrendNote: "Align M+1, M+3 and M+6 by actual sales month to see whether forecast quality is improving.",
+    accuracyTrendTitle: "Monthly accuracy for M+1, M+3 and M+6",
+    actualMonth: "Actual sales month",
+    seriesLabel: "Forecast Series",
     weightChartTitle: "WAPE before and after weighting",
     mwWape: "MW WAPE",
     weightedWape: "MW Weighted WAPE",
@@ -349,6 +359,34 @@ function renderHorizonChart() {
   ], { title: t("horizonTitle"), yaxis: { title: "%", range: [0, 105], gridcolor: "#e5edf2" }, yaxis2: { title: t("bias"), overlaying: "y", side: "right", ticksuffix: "%", zeroline: true, zerolinecolor: "#8ca0ae" }, margin: { l: 56, r: 58, t: 54, b: 64 } });
 }
 
+function renderAccuracyTrend() {
+  const horizonIds = ["M1", "M3", "M6"];
+  const colors = { M1: "#198d80", M3: "#3278b8", M6: "#8a67b4" };
+  const results = horizonIds.map((id) => ({ id, result: Core.analyze(normalizedRows, analysisOptions({ horizonId: id })) }));
+  const actualMonths = [...new Set(results.flatMap(({ result }) => result.samples.filter((row) => row.ape != null).map((row) => row.periodStart)))].sort();
+  const traces = results.map(({ id, result }) => {
+    const usable = result.samples.filter((row) => row.ape != null);
+    return {
+      x: usable.map((row) => row.periodStart),
+      y: usable.map((row) => Math.max(0, 1 - row.ape) * 100),
+      type: "scatter",
+      mode: "lines+markers",
+      name: horizonName(id),
+      line: { color: colors[id], width: 3 },
+      marker: { size: 8 },
+      connectgaps: false,
+      customdata: usable.map((row) => [row.series, row.actual, row.forecast, row.ape * 100, basisName(row.basis, id)]),
+      hovertemplate: `${t("actualMonth")} %{x}<br>${t("seriesLabel")} %{customdata[0]}<br>Actual %{customdata[1]:.1f} MW<br>Forecast %{customdata[2]:.1f} MW<br>${t("absolutePctError")} %{customdata[3]:.1f}%<br>${t("basis")} %{customdata[4]}<extra>${horizonName(id)}</extra>`,
+    };
+  });
+  plot("accuracyTrendChart", traces, {
+    title: t("accuracyTrendTitle"),
+    xaxis: { title: t("actualMonth"), gridcolor: "#e5edf2", type: "category", categoryorder: "array", categoryarray: actualMonths },
+    yaxis: { title: t("accuracy"), ticksuffix: "%", range: [0, 105], gridcolor: "#e5edf2" },
+    hovermode: "x unified",
+  });
+}
+
 function renderWeightChart() {
   const ids = Object.keys(Core.HORIZONS);
   const raw = ids.map((id) => Core.analyze(normalizedRows, analysisOptions({ horizonId: id, basisMode: "mw" })).summary.wape);
@@ -410,6 +448,7 @@ function renderAll() {
   renderKpis(activeAnalysis);
   renderTrend(activeAnalysis);
   renderHorizonChart();
+  renderAccuracyTrend();
   renderWeightChart();
   renderRegions();
   renderDetail(activeAnalysis);
