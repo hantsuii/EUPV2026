@@ -107,7 +107,7 @@ function normalizeRows(rawRows) {
     const tcl = String(row["TCL Report Product"] || "").trim().toUpperCase(), mid = String(row["Product Mid Category"] || "").trim().toUpperCase();
     const isPV = category === "PV", isESS = category === "ESS";
     const essQtyEligible = isESS && hasValue(row["Unit Price * Qty"]) && n(row["Unit Price * Qty"]) !== 0 && (mid === "HYBRID INVERTER" || ["ENERGY+_KIT GEN1", "ENERGY+_KIT", "TCL"].includes(tcl));
-    const customer = String(rowValue(row, ["Customer Name", "Customer", "Sold-to Party Name", "Sold To Party", "Account Name", "Client", "Distributor"], "Unknown Customer")).trim() || "Unknown Customer";
+    const customer = String(rowValue(row, ["Customer Name Level6", "Customer Name", "Customer", "Sold-to Party Name", "Sold To Party", "Account Name", "Client", "Distributor"], "Unknown Customer")).trim() || "Unknown Customer";
     const country = String(rowValue(row, ["Country", "Market", "Ship-to Country", "Ship To Country", "Customer Country"], "Unknown")).trim() || "Unknown";
     const orderId = String(rowValue(row, ["Sales Order", "Sales Order No", "Order Number", "Order No", "Order ID", "TCL Reference", "PO Number"], `ROW-${rowIndex + 1}`)).trim();
     const orderDate = parseExcelDate(rowValue(row, ["Order Date", "Sales Order Date", "PO Date", "Created Date"], `${month}-01`));
