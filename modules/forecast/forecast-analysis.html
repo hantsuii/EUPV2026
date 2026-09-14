@@ -14,7 +14,10 @@
     .tool-wrap { max-width: 1460px; }
     .hero .lang-switch { position: absolute; top: 18px; right: 22px; }
     .panel { margin-bottom: 16px; }
-    .controls { display: grid; grid-template-columns: minmax(280px, 1.7fr) repeat(4, minmax(145px, .8fr)); gap: 12px; align-items: end; }
+    .controls { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+    .source-file { max-width: 560px; }
+    .result-controls { margin-bottom: 14px; }
+    .section-controls { display: grid; grid-template-columns: repeat(3, minmax(170px, 1fr)); gap: 12px; align-items: end; max-width: 760px; margin: 0 0 12px; }
     .field label { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 750; color: #496579; }
     .field input, .field select { width: 100%; min-height: 42px; padding: 9px 10px; }
     .field.actions-field { display: flex; gap: 8px; }
@@ -55,9 +58,9 @@
     .quality-item strong { display: block; margin-top: 5px; color: #203f52; font-size: 20px; }
     .warning-note { margin-top: 10px; padding: 10px 12px; border-left: 4px solid #d69442; border-radius: 8px; background: #fff7eb; color: #725024; font-size: 12px; }
     .empty-state { padding: 34px; text-align: center; color: #718695; }
-    @media (max-width: 1120px) { .controls, .trend-controls { grid-template-columns: repeat(2, minmax(220px, 1fr)); } .curve-picker { grid-column: 1 / -1; } .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 1120px) { .controls, .trend-controls, .section-controls { grid-template-columns: repeat(2, minmax(220px, 1fr)); } .curve-picker { grid-column: 1 / -1; } .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 800px) { .hero .lang-switch { position: static; margin-bottom: 10px; } .chart-grid { grid-template-columns: 1fr; } .quality-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 560px) { .controls, .trend-controls, .kpi-grid, .quality-grid { grid-template-columns: 1fr; } .curve-picker { grid-column: auto; } .tool-wrap { padding: 12px; } }
+    @media (max-width: 560px) { .controls, .trend-controls, .section-controls, .kpi-grid, .quality-grid { grid-template-columns: 1fr; } .curve-picker { grid-column: auto; } .tool-wrap { padding: 12px; } }
   </style>
 </head>
 <body class="light-ui" data-page="forecast">
@@ -71,13 +74,7 @@
 
     <section class="panel">
       <div class="section-head"><h2 data-i18n="sourceTitle">读取预测文件</h2><p data-i18n="sourcePrivacy">文件仅在当前浏览器中处理。</p></div>
-      <div class="controls">
-        <div class="field"><label for="forecastFile" data-i18n="fileLabel">FCST KPI 工作簿</label><input id="forecastFile" type="file" accept=".xlsx,.xlsm,.xls" /></div>
-        <div class="field"><label for="categorySel" data-i18n="categoryLabel">产品类别</label><select id="categorySel" disabled></select></div>
-        <div class="field"><label for="regionSel" data-i18n="regionLabel">销售地区</label><select id="regionSel" disabled></select></div>
-        <div class="field"><label for="horizonSel" data-i18n="horizonLabel">预测周期</label><select id="horizonSel" disabled></select></div>
-        <div class="field"><label for="basisSel" data-i18n="basisLabel">预测口径</label><select id="basisSel" disabled></select></div>
-      </div>
+      <div class="field source-file"><label for="forecastFile" data-i18n="fileLabel">FCST KPI 工作簿</label><input id="forecastFile" type="file" accept=".xlsx,.xlsm,.xls" /></div>
       <div class="actions"><button id="runBtn" class="btn-primary" type="button" data-i18n="runButton">读取并分析</button><button id="exportBtn" class="btn-secondary" type="button" data-i18n="exportButton" disabled>下载分析明细</button></div>
       <div id="status" class="status" role="status" aria-live="polite" data-i18n="statusInitial">请选择包含 Data 工作表的 FCST KPI 文件。</div>
       <p class="method-note" data-i18n="methodNote">官方口径：M+1及M+1～M+3使用MW；M+3、M+6及M+1～M+6使用MW Weighted。只评价已完整结束月份。</p>
@@ -91,6 +88,12 @@
 
       <section class="panel">
         <div class="section-head"><h2 data-i18n="selectedSummaryTitle">当前筛选结果</h2><p id="scopeNote"></p></div>
+        <div class="controls result-controls">
+          <div class="field"><label for="categorySel" data-i18n="categoryLabel">产品类别</label><select id="categorySel" disabled></select></div>
+          <div class="field"><label for="regionSel" data-i18n="regionLabel">销售地区</label><select id="regionSel" disabled></select></div>
+          <div class="field"><label for="horizonSel" data-i18n="horizonLabel">预测周期</label><select id="horizonSel" disabled></select></div>
+          <div class="field"><label for="basisSel" data-i18n="basisLabel">预测口径</label><select id="basisSel" disabled></select></div>
+        </div>
         <div id="kpiGrid" class="kpi-grid"></div>
       </section>
 
@@ -102,7 +105,7 @@
       </section>
 
       <section class="panel">
-        <div class="section-head"><h2 data-i18n="accuracyTrendSectionTitle">月度预测准确率趋势</h2><p data-i18n="accuracyTrendNote">单月周期按实际销售月份定位，累计周期按覆盖区间起始月定位。</p></div>
+        <div class="section-head"><h2 data-i18n="accuracyTrendSectionTitle">月度预测准确率趋势</h2><p data-i18n="accuracyTrendNote">所有周期均按实际销售月份统计；累计周期以完整区间的结束月定位。</p></div>
         <div class="trend-controls">
           <div class="field"><label for="trendRegionSel" data-i18n="trendRegionLabel">趋势图 Sales Region</label><select id="trendRegionSel" disabled></select></div>
           <div class="field"><label for="trendStartMonthSel" data-i18n="trendStartMonthLabel">WAPE 数据起始月份</label><select id="trendStartMonthSel" disabled></select></div>
@@ -113,11 +116,21 @@
 
       <section class="panel">
         <div class="section-head"><h2 data-i18n="weightTitle">MW 与 MW Weighted 效果</h2><p data-i18n="weightNote">在相同样本上比较 WAPE，数值越低越好。</p></div>
+        <div class="section-controls">
+          <div class="field"><label for="weightCategorySel" data-i18n="categoryLabel">产品类别</label><select id="weightCategorySel" disabled></select></div>
+          <div class="field"><label for="weightStartMonthSel" data-i18n="startMonthLabel">开始月份</label><select id="weightStartMonthSel" disabled></select></div>
+          <div class="field"><label for="weightEndMonthSel" data-i18n="endMonthLabel">结束月份</label><select id="weightEndMonthSel" disabled></select></div>
+        </div>
         <div id="weightChart" class="chart"></div>
       </section>
 
       <section class="panel">
         <div class="section-head"><h2 data-i18n="regionTitle">Sales Region 对比</h2><p data-i18n="regionNote">点击地区行可切换到该地区的详细结果。</p></div>
+        <div class="section-controls">
+          <div class="field"><label for="regionCategorySel" data-i18n="categoryLabel">产品类别</label><select id="regionCategorySel" disabled></select></div>
+          <div class="field"><label for="regionStartMonthSel" data-i18n="startMonthLabel">开始月份</label><select id="regionStartMonthSel" disabled></select></div>
+          <div class="field"><label for="regionEndMonthSel" data-i18n="endMonthLabel">结束月份</label><select id="regionEndMonthSel" disabled></select></div>
+        </div>
         <div class="chart-grid">
           <div class="chart-box"><div id="regionChart" class="chart"></div></div>
           <div class="table-wrap"><table id="regionTable"></table></div>

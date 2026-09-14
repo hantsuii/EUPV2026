@@ -12,6 +12,8 @@ window.PAGE_I18N = {
     regionLabel: "销售地区",
     horizonLabel: "预测周期",
     basisLabel: "预测口径",
+    startMonthLabel: "开始月份",
+    endMonthLabel: "结束月份",
     runButton: "读取并分析",
     exportButton: "下载分析明细",
     statusInitial: "请选择包含 Data 工作表的 FCST KPI 文件。",
@@ -69,13 +71,13 @@ window.PAGE_I18N = {
     horizonAccuracy: "准确率",
     horizonBias: "Bias",
     accuracyTrendSectionTitle: "月度预测准确率趋势",
-    accuracyTrendNote: "单月周期按实际销售月份定位，累计周期按覆盖区间起始月定位。",
+    accuracyTrendNote: "所有周期均按实际销售月份统计；累计周期以完整区间的结束月定位。",
     accuracyTrendTitle: "月度 WAPE 准确率",
     trendRegionLabel: "趋势图 Sales Region",
     trendStartMonthLabel: "WAPE 数据起始月份",
     trendCurvesLabel: "显示曲线",
     allMonths: "所有月份",
-    trendPeriodAxis: "评估月份 / 区间起始月",
+    trendPeriodAxis: "实际销售月份",
     actualMonth: "实际销售月份",
     seriesLabel: "预测 Series",
     weightChartTitle: "权重调整前后 WAPE",
@@ -112,6 +114,8 @@ window.PAGE_I18N = {
     regionLabel: "Sales region",
     horizonLabel: "Forecast horizon",
     basisLabel: "Forecast basis",
+    startMonthLabel: "Start month",
+    endMonthLabel: "End month",
     runButton: "Load and analyze",
     exportButton: "Download detail",
     statusInitial: "Choose an FCST KPI workbook containing a Data sheet.",
@@ -169,13 +173,13 @@ window.PAGE_I18N = {
     horizonAccuracy: "Accuracy",
     horizonBias: "Bias",
     accuracyTrendSectionTitle: "Monthly forecast accuracy trend",
-    accuracyTrendNote: "Point horizons use the actual sales month; cumulative horizons use the start month of their covered window.",
+    accuracyTrendNote: "All horizons are reported by actual sales month; cumulative horizons use the end month of the completed window.",
     accuracyTrendTitle: "Monthly WAPE accuracy",
     trendRegionLabel: "Trend Sales Region",
     trendStartMonthLabel: "WAPE data start month",
     trendCurvesLabel: "Visible curves",
     allMonths: "All months",
-    trendPeriodAxis: "Evaluation month / window start",
+    trendPeriodAxis: "Actual sales month",
     actualMonth: "Actual sales month",
     seriesLabel: "Forecast Series",
     weightChartTitle: "WAPE before and after weighting",
@@ -215,6 +219,12 @@ const basisSel = byId("basisSel");
 const trendRegionSel = byId("trendRegionSel");
 const trendStartMonthSel = byId("trendStartMonthSel");
 const trendCurveOptions = byId("trendCurveOptions");
+const weightCategorySel = byId("weightCategorySel");
+const weightStartMonthSel = byId("weightStartMonthSel");
+const weightEndMonthSel = byId("weightEndMonthSel");
+const regionCategorySel = byId("regionCategorySel");
+const regionStartMonthSel = byId("regionStartMonthSel");
+const regionEndMonthSel = byId("regionEndMonthSel");
 const statusEl = byId("status");
 const dashboard = byId("dashboard");
 let normalizedRows = [];
@@ -264,6 +274,8 @@ function setOptions(select, options, selectedValue) {
 function initControls() {
   const categories = ["PV", "ESS", "HP"].filter((category) => normalizedRows.some((row) => row.category === category));
   setOptions(categorySel, categories.map((value) => ({ value, label: value })), categorySel.value || categories[0]);
+  setOptions(weightCategorySel, categories.map((value) => ({ value, label: value })), weightCategorySel.value || categorySel.value || categories[0]);
+  setOptions(regionCategorySel, categories.map((value) => ({ value, label: value })), regionCategorySel.value || categorySel.value || categories[0]);
   setOptions(horizonSel, Object.keys(Core.HORIZONS).map((value) => ({ value, label: horizonName(value) })), horizonSel.value || "M1");
   setOptions(basisSel, [
     { value: "official", label: t("officialBasis") },
@@ -274,8 +286,11 @@ function initControls() {
   refreshTrendRegions(trendRegionSel.value || regionSel.value || "__ALL__");
   renderTrendCurveOptions();
   refreshTrendStartMonths(trendStartMonthSel.value || "__ALL__");
+  refreshWeightMonthOptions(weightStartMonthSel.value, weightEndMonthSel.value);
+  refreshRegionMonthOptions(regionStartMonthSel.value, regionEndMonthSel.value);
   [categorySel, regionSel, horizonSel, basisSel].forEach((select) => { select.disabled = false; });
   [trendRegionSel, trendStartMonthSel].forEach((select) => { select.disabled = false; });
+  [weightCategorySel, regionCategorySel].forEach((select) => { select.disabled = false; });
 }
 
 function refreshRegions(selectedValue = "__ALL__") {
@@ -302,9 +317,58 @@ function trendAnalysis(horizonId) {
   return Core.analyze(normalizedRows, analysisOptions({ horizonId, region: trendRegionSel.value || "__ALL__" }));
 }
 
+function sampleActualMonth(row, config) {
+  return config.kind === "window" ? row.periodEnd : row.periodStart;
+}
+
 function refreshTrendStartMonths(selectedValue = "__ALL__") {
-  const months = [...new Set(Object.keys(Core.HORIZONS).flatMap((id) => trendAnalysis(id).samples.map((row) => row.periodStart)))].sort();
+  const months = [...new Set(Object.keys(Core.HORIZONS).flatMap((id) => {
+    const result = trendAnalysis(id);
+    return result.samples.map((row) => sampleActualMonth(row, result.config));
+  }))].sort();
   setOptions(trendStartMonthSel, [{ value: "__ALL__", label: t("allMonths") }, ...months.map((value) => ({ value, label: value }))], selectedValue);
+}
+
+function availableComparisonMonths(category, horizonIds = Object.keys(Core.HORIZONS)) {
+  return [...new Set(horizonIds.flatMap((id) => {
+    const result = Core.analyze(normalizedRows, analysisOptions({ category, region: "__ALL__", horizonId: id }));
+    return result.samples.map((row) => sampleActualMonth(row, result.config));
+  }))].sort();
+}
+
+function setMonthRangeOptions(startSelect, endSelect, months, selectedStart, selectedEnd) {
+  if (!months.length) {
+    const empty = [{ value: "", label: t("unavailable") }];
+    setOptions(startSelect, empty, "");
+    setOptions(endSelect, empty, "");
+    startSelect.disabled = true;
+    endSelect.disabled = true;
+    return;
+  }
+  const options = months.map((value) => ({ value, label: value }));
+  const start = months.includes(selectedStart) ? selectedStart : months[0];
+  const end = months.includes(selectedEnd) ? selectedEnd : months.at(-1);
+  setOptions(startSelect, options, start);
+  setOptions(endSelect, options, end);
+  if (startSelect.value > endSelect.value) endSelect.value = startSelect.value;
+  startSelect.disabled = false;
+  endSelect.disabled = false;
+}
+
+function refreshWeightMonthOptions(selectedStart, selectedEnd) {
+  setMonthRangeOptions(weightStartMonthSel, weightEndMonthSel, availableComparisonMonths(weightCategorySel.value), selectedStart, selectedEnd);
+}
+
+function refreshRegionMonthOptions(selectedStart, selectedEnd) {
+  setMonthRangeOptions(regionStartMonthSel, regionEndMonthSel, availableComparisonMonths(regionCategorySel.value, [horizonSel.value]), selectedStart, selectedEnd);
+}
+
+function filterAnalysisByMonths(result, startMonth, endMonth) {
+  const samples = result.samples.filter((row) => {
+    const month = sampleActualMonth(row, result.config);
+    return (!startMonth || month >= startMonth) && (!endMonth || month <= endMonth);
+  });
+  return { ...result, samples, summary: Core.summarize(samples, result.summary.hitThreshold) };
 }
 
 function buildTable(tableId, headers, rows, attributes = []) {
@@ -346,6 +410,8 @@ function renderCategoryOverview() {
   byId("categoryTable").querySelectorAll("tbody tr[data-category]").forEach((row) => row.addEventListener("click", () => {
     categorySel.value = row.dataset.category;
     refreshRegions("__ALL__");
+    refreshTrendRegions("__ALL__");
+    refreshTrendStartMonths("__ALL__");
     renderAll();
   }));
 }
@@ -406,11 +472,11 @@ function renderAccuracyTrend() {
   const colors = { M1: "#198d80", M3: "#3278b8", M6: "#8a67b4", M1_3: "#d07836", M1_6: "#c14f70" };
   const results = horizonIds.map((id) => ({ id, result: trendAnalysis(id) }));
   const actualMonths = [...new Set(results.flatMap(({ result }) => result.samples
-    .filter((row) => row.ape != null && (startMonth === "__ALL__" || row.periodStart >= startMonth))
-    .map((row) => row.periodStart)))].sort();
+    .filter((row) => row.ape != null && (startMonth === "__ALL__" || sampleActualMonth(row, result.config) >= startMonth))
+    .map((row) => sampleActualMonth(row, result.config))))].sort();
   const traces = results.map(({ id, result }) => {
-    const usable = result.samples.filter((row) => row.ape != null && (startMonth === "__ALL__" || row.periodStart >= startMonth));
-    const byMonth = new Map(usable.map((row) => [row.periodStart, row]));
+    const usable = result.samples.filter((row) => row.ape != null && (startMonth === "__ALL__" || sampleActualMonth(row, result.config) >= startMonth));
+    const byMonth = new Map(usable.map((row) => [sampleActualMonth(row, result.config), row]));
     return {
       x: actualMonths,
       y: actualMonths.map((month) => {
@@ -440,16 +506,29 @@ function renderAccuracyTrend() {
 
 function renderWeightChart() {
   const ids = Object.keys(Core.HORIZONS);
-  const raw = ids.map((id) => Core.analyze(normalizedRows, analysisOptions({ horizonId: id, basisMode: "mw" })).summary.wape);
-  const weighted = ids.map((id) => Core.analyze(normalizedRows, analysisOptions({ horizonId: id, basisMode: "weighted" })).summary.wape);
+  const options = { category: weightCategorySel.value, region: "__ALL__" };
+  const raw = ids.map((id) => filterAnalysisByMonths(
+    Core.analyze(normalizedRows, analysisOptions({ ...options, horizonId: id, basisMode: "mw" })),
+    weightStartMonthSel.value,
+    weightEndMonthSel.value,
+  ).summary.wape);
+  const weighted = ids.map((id) => filterAnalysisByMonths(
+    Core.analyze(normalizedRows, analysisOptions({ ...options, horizonId: id, basisMode: "weighted" })),
+    weightStartMonthSel.value,
+    weightEndMonthSel.value,
+  ).summary.wape);
+  const maxWape = Math.max(0, ...raw.filter(Number.isFinite), ...weighted.filter(Number.isFinite)) * 100;
   plot("weightChart", [
-    { x: ids.map(horizonName), y: raw.map((value) => value == null ? null : value * 100), type: "bar", name: t("mwWape"), marker: { color: "#4c86bd" }, text: raw.map(fmtPct), textposition: "outside" },
-    { x: ids.map(horizonName), y: weighted.map((value) => value == null ? null : value * 100), type: "bar", name: t("weightedWape"), marker: { color: "#8f72bd" }, text: weighted.map(fmtPct), textposition: "outside" },
-  ], { title: t("weightChartTitle"), barmode: "group", yaxis: { title: "WAPE", ticksuffix: "%", gridcolor: "#e5edf2" } });
+    { x: ids.map(horizonName), y: raw.map((value) => value == null ? null : value * 100), type: "bar", name: t("mwWape"), marker: { color: "#4c86bd" }, text: raw.map(fmtPct), textposition: "outside", cliponaxis: false },
+    { x: ids.map(horizonName), y: weighted.map((value) => value == null ? null : value * 100), type: "bar", name: t("weightedWape"), marker: { color: "#8f72bd" }, text: weighted.map(fmtPct), textposition: "outside", cliponaxis: false },
+  ], { title: t("weightChartTitle"), barmode: "group", yaxis: { title: "WAPE", ticksuffix: "%", range: [0, Math.max(10, maxWape * 1.16)], gridcolor: "#e5edf2" } });
 }
 
 function renderRegions() {
-  const results = Core.analyzeRegions(normalizedRows, analysisOptions()).sort((a, b) => (a.summary.wape ?? Infinity) - (b.summary.wape ?? Infinity));
+  const results = Core.analyzeRegions(normalizedRows, analysisOptions({ category: regionCategorySel.value, region: "__ALL__" }))
+    .map((item) => ({ ...item, ...filterAnalysisByMonths(item, regionStartMonthSel.value, regionEndMonthSel.value) }))
+    .filter((item) => item.summary.sampleCount > 0)
+    .sort((a, b) => (a.summary.wape ?? Infinity) - (b.summary.wape ?? Infinity));
   const chartRows = [...results].sort((a, b) => (b.summary.wape ?? -Infinity) - (a.summary.wape ?? -Infinity));
   plot("regionChart", [{
     x: chartRows.map((item) => item.summary.wape == null ? null : item.summary.wape * 100), y: chartRows.map((item) => item.region),
@@ -461,9 +540,13 @@ function renderRegions() {
 
   const rows = results.map((item) => [item.region, fmtPct(item.summary.wape), fmtPct(item.summary.accuracy), fmtPct(item.summary.bias), fmtPct(item.summary.hitRate), String(item.summary.sampleCount)]);
   buildTable("regionTable", [t("region"), t("wape"), t("accuracy"), t("bias"), t("hitRate"), t("sampleCount")], rows,
-    results.map((item) => ` data-region="${esc(item.region)}"${item.region === regionSel.value ? ' class="selected"' : ""}`));
+    results.map((item) => ` data-region="${esc(item.region)}"${regionCategorySel.value === categorySel.value && item.region === regionSel.value ? ' class="selected"' : ""}`));
   byId("regionTable").querySelectorAll("tbody tr[data-region]").forEach((row) => row.addEventListener("click", () => {
+    categorySel.value = regionCategorySel.value;
+    refreshRegions(row.dataset.region);
     regionSel.value = row.dataset.region;
+    refreshTrendRegions("__ALL__");
+    refreshTrendStartMonths("__ALL__");
     renderAll();
     window.scrollTo({ top: byId("kpiGrid").getBoundingClientRect().top + window.scrollY - 24, behavior: "smooth" });
   }));
@@ -564,10 +647,32 @@ categorySel.addEventListener("change", () => {
   refreshTrendStartMonths("__ALL__");
   renderAll();
 });
-[regionSel, horizonSel, basisSel].forEach((select) => select.addEventListener("change", renderAll));
+regionSel.addEventListener("change", renderAll);
+[horizonSel, basisSel].forEach((select) => select.addEventListener("change", () => {
+  refreshRegionMonthOptions(regionStartMonthSel.value, regionEndMonthSel.value);
+  renderAll();
+}));
 trendRegionSel.addEventListener("change", () => { refreshTrendStartMonths(trendStartMonthSel.value); renderAccuracyTrend(); });
 trendStartMonthSel.addEventListener("change", renderAccuracyTrend);
 trendCurveOptions.addEventListener("change", renderAccuracyTrend);
+weightCategorySel.addEventListener("change", () => { refreshWeightMonthOptions(); renderWeightChart(); });
+weightStartMonthSel.addEventListener("change", () => {
+  if (weightStartMonthSel.value > weightEndMonthSel.value) weightEndMonthSel.value = weightStartMonthSel.value;
+  renderWeightChart();
+});
+weightEndMonthSel.addEventListener("change", () => {
+  if (weightEndMonthSel.value < weightStartMonthSel.value) weightStartMonthSel.value = weightEndMonthSel.value;
+  renderWeightChart();
+});
+regionCategorySel.addEventListener("change", () => { refreshRegionMonthOptions(); renderRegions(); });
+regionStartMonthSel.addEventListener("change", () => {
+  if (regionStartMonthSel.value > regionEndMonthSel.value) regionEndMonthSel.value = regionStartMonthSel.value;
+  renderRegions();
+});
+regionEndMonthSel.addEventListener("change", () => {
+  if (regionEndMonthSel.value < regionStartMonthSel.value) regionStartMonthSel.value = regionEndMonthSel.value;
+  renderRegions();
+});
 window.addEventListener("app-language-change", () => {
   if (!normalizedRows.length) return;
   const category = categorySel.value;
@@ -577,6 +682,12 @@ window.addEventListener("app-language-change", () => {
   const trendRegion = trendRegionSel.value;
   const trendStartMonth = trendStartMonthSel.value;
   const trendHorizons = selectedTrendHorizons();
+  const weightCategory = weightCategorySel.value;
+  const weightStartMonth = weightStartMonthSel.value;
+  const weightEndMonth = weightEndMonthSel.value;
+  const regionCategory = regionCategorySel.value;
+  const regionStartMonth = regionStartMonthSel.value;
+  const regionEndMonth = regionEndMonthSel.value;
   initControls();
   categorySel.value = category;
   refreshRegions(region);
@@ -585,6 +696,10 @@ window.addEventListener("app-language-change", () => {
   refreshTrendRegions(trendRegion);
   renderTrendCurveOptions(trendHorizons);
   refreshTrendStartMonths(trendStartMonth);
+  weightCategorySel.value = weightCategory;
+  refreshWeightMonthOptions(weightStartMonth, weightEndMonth);
+  regionCategorySel.value = regionCategory;
+  refreshRegionMonthOptions(regionStartMonth, regionEndMonth);
   renderAll();
   setStatus("statusDone", { rows: normalizedRows.length, month: quality.completeThrough || t("unavailable") });
 });
