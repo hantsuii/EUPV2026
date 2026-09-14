@@ -263,6 +263,32 @@
     .metric-label { color: #5f7da6; }
     .metric-value { font-weight: 700; color: #1f4a7a; }
 
+    .customer-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(150px, .65fr));
+      gap: 12px;
+      margin: 10px 0 14px;
+      padding: 14px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%);
+    }
+    .customer-toolbar label { display:block;margin-bottom:4px;color:#406491;font-size:13px;font-weight:700; }
+    .customer-toolbar select, .customer-toolbar input { width:100%;border:1px solid #c5d9f4;border-radius:10px;padding:9px 10px;background:#fff;color:#2a4d7a; }
+    .customer-scope { display:flex;align-items:center;gap:8px;margin:4px 0 12px;color:#56739f;font-size:13px; }
+    .customer-scope strong { color:#1f4a7a;font-size:15px; }
+    .customer-subnav { display:flex;flex-wrap:wrap;gap:8px;margin:12px 0; }
+    .customer-subnav button { border:1px solid #c5d9f4;border-radius:999px;padding:7px 12px;background:#fff;color:#315b8d;font-weight:700;cursor:pointer; }
+    .customer-subnav button.active { background:#245fbd;border-color:#245fbd;color:#fff; }
+    .customer-view { display:none; }
+    .customer-view.active { display:block; }
+    .customer-chart-grid { display:grid;grid-template-columns:1.25fr .75fr;gap:12px; }
+    .status-pill { display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:800; }
+    .status-active { background:#dcf7ee;color:#16725e; }
+    .status-sleep { background:#fff1ce;color:#8b5b00; }
+    .status-risk { background:#ffe2df;color:#a33d35; }
+    .customer-note { margin:8px 0 0;color:#6883a8;font-size:12px; }
+
     @media (max-width: 1180px) {
       .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
       .kpi-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
@@ -270,10 +296,13 @@
       .chart-grid-2 { grid-template-columns: 1fr; }
       .product-hierarchy-grid, .product-control-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
       .product-chart-grid { grid-template-columns: 1fr; }
+      .customer-toolbar { grid-template-columns:repeat(2,minmax(180px,1fr)); }
+      .customer-chart-grid { grid-template-columns:1fr; }
     }
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
       .filter-grid { grid-template-columns: 1fr; }
+      .customer-toolbar { grid-template-columns:1fr; }
     }
   </style>
   <link rel="stylesheet" href="../../theme.css" />
@@ -328,6 +357,7 @@
         <button class="jump-btn active" data-target="block-total" data-i18n="tabTotal">总计 Dashboard</button>
         <button class="jump-btn" data-target="block-region" data-i18n="tabRegion">各地区看板</button>
         <button class="jump-btn" data-target="block-product" data-i18n="tabProduct">产品销售分析</button>
+        <button class="jump-btn" data-target="block-customer" data-i18n="tabCustomer">客户分析</button>
       </div>
 
       <div id="block-total" class="content-block active">
@@ -451,6 +481,39 @@
         </div>
         <div class="table-wrap"><table id="productRankingTable"></table></div>
       </div>
+
+      <div id="block-customer" class="content-block">
+        <h3 data-i18n="customerTitle">客户分析</h3>
+        <p class="mini-tip" data-i18n="customerSubtitle">先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。</p>
+        <div class="customer-toolbar">
+          <div><label for="customerRegionSel" data-i18n="customerRegion">分析地区</label><select id="customerRegionSel"></select></div>
+          <div><label for="customerYearSel" data-i18n="customerYear">分析年份</label><select id="customerYearSel"></select></div>
+          <div><label for="customerProductSel" data-i18n="customerProduct">产品线</label><select id="customerProductSel"><option value="__ALL__">全部</option><option value="PV">PV</option><option value="ESS">ESS</option><option value="HP">HP</option></select></div>
+          <div><label for="customerSearch" data-i18n="customerSearch">搜索客户</label><input id="customerSearch" type="search" placeholder="客户名称 / 国家" data-i18n-placeholder="customerSearchPlaceholder" /></div>
+        </div>
+        <div class="customer-scope"><span data-i18n="customerCurrentScope">当前分析范围</span><strong id="customerScopeLabel">全球总览</strong></div>
+
+        <div id="customerOverviewKpis" class="kpi-grid kpi-grid-4"></div>
+        <div class="customer-chart-grid">
+          <div class="chart-box"><div id="customerTrendChart" class="chart"></div></div>
+          <div class="chart-box"><div id="customerRegionChart" class="chart"></div></div>
+        </div>
+
+        <div class="customer-subnav" id="customerSubnav">
+          <button class="active" type="button" data-customer-view="region" data-i18n="customerTabRegion">地区概览</button>
+          <button type="button" data-customer-view="product" data-i18n="customerTabProduct">产品结构</button>
+          <button type="button" data-customer-view="activity" data-i18n="customerTabActivity">活跃度</button>
+          <button type="button" data-customer-view="value" data-i18n="customerTabValue">客户价值</button>
+          <button type="button" data-customer-view="detail" data-i18n="customerTabDetail">客户明细</button>
+        </div>
+
+        <div id="customer-view-region" class="customer-view active"><div class="table-wrap"><table id="customerRegionTable"></table></div></div>
+        <div id="customer-view-product" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerProductChart" class="chart"></div></div><div class="chart-box"><div id="customerMixChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerProductTable"></table></div></div>
+        <div id="customer-view-activity" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerActivityChart" class="chart"></div></div><div class="chart-box"><div id="customerStatusChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerActivityTable"></table></div></div>
+        <div id="customer-view-value" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerValueChart" class="chart"></div></div><div class="chart-box"><div id="customerConcentrationChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerValueTable"></table></div></div>
+        <div id="customer-view-detail" class="customer-view"><div class="table-wrap"><table id="customerDetailTable"></table></div></div>
+        <p class="customer-note" data-i18n="customerDefinition">活跃客户：数据中最近月份往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。</p>
+      </div>
     </section>
   </main>
 
@@ -493,6 +556,7 @@
   </div>
 
   <script src="./sales-change-analysis.js"></script>
+  <script src="./customer-analysis.js"></script>
 </body>
 </html>
 
