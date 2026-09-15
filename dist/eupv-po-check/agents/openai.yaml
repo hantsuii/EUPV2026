@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV PO Check"
+  short_description: "Reconcile EUPV purchase orders and ODP records"
+  default_prompt: "Use $eupv-po-check to compare the purchase-order workbook with EUPV ODP MASTER and create a traceable Excel report."
