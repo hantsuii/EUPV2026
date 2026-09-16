@@ -61,9 +61,10 @@ function plannedPickupWeek(record){
 }
 function actualPickupWeek(record){if(record.pickupDate)return isoWeek(record.pickupDate);const w=toNumber(record.pickupWeek);if(!w)return null;const order=orderMonth(record);return weekWithBestYear(w,order?Number(order.slice(0,4)):new Date().getFullYear(),record.atd);}
 function arrivalInfo(record){if(record.ata)return{date:record.ata,type:"actual"};if(record.etaUpdate)return{date:record.etaUpdate,type:"forecast"};if(record.etaSO)return{date:record.etaSO,type:"forecast"};return{date:null,type:"missing"};}
+function isArrivalValid(record){if(record.poType==="OFFSHORE")return false;const a=arrivalInfo(record);return a.type!=="missing";}
 function departureInfo(record){if(record.atd)return{date:record.atd,type:"actual"};if(record.etdUpdate)return{date:record.etdUpdate,type:"forecast"};if(record.etdSO)return{date:record.etdSO,type:"forecast"};return{date:null,type:"missing"};}
 function inMonthRange(value,startId,endId){if(!value)return false;const start=byId(startId).value,end=byId(endId).value;return(!start||value>=start)&&(!end||value<=end);}
-function setDefaultMonthRanges(){const current=monthKey(new Date());["order","departure","arrival"].forEach((scope)=>{byId(`${scope}StartMonth`).value=current;byId(`${scope}EndMonth`).value=current;});}
+function setDefaultMonthRanges(){const now=new Date(),current=monthKey(now),nextMonth=new Date(now.getFullYear(),now.getMonth()+1,1),next=monthKey(nextMonth);["order","departure"].forEach((scope)=>{byId(`${scope}StartMonth`).value=current;byId(`${scope}EndMonth`).value=current;});byId("arrivalStartMonth").value=current;byId("arrivalEndMonth").value=next;}
 function median(values){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b),mid=Math.floor(sorted.length/2);return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;}
 function percent(count,total){return total?`${(count/total*100).toFixed(1)}%`:"—";}
 function modelKey(record){return record.model==null||String(record.model).trim()===""?"__UNKNOWN__":normalizeText(record.model);}
@@ -71,6 +72,10 @@ function modelLabel(record){return modelKey(record)==="__UNKNOWN__"?t("unknown")
 function activeProductType(){return byId("productTypeSelect")?.value||"PV";}
 function activeSources(){const pt=activeProductType();if(pt==="ALL")return new Set(["PV SUPPLY DATA","ESS SUPPLY DATA"]);if(pt==="ESS")return new Set(["ESS SUPPLY DATA"]);return new Set(["PV SUPPLY DATA"]);}
 function activeMainRecords(){const sources=activeSources();return records.filter((r)=>sources.has(r.source));}
+/* Independent product type filters for arrival and portDaily panels */
+const panelProductTypes={arrival:"PV",portDaily:"PV"};
+function panelSources(panel){const pt=panelProductTypes[panel];if(pt==="ALL")return new Set(["PV SUPPLY DATA","ESS SUPPLY DATA"]);if(pt==="ESS")return new Set(["ESS SUPPLY DATA"]);return new Set(["PV SUPPLY DATA"]);}
+function panelMainRecords(panel){const sources=panelSources(panel);return records.filter((r)=>sources.has(r.source));}
 function availableModels(){
   const models=new Map();
   activeMainRecords().forEach((r)=>{const key=modelKey(r);if(!models.has(key))models.set(key,modelLabel(r));});
@@ -108,7 +113,8 @@ function readSheet(workbook,sheetName,headerRow,productType){
   return grid.slice(headerRow).flatMap((row)=>{
     const ref=clean(row[index[refField]]);if(ref==null)return[];
     let rawPol=index.POL!=null?clean(row[index.POL]):null;if(rawPol==null&&index["PORT OF LOADING"]!=null)rawPol=clean(row[index["PORT OF LOADING"]]);
-    return[{source:sheetName,productType:productType||"PV",reference:String(ref).trim(),quantity:toNumber(row[index.QUANTITY]),mw:toNumber(row[index.MW])||0,containers:toNumber(row[index.CONTAINERS])||0,sku:index["New Ark SKU"]!=null?clean(row[index["New Ark SKU"]]):index["PN"]!=null?clean(row[index.PN]):null,model:index.Model!=null?clean(row[index.Model]):index.DESCRIPTION!=null?clean(row[index.DESCRIPTION]):null,factory:index["Factory Location"]!=null?clean(row[index["Factory Location"]]):null,carrier:index.Carrier!=null?clean(row[index.Carrier]):null,status:index.STATUS!=null?String(clean(row[index.STATUS])||""):"",pickupDate:index["Pick-Up Date"]!=null?toDate(row[index["Pick-Up Date"]]):index["PICK-UP DATE"]!=null?toDate(row[index["PICK-UP DATE"]]):null,pickupWeek:index["Pick-Up Week"]!=null?row[index["Pick-Up Week"]]:null,rawPol,rawDestination:clean(row[index["PORT DESTINATION"]]),etdSO:toDate(row[index["ETD On S/O"]]),etdUpdate:toDate(row[index["ETD Update"]]),atd:toDate(row[index["ATD PORT"]]),etaSO:toDate(row[index["ETA On S/O"]]),etaUpdate:toDate(row[index["ETA Update"]]),ata:toDate(row[index["ATA PORT"]]),vessel:index["REFERENCE V.V"]!=null?clean(row[index["REFERENCE V.V"]]):null,booking:index[bookingField]!=null?clean(row[index[bookingField]]):null}];
+    let rawPoType=index["New Ark PO Type"]!=null?clean(row[index["New Ark PO Type"]]):null;
+    return[{source:sheetName,productType:productType||"PV",poType:rawPoType?String(rawPoType).trim().toUpperCase():"",reference:String(ref).trim(),quantity:toNumber(row[index.QUANTITY]),mw:toNumber(row[index.MW])||0,containers:toNumber(row[index.CONTAINERS])||0,sku:index["New Ark SKU"]!=null?clean(row[index["New Ark SKU"]]):index["PN"]!=null?clean(row[index.PN]):null,model:index.Model!=null?clean(row[index.Model]):index.DESCRIPTION!=null?clean(row[index.DESCRIPTION]):null,factory:index["Factory Location"]!=null?clean(row[index["Factory Location"]]):null,carrier:index.Carrier!=null?clean(row[index.Carrier]):null,status:index.STATUS!=null?String(clean(row[index.STATUS])||""):"",pickupDate:index["Pick-Up Date"]!=null?toDate(row[index["Pick-Up Date"]]):index["PICK-UP DATE"]!=null?toDate(row[index["PICK-UP DATE"]]):null,pickupWeek:index["Pick-Up Week"]!=null?row[index["Pick-Up Week"]]:null,rawPol,rawDestination:clean(row[index["PORT DESTINATION"]]),etdSO:toDate(row[index["ETD On S/O"]]),etdUpdate:toDate(row[index["ETD Update"]]),atd:toDate(row[index["ATD PORT"]]),etaSO:toDate(row[index["ETA On S/O"]]),etaUpdate:toDate(row[index["ETA Update"]]),ata:toDate(row[index["ATA PORT"]]),vessel:index["REFERENCE V.V"]!=null?clean(row[index["REFERENCE V.V"]]):null,booking:index[bookingField]!=null?clean(row[index[bookingField]]):null}];
   });
 }
 
@@ -191,8 +197,10 @@ function parseWorkbook(workbook,skuModelMap){
   const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});ensureDiscoveredMappings();renderMappingTable();
   setDefaultMonthRanges();
   const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
-  const arrivalDates=records.flatMap((r)=>{const a=arrivalInfo(r);return a.date?[a.date]:[];}).sort((a,b)=>a-b);
-  if(arrivalDates.length){byId("portDailyStart").value=isoDate(arrivalDates[0]);byId("portDailyEnd").value=isoDate(arrivalDates.at(-1));}
+  /* Port daily default months: same as arrival month range (current month → next month) */
+  const now=new Date();
+  byId("portDailyStart").value=monthKey(now);
+  byId("portDailyEnd").value=monthKey(new Date(now.getFullYear(),now.getMonth()+1,1));
   renderAll();
 }
 
@@ -241,7 +249,8 @@ function renderBusinessViews(){
   renderTable("orderTable",[t("hOrderMonth"),t("hModel"),t("hPol"),t("hDestination"),t("hSku"),t("hPlannedPickup"),t("hActualShip"),t("hMw"),t("hContainers")],orders.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4],weekBreakdownCell(x.plannedWeeks),weekBreakdownCell(x.actualWeeks),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
   const departures=groupRows(allMain,(r)=>{const d=departureInfo(r),month=monthKey(d.date);return matchesModel(r,"departure")&&month&&inMonthRange(month,"departureStartMonth","departureEndMonth")?[month,modelLabel(r),String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),d.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[4].localeCompare(b.parts[4]));
   renderTable("departureTable",[t("hDepartureMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
-  const arrivals=groupRows(allMain,(r)=>{const a=arrivalInfo(r),month=monthKey(a.date);return matchesModel(r,"arrival")&&month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,modelLabel(r),String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[4].localeCompare(b.parts[4]));
+  const arrivalMain=panelMainRecords("arrival");
+  const arrivals=groupRows(arrivalMain,(r)=>{if(!isArrivalValid(r))return null;const a=arrivalInfo(r),month=monthKey(a.date);return matchesModel(r,"arrival")&&month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,modelLabel(r),String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[4].localeCompare(b.parts[4]));
   renderTable("arrivalTable",[t("hArrivalMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
 }
 
@@ -283,16 +292,19 @@ function exportAssumptionATP(){
 const PORT_DAILY_COLORS=["#3f8bff","#e85f3a","#2ecc8f","#f5a623","#9b59d4","#1ab6e0","#e74c8c","#3ac569"];
 function availableArrivalPorts(){
   const ports=new Set();
-  activeMainRecords().forEach((r)=>{const a=arrivalInfo(r);if(a.date){const dest=resolvePort(r.rawDestination,"DEST");if(dest)ports.add(dest);}});
+  panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(a.date){const dest=resolvePort(r.rawDestination,"DEST");if(dest)ports.add(dest);}});
   return[...ports].sort((a,b)=>a.localeCompare(b));
 }
 function buildPortDailyData(){
-  const startStr=byId("portDailyStart").value,endStr=byId("portDailyEnd").value;
-  const start=startStr?new Date(startStr+"T00:00:00"):null,end=endStr?new Date(endStr+"T23:59:59"):null;
+  const startMonth=byId("portDailyStart").value,endMonth=byId("portDailyEnd").value;
+  /* month inputs are YYYY-MM; convert to date range: start=1st of start month, end=last day of end month */
+  const start=startMonth?new Date(startMonth+"-01T00:00:00"):null;
+  const end=endMonth?new Date(new Date(endMonth+"-01T00:00:00").getFullYear(),new Date(endMonth+"-01T00:00:00").getMonth()+1,0,23,59,59):null;
   const portSelect=byId("portFilter"),selectedPorts=[...portSelect.selectedOptions].map((o)=>o.value);
   const portSet=selectedPorts.length?new Set(selectedPorts):null;
   const data=new Map();
-  activeMainRecords().forEach((r)=>{
+  panelMainRecords("portDaily").forEach((r)=>{
+    if(!isArrivalValid(r))return;
     const a=arrivalInfo(r);if(!a.date)return;
     if(start&&a.date<start||end&&a.date>end)return;
     const dest=resolvePort(r.rawDestination,"DEST");if(!dest)return;
@@ -310,33 +322,32 @@ function renderPortDailyChart(){
   if(!ports.length){target.innerHTML=`<div class="port-daily-chart-empty">${escapeHtml(t("noData"))}</div>`;return;}
   const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
   if(!allDays.length){target.innerHTML=`<div class="port-daily-chart-empty">${escapeHtml(t("noData"))}</div>`;return;}
-  const barWidth=28,gap=10,groupGap=14,leftPad=80,rightPad=20,topPad=28,bottomPad=60;
-  const groupWidth=ports.length*(barWidth+gap);
-  const chartWidth=leftPad+rightPad+allDays.length*(groupWidth+groupGap);
+  /* Fixed-size chart per port: 680x300 viewBox */
+  const W=680,H=300,left=60,right=20,top=24,bottom=56,plotW=W-left-right,plotH=H-top-bottom;
   const maxVal=Math.max(1,...ports.flatMap((p)=>[...data.get(p).values()]));
-  const yMax=Math.ceil(maxVal*1.1),plotHeight=240,height=topPad+plotHeight+bottomPad;
-  const x=(dayIdx)=>leftPad+dayIdx*(groupWidth+groupGap);
-  const y=(val)=>topPad+(1-val/yMax)*plotHeight;
+  const yMax=Math.max(10,Math.ceil(maxVal*1.1));
+  const barW=Math.max(4,Math.min(30,plotW/Math.max(allDays.length,1)-4));
+  const gap=(plotW-barW*allDays.length)/Math.max(allDays.length,1);
+  const x=(di)=>left+di*(barW+gap)+gap/2;
+  const y=(val)=>top+(1-val/yMax)*plotH;
   const yTicks=Array.from({length:Math.min(6,yMax+1)},(_,i)=>Math.round(yMax*i/Math.min(5,yMax)));
-  const grid=yTicks.map((v)=>`<line class="grid" x1="${leftPad}" y1="${y(v)}" x2="${chartWidth-rightPad}" y2="${y(v)}"/><text x="${leftPad-8}" y="${y(v)+4}" text-anchor="end" font-size="12">${v}</text>`).join("");
-  const dayLabels=allDays.map((day,i)=>{
-    const labelX=x(i)+groupWidth/2;
-    return`<line class="axis" x1="${labelX}" y1="${topPad+plotHeight}" x2="${labelX}" y2="${topPad+plotHeight+5}"/><text x="${labelX}" y="${topPad+plotHeight+20}" text-anchor="middle" font-size="11" transform="rotate(-35 ${labelX} ${topPad+plotHeight+20})">${escapeHtml(day)}</text>`;
-  }).join("");
-  const bars=ports.map((port,pi)=>{
+  const charts=ports.map((port,pi)=>{
     const color=PORT_DAILY_COLORS[pi%PORT_DAILY_COLORS.length];
-    return allDays.map((day,di)=>{
-      const val=data.get(port).get(day)||0;
+    const portDays=[...data.get(port).keys()].sort();
+    const grid=yTicks.map((v)=>`<line class="grid" x1="${left}" y1="${y(v)}" x2="${W-right}" y2="${y(v)}"/><text x="${left-8}" y="${y(v)+4}" text-anchor="end" font-size="11">${v}</text>`).join("");
+    const bars=portDays.map((day)=>{
+      const di=allDays.indexOf(day),val=data.get(port).get(day)||0;
       if(val<=0)return"";
-      const bx=x(di)+pi*(barWidth+gap),by=y(val),bh=topPad+plotHeight-by;
-      return`<rect class="bar" x="${bx}" y="${by}" width="${barWidth}" height="${bh}" fill="${color}" rx="2"><title>${escapeHtml(port)} | ${escapeHtml(day)} | ${fmtNumber(val,1)} ${escapeHtml(t("containerShort"))}</title></rect>`;
+      const bx=x(di),by=y(val),bh=top+plotH-by;
+      return`<rect class="bar" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${color}" rx="2"><title>${escapeHtml(port)} | ${escapeHtml(day)} | ${fmtNumber(val,1)} ${escapeHtml(t("containerShort"))}</title></rect>`;
     }).join("");
+    /* Show ~8 x-axis labels max */
+    const labelStep=Math.max(1,Math.ceil(allDays.length/8));
+    const dayLabels=allDays.filter((_,i)=>i%labelStep===0).map((day)=>{const di=allDays.indexOf(day);return`<text x="${x(di).toFixed(1)}" y="${top+plotH+16}" text-anchor="middle" font-size="10">${escapeHtml(day)}</text>`;}).join("");
+    const total=[...data.get(port).values()].reduce((s,v)=>s+v,0);
+    return`<div class="port-chart-item"><h4 style="margin:0 0 4px;color:${color}">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(total,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("atdDate"))}</text></svg></div>`;
   }).join("");
-  const legend=ports.map((port,pi)=>{
-    const color=PORT_DAILY_COLORS[pi%PORT_DAILY_COLORS.length];
-    return`<rect x="${leftPad+pi*140}" y="${height-20}" width="12" height="12" fill="${color}" rx="2"/><text x="${leftPad+pi*140+17}" y="${height-10}" font-size="12">${escapeHtml(port)}</text>`;
-  }).join("");
-  target.innerHTML=`<h3>${escapeHtml(t("portChartTitle"))}</h3><svg viewBox="0 0 ${Math.max(chartWidth,leftPad+rightPad+ports.length*140)} ${height+30}" role="img" style="min-width:${Math.max(chartWidth,600)}px"><line class="axis" x1="${leftPad}" y1="${topPad}" x2="${leftPad}" y2="${topPad+plotHeight}"/><line class="axis" x1="${leftPad}" y1="${topPad+plotHeight}" x2="${chartWidth-rightPad}" y2="${topPad+plotHeight}"/>${grid}${bars}${dayLabels}${legend}</svg>`;
+  target.innerHTML=`<div class="port-chart-grid">${charts}</div>`;
 }
 function renderPortDailyTable(){
   const data=buildPortDailyData();
@@ -404,6 +415,8 @@ byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
 byId("portDailyApply").addEventListener("click",()=>{renderPortDailyChart();renderPortDailyTable();});
 byId("exportPortDailyBtn").addEventListener("click",exportPortDaily);
 byId("productTypeSelect").addEventListener("change",()=>{renderAll();});
+byId("arrivalProductType").addEventListener("change",(e)=>{panelProductTypes.arrival=e.target.value;renderBusinessViews();});
+byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
 document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter"));renderBusinessViews();}));
 document.addEventListener("click",(event)=>{
   const root=event.target.closest(".model-filter");
@@ -424,4 +437,4 @@ byId("importMappingBtn").addEventListener("click",()=>byId("importMappingFile").
 byId("importMappingFile").addEventListener("change",async(event)=>{try{if(!event.target.files[0])return;const incoming=JSON.parse(await event.target.files[0].text());if(!Array.isArray(incoming))throw new Error(t("jsonArray"));mappings=incoming;saveMappings();ensureDiscoveredMappings();renderAll();}catch(error){alert(t("importFailed",{error:error.message||error}));}finally{event.target.value="";}});
 document.querySelectorAll(".tab-btn").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll(".tab-btn").forEach((x)=>x.classList.toggle("active",x===button));document.querySelectorAll(".tab").forEach((x)=>x.classList.toggle("active",x.id===button.dataset.tab));}));
 window.addEventListener("app-language-change",()=>{renderAll();if(!hasLoadedWorkbook)statusEl.textContent=t("statusInitial");});
-setDefaultMonthRanges();renderModelFilters();renderMergeReview();renderRouteFilters();renderRouteTrend([]);renderMappingTable();renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();
+setDefaultMonthRanges();{const now=new Date();byId("portDailyStart").value=monthKey(now);byId("portDailyEnd").value=monthKey(new Date(now.getFullYear(),now.getMonth()+1,1));}renderModelFilters();renderMergeReview();renderRouteFilters();renderRouteTrend([]);renderMappingTable();renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();
