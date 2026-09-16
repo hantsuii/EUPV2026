@@ -13,6 +13,7 @@ let hasLoadedWorkbook = false;
 let mergeReview = { blankPopvRows: 0, groups: [], missingHeaders: [] };
 let mappings = loadMappings();
 const modelFilters = { order: null, departure: null, arrival: null };
+let portFilterSelection = null; /* null = all ports; Set = selected port keys */
 const MERGE_COMPARE_FIELDS = ["New Ark SKU", "Model", "B/L Consignee", "POL", "PORT DESTINATION"];
 const MERGE_DISPLAY_FIELDS = [...MERGE_COMPARE_FIELDS, "TCL REFERENCE", "QUANTITY"];
 
@@ -60,7 +61,7 @@ function plannedPickupWeek(record){
   return null;
 }
 function actualPickupWeek(record){if(record.pickupDate)return isoWeek(record.pickupDate);const w=toNumber(record.pickupWeek);if(!w)return null;const order=orderMonth(record);return weekWithBestYear(w,order?Number(order.slice(0,4)):new Date().getFullYear(),record.atd);}
-function arrivalInfo(record){if(record.ata)return{date:record.ata,type:"actual"};if(record.etaUpdate)return{date:record.etaUpdate,type:"forecast"};if(record.etaSO)return{date:record.etaSO,type:"forecast"};return{date:null,type:"missing"};}
+function arrivalInfo(record){if(record.ata)return{date:record.ata,type:"actual"};if(record.etaUpdate)return{date:record.etaUpdate,type:"forecast"};if(record.etaSO)return{date:record.etaSO,type:"forecast"};if(record.odpEtaPort)return{date:record.odpEtaPort,type:"planned"};return{date:null,type:"missing"};}
 function isArrivalValid(record){if(record.poType==="OFFSHORE")return false;const a=arrivalInfo(record);return a.type!=="missing";}
 function departureInfo(record){if(record.atd)return{date:record.atd,type:"actual"};if(record.etdUpdate)return{date:record.etdUpdate,type:"forecast"};if(record.etdSO)return{date:record.etdSO,type:"forecast"};return{date:null,type:"missing"};}
 function inMonthRange(value,startId,endId){if(!value)return false;const start=byId(startId).value,end=byId(endId).value;return(!start||value>=start)&&(!end||value<=end);}
@@ -99,6 +100,26 @@ function renderModelFilters(){
     root.innerHTML=`<label>${escapeHtml(t("modelFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
   });
 }
+function availablePortOptions(){
+  const ports=new Set();
+  panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(a.date){const dest=resolvePort(r.rawDestination,"DEST");if(dest)ports.add(dest);}});
+  return[...ports].sort((a,b)=>a.localeCompare(b)).map((p)=>({key:p,label:p}));
+}
+function commitPortFilter(root){
+  if(!root)return;
+  const query=normalizeText(root.querySelector('.model-filter-search')?.value),allBoxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')];
+  const boxes=query?allBoxes.filter((x)=>!x.closest('.model-filter-option')?.hidden):allBoxes;
+  const chosen=new Set((query?boxes:boxes.filter((x)=>x.checked)).map((x)=>x.value));
+  portFilterSelection=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
+}
+function renderPortFilter(){
+  const root=document.querySelector(".port-filter");
+  if(!root)return;
+  const options=availablePortOptions();
+  const selected=portFilterSelection,selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
+  const summary=selected===null?t("allPorts"):t("selectedModels",{count:selectedCount,total:options.length});
+  root.innerHTML=`<label>${escapeHtml(t("portFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
+}
 
 function saveMappings(){mappings=mappings.map((x)=>({type:x.type==="POL"?"POL":"DEST",raw:normalizeText(x.raw),standard:normalizeText(x.standard),country:String(x.country||"").trim(),note:String(x.note||"").trim()})).filter((x)=>x.raw&&x.standard);localStorage.setItem(PORT_MAPPING_KEY,JSON.stringify(mappings));}
 function mappingIndex(){return new Map(mappings.map((x)=>[`${x.type}|${normalizeText(x.raw)}`,x]));}
@@ -114,7 +135,7 @@ function readSheet(workbook,sheetName,headerRow,productType){
     const ref=clean(row[index[refField]]);if(ref==null)return[];
     let rawPol=index.POL!=null?clean(row[index.POL]):null;if(rawPol==null&&index["PORT OF LOADING"]!=null)rawPol=clean(row[index["PORT OF LOADING"]]);
     let rawPoType=index["New Ark PO Type"]!=null?clean(row[index["New Ark PO Type"]]):null;
-    return[{source:sheetName,productType:productType||"PV",poType:rawPoType?String(rawPoType).trim().toUpperCase():"",reference:String(ref).trim(),quantity:toNumber(row[index.QUANTITY]),mw:toNumber(row[index.MW])||0,containers:toNumber(row[index.CONTAINERS])||0,sku:index["New Ark SKU"]!=null?clean(row[index["New Ark SKU"]]):index["PN"]!=null?clean(row[index.PN]):null,model:index.Model!=null?clean(row[index.Model]):index.DESCRIPTION!=null?clean(row[index.DESCRIPTION]):null,factory:index["Factory Location"]!=null?clean(row[index["Factory Location"]]):null,carrier:index.Carrier!=null?clean(row[index.Carrier]):null,status:index.STATUS!=null?String(clean(row[index.STATUS])||""):"",pickupDate:index["Pick-Up Date"]!=null?toDate(row[index["Pick-Up Date"]]):index["PICK-UP DATE"]!=null?toDate(row[index["PICK-UP DATE"]]):null,pickupWeek:index["Pick-Up Week"]!=null?row[index["Pick-Up Week"]]:null,rawPol,rawDestination:clean(row[index["PORT DESTINATION"]]),etdSO:toDate(row[index["ETD On S/O"]]),etdUpdate:toDate(row[index["ETD Update"]]),atd:toDate(row[index["ATD PORT"]]),etaSO:toDate(row[index["ETA On S/O"]]),etaUpdate:toDate(row[index["ETA Update"]]),ata:toDate(row[index["ATA PORT"]]),vessel:index["REFERENCE V.V"]!=null?clean(row[index["REFERENCE V.V"]]):null,booking:index[bookingField]!=null?clean(row[index[bookingField]]):null}];
+    return[{source:sheetName,productType:productType||"PV",poType:rawPoType?String(rawPoType).trim().toUpperCase():"",reference:String(ref).trim(),quantity:toNumber(row[index.QUANTITY]),mw:toNumber(row[index.MW])||0,containers:toNumber(row[index.CONTAINERS])||0,sku:index["New Ark SKU"]!=null?clean(row[index["New Ark SKU"]]):index["PN"]!=null?clean(row[index.PN]):null,model:index.Model!=null?clean(row[index.Model]):index.DESCRIPTION!=null?clean(row[index.DESCRIPTION]):null,factory:index["Factory Location"]!=null?clean(row[index["Factory Location"]]):null,carrier:index.Carrier!=null?clean(row[index.Carrier]):null,status:index.STATUS!=null?String(clean(row[index.STATUS])||""):"",pickupDate:index["Pick-Up Date"]!=null?toDate(row[index["Pick-Up Date"]]):index["PICK-UP DATE"]!=null?toDate(row[index["PICK-UP DATE"]]):null,pickupWeek:index["Pick-Up Week"]!=null?row[index["Pick-Up Week"]]:null,rawPol,rawDestination:clean(row[index["PORT DESTINATION"]]),etdSO:toDate(row[index["ETD On S/O"]]),etdUpdate:toDate(row[index["ETD Update"]]),atd:toDate(row[index["ATD PORT"]]),etaSO:toDate(row[index["ETA On S/O"]]),etaUpdate:toDate(row[index["ETA Update"]]),ata:toDate(row[index["ATA PORT"]]),odpEtaPort:toDate(row[index["ODP ETA Port"]]),vessel:index["REFERENCE V.V"]!=null?clean(row[index["REFERENCE V.V"]]):null,booking:index[bookingField]!=null?clean(row[index[bookingField]]):null}];
   });
 }
 
@@ -194,7 +215,7 @@ function parseWorkbook(workbook,skuModelMap){
   essSources.flatMap(([name,row])=>readSheet(workbook,name,row,"ESS")).forEach((record)=>{if(record.quantity==null){invalidQuantityCount++;return;}if(record.quantity<=0){quantityZeroCount++;return;}const dedupKey=`ESS|${record.reference}`;if(!unique.has(dedupKey))unique.set(dedupKey,record);});
   records=[...unique.values()];assumptionRows=parseAssumptionRows(workbook);mergeReview=parseMergeReview(workbook);skuModelMatched=0;
   records.forEach((record)=>{const mapped=skuModelMap.get(normalizeText(record.sku));if(mapped){record.model=mapped;if(record.source==="PV SUPPLY DATA"||record.source==="ESS SUPPLY DATA")skuModelMatched++;}});
-  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});ensureDiscoveredMappings();renderMappingTable();
+  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});portFilterSelection=null;ensureDiscoveredMappings();renderMappingTable();
   setDefaultMonthRanges();
   const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
   /* Port daily default months: same as arrival month range (current month → next month) */
@@ -251,7 +272,7 @@ function renderBusinessViews(){
   renderTable("departureTable",[t("hDepartureMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hDepartureType"),t("hQuantity"),t("hMw"),t("hContainers")],departures.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
   const arrivalMain=panelMainRecords("arrival");
   const arrivals=groupRows(arrivalMain,(r)=>{if(!isArrivalValid(r))return null;const a=arrivalInfo(r),month=monthKey(a.date);return matchesModel(r,"arrival")&&month&&inMonthRange(month,"arrivalStartMonth","arrivalEndMonth")?[month,modelLabel(r),String(resolvePort(r.rawDestination,"DEST")||t("unknown")),String(r.sku||t("unknown")),a.type]:null;}).sort((a,b)=>a.parts[0].localeCompare(b.parts[0])||a.parts[1].localeCompare(b.parts[1])||a.parts[2].localeCompare(b.parts[2])||a.parts[3].localeCompare(b.parts[3])||a.parts[4].localeCompare(b.parts[4]));
-  renderTable("arrivalTable",[t("hArrivalMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers")],arrivals.map((x)=>[x.parts[0],x.parts[1],x.parts[2],x.parts[3],x.parts[4]==="actual"?{html:`<span class="actual">${escapeHtml(t("actual"))}</span>`}:{html:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)]));
+  renderTable("arrivalTable",[t("hArrivalMonth"),t("hModel"),t("hDestination"),t("hSku"),t("hArrivalType"),t("hQuantity"),t("hMw"),t("hContainers")],arrivals.map((x)=>{const typeHtml=x.parts[4]==="actual"?`<span class="actual">${escapeHtml(t("actual"))}</span>`:x.parts[4]==="planned"?`<span class="planned">${escapeHtml(t("planned"))}</span>`:`<span class="forecast">${escapeHtml(t("forecast"))}</span>`;return[x.parts[0],x.parts[1],x.parts[2],x.parts[3],{html:typeHtml},fmtNumber(x.quantity),fmtNumber(x.mw,3),fmtNumber(x.containers,1)];}));
 }
 
 function nearestRank(values,rate){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.max(0,Math.ceil(rate*sorted.length)-1)];}
@@ -300,8 +321,7 @@ function buildPortDailyData(){
   /* month inputs are YYYY-MM; convert to date range: start=1st of start month, end=last day of end month */
   const start=startMonth?new Date(startMonth+"-01T00:00:00"):null;
   const end=endMonth?new Date(new Date(endMonth+"-01T00:00:00").getFullYear(),new Date(endMonth+"-01T00:00:00").getMonth()+1,0,23,59,59):null;
-  const portSelect=byId("portFilter"),selectedPorts=[...portSelect.selectedOptions].map((o)=>o.value);
-  const portSet=selectedPorts.length?new Set(selectedPorts):null;
+  const portSet=portFilterSelection;
   const data=new Map();
   panelMainRecords("portDaily").forEach((r)=>{
     if(!isArrivalValid(r))return;
@@ -363,11 +383,7 @@ function renderPortDailyTable(){
   const body=rows.length?rows.map((row)=>`<tr>${row.map((v)=>`<td>${v}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;
   byId("portDailyTable").innerHTML=head+`<tbody>${body}</tbody>`;
 }
-function renderPortDailyFilters(){
-  const select=byId("portFilter"),current=[...select.selectedOptions].map((o)=>o.value);
-  const ports=availableArrivalPorts();
-  select.innerHTML=ports.map((p)=>`<option value="${escapeHtml(p)}"${current.includes(p)?" selected":""}>${escapeHtml(p)}</option>`).join("");
-}
+function renderPortDailyFilters(){renderPortFilter();}
 function exportPortDaily(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
@@ -412,22 +428,23 @@ byId("routePolFilter").addEventListener("change",()=>{renderRouteFilters(true);r
 byId("routeDestinationFilter").addEventListener("change",renderRoutes);
 byId("performanceApplyBtn").addEventListener("click",renderPerformance);
 byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
-byId("portDailyApply").addEventListener("click",()=>{renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));renderPortDailyChart();renderPortDailyTable();});
 byId("exportPortDailyBtn").addEventListener("click",exportPortDaily);
 byId("productTypeSelect").addEventListener("change",()=>{renderAll();});
 byId("arrivalProductType").addEventListener("change",(e)=>{panelProductTypes.arrival=e.target.value;renderBusinessViews();});
-byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;portFilterSelection=null;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
 document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter"));renderBusinessViews();}));
 document.addEventListener("click",(event)=>{
-  const root=event.target.closest(".model-filter");
-  document.querySelectorAll(".model-filter.open").forEach((x)=>{if(x!==root)x.classList.remove("open");});
+  const root=event.target.closest(".model-filter, .port-filter");
+  document.querySelectorAll(".model-filter.open, .port-filter.open").forEach((x)=>{if(x!==root)x.classList.remove("open");});
   if(!root)return;
   if(event.target.closest(".model-filter-toggle")){root.classList.toggle("open");return;}
   if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
   if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
-  if(event.target.closest(".model-filter-apply")){commitModelFilter(root);renderBusinessViews();}
+  if(event.target.closest(".model-filter-apply")){commitModelFilter(root);renderBusinessViews();return;}
+  if(root.classList.contains("port-filter")&&event.target.closest(".model-filter-apply")){commitPortFilter(root);renderPortDailyChart();renderPortDailyTable();return;}
 });
-document.addEventListener("input",(event)=>{if(!event.target.classList.contains("model-filter-search"))return;const query=normalizeText(event.target.value),root=event.target.closest(".model-filter");root.querySelectorAll(".model-filter-option[data-search]").forEach((x)=>{x.hidden=!x.dataset.search.includes(query);});});
+document.addEventListener("input",(event)=>{if(!event.target.classList.contains("model-filter-search"))return;const root=event.target.closest(".model-filter, .port-filter");if(!root)return;const query=normalizeText(event.target.value);root.querySelectorAll(".model-filter-option[data-search]").forEach((x)=>{x.hidden=!x.dataset.search.includes(query);});});
 byId("saveMappingBtn").addEventListener("click",()=>{collectMappingEdits();saveMappings();renderAll();});
 byId("addMappingBtn").addEventListener("click",()=>{collectMappingEdits();mappings.push({type:"DEST",raw:"",standard:"",country:"",note:""});renderMappingTable();});
 byId("resetMappingBtn").addEventListener("click",()=>{if(!confirm(t("resetConfirm")))return;mappings=copyDefaults();saveMappings();ensureDiscoveredMappings();renderAll();});
