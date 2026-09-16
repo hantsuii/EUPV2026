@@ -441,8 +441,11 @@ document.addEventListener("click",(event)=>{
   if(event.target.closest(".model-filter-toggle")){root.classList.toggle("open");return;}
   if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
   if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
-  if(event.target.closest(".model-filter-apply")){commitModelFilter(root);renderBusinessViews();return;}
-  if(root.classList.contains("port-filter")&&event.target.closest(".model-filter-apply")){commitPortFilter(root);renderPortDailyChart();renderPortDailyTable();return;}
+  if(event.target.closest(".model-filter-apply")){
+    if(root.classList.contains("port-filter")){commitPortFilter(root);renderPortDailyChart();renderPortDailyTable();}
+    else{commitModelFilter(root);renderBusinessViews();}
+    return;
+  }
 });
 document.addEventListener("input",(event)=>{if(!event.target.classList.contains("model-filter-search"))return;const root=event.target.closest(".model-filter, .port-filter");if(!root)return;const query=normalizeText(event.target.value);root.querySelectorAll(".model-filter-option[data-search]").forEach((x)=>{x.hidden=!x.dataset.search.includes(query);});});
 byId("saveMappingBtn").addEventListener("click",()=>{collectMappingEdits();saveMappings();renderAll();});
