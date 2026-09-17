@@ -94,7 +94,7 @@ function commitModelFilter(root){
 }
 function renderModelFilters(){
   const options=availableModels();
-  document.querySelectorAll(".model-filter").forEach((root)=>{
+  document.querySelectorAll(".model-filter:not(.port-filter)").forEach((root)=>{
     const scope=root.dataset.scope,selected=modelFilters[scope],selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
     const summary=selected===null?t("allModels"):t("selectedModels",{count:selectedCount,total:options.length});
     root.innerHTML=`<label>${escapeHtml(t("modelFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
@@ -433,7 +433,7 @@ byId("exportPortDailyBtn").addEventListener("click",exportPortDaily);
 byId("productTypeSelect").addEventListener("change",()=>{renderAll();});
 byId("arrivalProductType").addEventListener("change",(e)=>{panelProductTypes.arrival=e.target.value;renderBusinessViews();});
 byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;portFilterSelection=null;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
-document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter"));renderBusinessViews();}));
+document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter:not(.port-filter)"));renderBusinessViews();}));
 document.addEventListener("click",(event)=>{
   const root=event.target.closest(".model-filter, .port-filter");
   document.querySelectorAll(".model-filter.open, .port-filter.open").forEach((x)=>{if(x!==root)x.classList.remove("open");});
