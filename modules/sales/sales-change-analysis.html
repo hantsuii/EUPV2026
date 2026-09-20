@@ -194,7 +194,8 @@
     .filter-grid-6 { grid-template-columns: repeat(6, minmax(150px, 1fr)); }
     .filter-note { color: #5f7da6; font-size: 12px; margin: -2px 0 8px; }
     .quarter-total td { background: #eef5ff; font-weight: 800; color: #1f4a7a; }
-    .quarter-month td:first-child { padding-left: 28px; color: #5f7da6; }
+    .quarter-toggle { display: inline-block; width: 16px; text-align: center; font-size: 11px; color: #3f8bff; transition: transform 0.2s; }
+    .quarter-month td:first-child { padding-left: 42px; color: #5f7da6; }
     .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .product-filter-panel {
       margin: 10px 0 12px;
@@ -377,6 +378,12 @@
 
         <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
         <div class="asp-panel">
+          <div class="sub-title" data-i18n="filterBrand">品牌筛选</div>
+          <div class="filter-grid compact">
+            <div><label data-i18n="brand">品牌</label><select id="dashboardBrandSel" multiple size="4"></select></div>
+          </div>
+        </div>
+        <div class="asp-panel">
           <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
           <div class="filter-grid compact">
             <div><label for="pvAspRegionSel" data-i18n="filterRegion">地区</label><select id="pvAspRegionSel" multiple size="4"></select></div>
@@ -418,7 +425,7 @@
           </div>
           <div>
             <label for="monthSel" data-i18n="filterMonth">月份</label>
-            <select id="monthSel" multiple size="6"></select>
+            <select id="monthSel" multiple size="5"></select>
           </div>
         </div>
 
@@ -532,6 +539,12 @@
       <div class="sub-title" data-i18n="row3Title">未结束季度进度</div>
       <div class="table-wrap"><table id="detailQuarterProgressTable"></table></div>
       <div class="chart-box"><div id="detailMonthlyTrendChart" class="chart"></div></div>
+      <div class="asp-panel">
+        <div class="sub-title" data-i18n="filterBrand">品牌筛选</div>
+        <div class="filter-grid compact">
+          <div><label data-i18n="brand">品牌</label><select id="detailBrandSel" multiple size="4"></select></div>
+        </div>
+      </div>
       <div class="asp-panel">
         <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
         <div class="filter-grid compact">
