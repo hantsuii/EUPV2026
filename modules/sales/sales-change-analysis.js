@@ -39,7 +39,7 @@ const I18N = {
     statusReadRepo: "读取仓库文件：{path}", statusReadUpload: "读取上传文件：{name}", statusNoPath: "请输入仓库文件路径。", statusNoFile: "请先上传销售工作簿文件。", statusNoRows: "Order details 中没有可用的 Month / Quartely 数据。", statusDone: "完成：销售 {allRows} 行，Target {targetRows} 行。", statusFail: "失败：{msg}", statusNoRegion: "当前筛选下无地区数据。", ordersMissing: "工作簿中未找到“Order details”工作表。", targetMissing: "工作簿中未找到“Target”工作表。", repoMissing: "未找到仓库文件：{path}（HTTP {status}）",
     kpiRevenuePair: "开票收入 / 待确认收入(万€)", kpiPvQtyPair: "组件销量MW（开票/待确认）", kpiEssQtyPair: "储能销量Sets（开票/待确认）", kpiBpRate: "BP金额 / 总计达成率", kpiTargetDetail: "目标 {target} / 总计达成 {rate}", kpiFutureRevenue: "未来销售收入(万€)", kpiFuturePvQty: "未来组件销量(MW)", kpiFutureEssQty: "未来储能销量(Sets)", kpiH1Revenue: "H1 开票金额(万€)", kpiH1PvQty: "H1 开票组件销量(MW)", kpiH1EssQty: "H1 开票储能销量(Sets)", kpiH1Rate: "H1 开票达成率",
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
-    chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)", chartPvQty: "组件销量(MW)", chartEssQty: "储能销量(Sets)",
+    chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)", chartPvQty: "组件销量(MW)", chartEssQty: "储能销量(Sets)", chartPvQtyTitle: "2026 月度组件销量(MW)", chartEssQtyTitle: "2026 月度储能销量(Sets)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
     productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
     customerTitle:"客户分析", customerSubtitle:"先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。", customerRegion:"分析地区", customerYear:"分析年份", customerProduct:"产品线", customerBrand:"品牌", customerSearch:"搜索客户", customerSearchPlaceholder:"客户名称 / 国家", customerCurrentScope:"当前分析范围", customerTabRegion:"地区概览", customerTabProduct:"产品结构", customerTabActivity:"活跃度", customerTabValue:"客户价值", customerTabDetail:"客户明细", customerDefinition:"活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。",
@@ -52,7 +52,7 @@ const I18N = {
     statusReadRepo: "Loading repository file: {path}", statusReadUpload: "Reading uploaded file: {name}", statusNoPath: "Please enter the repository file path.", statusNoFile: "Please upload the sales workbook first.", statusNoRows: "No usable Month / Quartely data in Order details.", statusDone: "Done: {allRows} sales rows, {targetRows} target rows.", statusFail: "Failed: {msg}", statusNoRegion: "No regional data under current filters.", ordersMissing: "Sheet 'Order details' was not found in the workbook.", targetMissing: "Sheet 'Target' was not found in the workbook.", repoMissing: "Repository file not found: {path} (HTTP {status})",
     kpiRevenuePair: "Invoiced / Pending Revenue (10k €)", kpiPvQtyPair: "PV Qty MW (Invoiced/Pending)", kpiEssQtyPair: "ESS Qty Sets (Invoiced/Pending)", kpiBpRate: "BP Revenue / Total Achievement", kpiTargetDetail: "Target {target} / Total achievement {rate}", kpiFutureRevenue: "Future Revenue (10k €)", kpiFuturePvQty: "Future PV Qty (MW)", kpiFutureEssQty: "Future ESS Qty (Sets)", kpiH1Revenue: "H1 Invoiced Revenue (10k €)", kpiH1PvQty: "H1 Invoiced PV Qty (MW)", kpiH1EssQty: "H1 Invoiced ESS Qty (Sets)", kpiH1Rate: "H1 Invoiced Achievement",
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Pending Confirmation (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
-    chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)", chartPvQty: "PV Qty (MW)", chartEssQty: "ESS Qty (Sets)",
+    chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)", chartPvQty: "PV Qty (MW)", chartEssQty: "ESS Qty (Sets)", chartPvQtyTitle: "2026 Monthly PV Qty (MW)", chartEssQtyTitle: "2026 Monthly ESS Qty (Sets)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
     productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
     customerTitle:"Customer Analysis", customerSubtitle:"Start with the overview, then choose a region for product, activity, value and customer details.", customerRegion:"Analysis Region", customerYear:"Analysis Year", customerProduct:"Product Line", customerBrand:"Brand", customerSearch:"Search Customer", customerSearchPlaceholder:"Customer name / country", customerCurrentScope:"Current scope", customerTabRegion:"Regional Overview", customerTabProduct:"Product Mix", customerTabActivity:"Activity", customerTabValue:"Customer Value", customerTabDetail:"Customer Details", customerDefinition:"Active: ordered in the last 3 months from current date; sleeping: no order for 4–6 months; at risk: no order for more than 6 months.",
@@ -214,7 +214,7 @@ function renderOverview() {
   const brandFilteredTargets = filterTargetsByDashboardBrand(allTargets);
   renderDashboard(brandFilteredRows, brandFilteredTargets, {
     year: "yearKpiRow", future: "futureKpiRow", h1: "h1KpiRow", quarter: "quarterProgressTable",
-    trend: "monthlyTrendChart", pvAsp: "monthlyPvAspChart", essAsp: "monthlyEssAspChart",
+    trend: "monthlyTrendChart", pvAsp: "monthlyPvAspChart", pvQty: "monthlyPvQtyChart", essAsp: "monthlyEssAspChart", essQty: "monthlyEssQtyChart",
   }, { pv: pvAspFilters, ess: essAspFilters });
   setStatus("statusDone", { allRows: allRows.length, targetRows: allTargets.length });
 }
@@ -230,7 +230,7 @@ function renderDashboard(sourceRows, sourceTargets, ids, aspFilters = null) {
   const future = aggregate(sourceRows.filter((r) => r.year > TARGET_YEAR)); byId(ids.future).innerHTML = [card(t("kpiFutureRevenue"), fmtWanInt(future.revenue)), card(t("kpiFuturePvQty"), fmtInt(future.pvQty)), card(t("kpiFutureEssQty"), fmtInt(future.essQty))].join("");
   const h1Inv = aggregate(yearRows.filter((r) => r.month <= `${TARGET_YEAR}-06` && r.isInvoiced)), h1Bp = targetAgg(targetYear.filter((r) => r.month <= `${TARGET_YEAR}-06`));
   byId(ids.h1).innerHTML = [card(t("kpiH1Revenue"), fmtWanInt(h1Inv.revenue)), card(t("kpiH1PvQty"), fmtInt(h1Inv.pvQty)), card(t("kpiH1EssQty"), fmtInt(h1Inv.essQty)), card(t("kpiH1Rate"), fmtPct(achievement(h1Inv.revenue, h1Bp.revenue)))].join("");
-  renderQuarterProgress(yearRows, targetYear, ids.quarter); renderMonthlyRevenue(yearRows, ids.trend); renderAspCharts(yearRows, ids.pvAsp, ids.essAsp, aspFilters);
+  renderQuarterProgress(yearRows, targetYear, ids.quarter); renderMonthlyRevenue(yearRows, ids.trend); renderAspCharts(yearRows, ids.pvAsp, ids.pvQty, ids.essAsp, ids.essQty, aspFilters);
 }
 function renderQuarterProgress(yearRows, targetYear, tableId) {
   const rows = [];
@@ -273,19 +273,15 @@ function applyAspFilters(rows, filters) {
   result = filterMulti(result, selected(filters.level1), (r) => r.level1);
   return filterMulti(result, selected(filters.level2), (r) => r.level2);
 }
-function renderAspCharts(yearRows, pvChartId, essChartId, filters = null) {
+function renderAspCharts(yearRows, pvAspChartId, pvQtyChartId, essAspChartId, essQtyChartId, filters = null) {
   const months = Array.from({ length: 12 }, (_, i) => `${TARGET_YEAR}-${String(i + 1).padStart(2, "0")}`);
   const pvRows = yearRows.filter((r) => r.isPV), essRows = yearRows.filter((r) => r.isESS);
   const pvData = months.map((m) => aggregate(applyAspFilters(pvRows.filter((r) => r.month === m), filters?.pv))), pv = pvData.map((x) => x.pvQty !== 0 ? x.pvAmount / (x.pvQty * 1000000) : null);
   const essData = months.map((m) => aggregate(applyAspFilters(essRows.filter((r) => r.month === m), filters?.ess))), ess = essData.map((x) => x.essQty !== 0 ? x.essAmount / x.essQty : null);
-  renderPlot(pvChartId, [
-    { x: months, y: pvData.map((x) => x.pvQty), type: "bar", name: t("chartPvQty"), marker: { color: "#B4D0FF" }, yaxis: "y2" },
-    { x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 } }
-  ], { title: t("chartPvAspTitle"), yaxis: { title: t("chartPvAsp") }, yaxis2: { title: t("chartPvQty"), overlaying: "y", side: "right", showgrid: false } });
-  renderPlot(essChartId, [
-    { x: months, y: essData.map((x) => x.essQty), type: "bar", name: t("chartEssQty"), marker: { color: "#E0D0FF" }, yaxis: "y2" },
-    { x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 } }
-  ], { title: t("chartEssAspTitle"), yaxis: { title: t("chartEssAsp") }, yaxis2: { title: t("chartEssQty"), overlaying: "y", side: "right", showgrid: false } });
+  renderPlot(pvAspChartId, [{ x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 } }], { title: t("chartPvAspTitle"), yaxis: { title: t("chartPvAsp") } });
+  renderPlot(pvQtyChartId, [{ x: months, y: pvData.map((x) => x.pvQty), type: "bar", name: t("chartPvQty"), marker: { color: "#B4D0FF" } }], { title: t("chartPvQtyTitle"), yaxis: { title: t("chartPvQty") } });
+  renderPlot(essAspChartId, [{ x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 } }], { title: t("chartEssAspTitle"), yaxis: { title: t("chartEssAsp") } });
+  renderPlot(essQtyChartId, [{ x: months, y: essData.map((x) => x.essQty), type: "bar", name: t("chartEssQty"), marker: { color: "#E0D0FF" } }], { title: t("chartEssQtyTitle"), yaxis: { title: t("chartEssQty") } });
 }
 
 function renderRegion() {
@@ -327,7 +323,7 @@ function renderRegionDetails(resetFilters = false) {
   refreshAspCascade(detailPvAspFilters, resetFilters, rows.filter((r) => r.isPV)); refreshAspCascade(detailEssAspFilters, resetFilters, rows.filter((r) => r.isESS));
   renderDashboard(rows, targets, {
     year: "detailYearKpiRow", future: "detailFutureKpiRow", h1: "detailH1KpiRow", quarter: "detailQuarterProgressTable",
-    trend: "detailMonthlyTrendChart", pvAsp: "detailMonthlyPvAspChart", essAsp: "detailMonthlyEssAspChart",
+    trend: "detailMonthlyTrendChart", pvAsp: "detailMonthlyPvAspChart", pvQty: "detailMonthlyPvQtyChart", essAsp: "detailMonthlyEssAspChart", essQty: "detailMonthlyEssQtyChart",
   }, { pv: detailPvAspFilters, ess: detailEssAspFilters });
 }
 function closeRegionDetails() { regionDetailModal.classList.remove("open"); }

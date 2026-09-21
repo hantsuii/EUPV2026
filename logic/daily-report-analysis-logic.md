@@ -18,7 +18,7 @@
 - PV ASP 图在筛选和计算前固定限定 `Category = PV`；PV 数量取 `Total MW`，PV ASP = PV Revenue EUR / (PV MW × 1,000,000)。
 - ESS 数量沿用原页面口径：`Unit Price * Qty` 有效，且产品为 Hybrid Inverter、ENERGY+_KIT GEN1、ENERGY+_KIT 或 TCL 时，取 `Ordered Qty`。
 - ESS ASP 图在筛选和计算前固定限定 `Category = ESS`；ESS ASP = ESS Revenue EUR / ESS Sets。
-- PV 和 ESS ASP 纵向分别展示。每张图中折线代表 ASP，柱状图代表对应销售数量（PV MW 或 ESS Sets），共用 X 轴，左侧 Y 轴为 ASP、右侧 Y 轴为数量。每张图都可独立按 `Region`、`Brand`、`Level1`、`Level2` 多选筛选；上层筛选变化后，下层选项仅保留当前上层筛选范围内存在的值。
+- PV 和 ESS ASP 纵向分别展示。每个 ASP 筛选面板下并排放置两张图表：左侧折线图展示 ASP，右侧柱状图展示对应销售数量（PV MW 或 ESS Sets），两图共用 X 轴但各自独立 Y 轴。每张图都可独立按 `Region`、`Brand`、`Level1`、`Level2` 多选筛选；上层筛选变化后，下层选项仅保留当前上层筛选范围内存在的值。
 - 总计 Dashboard 和地区详情弹窗各自独立提供一个品牌多选筛选器，筛选后重新计算 KPI、季度进度、月度趋势和 ASP 图。
 
 ## BP 与达成率
