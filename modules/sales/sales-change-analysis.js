@@ -214,7 +214,7 @@ function renderOverview() {
   const brandFilteredTargets = filterTargetsByDashboardBrand(allTargets);
   renderDashboard(brandFilteredRows, brandFilteredTargets, {
     year: "yearKpiRow", future: "futureKpiRow", h1: "h1KpiRow", quarter: "quarterProgressTable",
-    trend: "monthlyTrendChart", pvAsp: "monthlyPvAspChart", pvQty: "monthlyPvQtyChart", essAsp: "monthlyEssAspChart", essQty: "monthlyEssQtyChart",
+    trend: "monthlyTrendChart", pvAsp: "monthlyPvAspChart", essAsp: "monthlyEssAspChart",
   }, { pv: pvAspFilters, ess: essAspFilters });
   setStatus("statusDone", { allRows: allRows.length, targetRows: allTargets.length });
 }
@@ -230,7 +230,7 @@ function renderDashboard(sourceRows, sourceTargets, ids, aspFilters = null) {
   const future = aggregate(sourceRows.filter((r) => r.year > TARGET_YEAR)); byId(ids.future).innerHTML = [card(t("kpiFutureRevenue"), fmtWanInt(future.revenue)), card(t("kpiFuturePvQty"), fmtInt(future.pvQty)), card(t("kpiFutureEssQty"), fmtInt(future.essQty))].join("");
   const h1Inv = aggregate(yearRows.filter((r) => r.month <= `${TARGET_YEAR}-06` && r.isInvoiced)), h1Bp = targetAgg(targetYear.filter((r) => r.month <= `${TARGET_YEAR}-06`));
   byId(ids.h1).innerHTML = [card(t("kpiH1Revenue"), fmtWanInt(h1Inv.revenue)), card(t("kpiH1PvQty"), fmtInt(h1Inv.pvQty)), card(t("kpiH1EssQty"), fmtInt(h1Inv.essQty)), card(t("kpiH1Rate"), fmtPct(achievement(h1Inv.revenue, h1Bp.revenue)))].join("");
-  renderQuarterProgress(yearRows, targetYear, ids.quarter); renderMonthlyRevenue(yearRows, ids.trend); renderAspCharts(yearRows, ids.pvAsp, ids.pvQty, ids.essAsp, ids.essQty, aspFilters);
+  renderQuarterProgress(yearRows, targetYear, ids.quarter); renderMonthlyRevenue(yearRows, ids.trend); renderAspCharts(yearRows, ids.pvAsp, ids.essAsp, aspFilters);
 }
 function renderQuarterProgress(yearRows, targetYear, tableId) {
   const rows = [];
@@ -273,15 +273,19 @@ function applyAspFilters(rows, filters) {
   result = filterMulti(result, selected(filters.level1), (r) => r.level1);
   return filterMulti(result, selected(filters.level2), (r) => r.level2);
 }
-function renderAspCharts(yearRows, pvAspChartId, pvQtyChartId, essAspChartId, essQtyChartId, filters = null) {
+function renderAspCharts(yearRows, pvChartId, essChartId, filters = null) {
   const months = Array.from({ length: 12 }, (_, i) => `${TARGET_YEAR}-${String(i + 1).padStart(2, "0")}`);
   const pvRows = yearRows.filter((r) => r.isPV), essRows = yearRows.filter((r) => r.isESS);
   const pvData = months.map((m) => aggregate(applyAspFilters(pvRows.filter((r) => r.month === m), filters?.pv))), pv = pvData.map((x) => x.pvQty !== 0 ? x.pvAmount / (x.pvQty * 1000000) : null);
   const essData = months.map((m) => aggregate(applyAspFilters(essRows.filter((r) => r.month === m), filters?.ess))), ess = essData.map((x) => x.essQty !== 0 ? x.essAmount / x.essQty : null);
-  renderPlot(pvAspChartId, [{ x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 } }], { title: t("chartPvAspTitle"), yaxis: { title: t("chartPvAsp") } });
-  renderPlot(pvQtyChartId, [{ x: months, y: pvData.map((x) => x.pvQty), type: "bar", name: t("chartPvQty"), marker: { color: "#B4D0FF" } }], { title: t("chartPvQtyTitle"), yaxis: { title: t("chartPvQty") } });
-  renderPlot(essAspChartId, [{ x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 } }], { title: t("chartEssAspTitle"), yaxis: { title: t("chartEssAsp") } });
-  renderPlot(essQtyChartId, [{ x: months, y: essData.map((x) => x.essQty), type: "bar", name: t("chartEssQty"), marker: { color: "#E0D0FF" } }], { title: t("chartEssQtyTitle"), yaxis: { title: t("chartEssQty") } });
+  renderPlot(pvChartId, [
+    { x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 }, xaxis: "x", yaxis: "y" },
+    { x: months, y: pvData.map((x) => x.pvQty), type: "bar", name: t("chartPvQty"), marker: { color: "#B4D0FF" }, xaxis: "x2", yaxis: "y2" }
+  ], { title: t("chartPvAspTitle"), xaxis: { domain: [0, 1], anchor: "y", showticklabels: false }, yaxis: { title: t("chartPvAsp"), domain: [0.52, 1], anchor: "x" }, xaxis2: { domain: [0, 1], anchor: "y2" }, yaxis2: { title: t("chartPvQty"), domain: [0, 0.45], anchor: "x2" }, margin: { l: 62, r: 32, t: 52, b: 42 } });
+  renderPlot(essChartId, [
+    { x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 }, xaxis: "x", yaxis: "y" },
+    { x: months, y: essData.map((x) => x.essQty), type: "bar", name: t("chartEssQty"), marker: { color: "#E0D0FF" }, xaxis: "x2", yaxis: "y2" }
+  ], { title: t("chartEssAspTitle"), xaxis: { domain: [0, 1], anchor: "y", showticklabels: false }, yaxis: { title: t("chartEssAsp"), domain: [0.52, 1], anchor: "x" }, xaxis2: { domain: [0, 1], anchor: "y2" }, yaxis2: { title: t("chartEssQty"), domain: [0, 0.45], anchor: "x2" }, margin: { l: 62, r: 32, t: 52, b: 42 } });
 }
 
 function renderRegion() {
@@ -323,7 +327,7 @@ function renderRegionDetails(resetFilters = false) {
   refreshAspCascade(detailPvAspFilters, resetFilters, rows.filter((r) => r.isPV)); refreshAspCascade(detailEssAspFilters, resetFilters, rows.filter((r) => r.isESS));
   renderDashboard(rows, targets, {
     year: "detailYearKpiRow", future: "detailFutureKpiRow", h1: "detailH1KpiRow", quarter: "detailQuarterProgressTable",
-    trend: "detailMonthlyTrendChart", pvAsp: "detailMonthlyPvAspChart", pvQty: "detailMonthlyPvQtyChart", essAsp: "detailMonthlyEssAspChart", essQty: "detailMonthlyEssQtyChart",
+    trend: "detailMonthlyTrendChart", pvAsp: "detailMonthlyPvAspChart", essAsp: "detailMonthlyEssAspChart",
   }, { pv: detailPvAspFilters, ess: detailEssAspFilters });
 }
 function closeRegionDetails() { regionDetailModal.classList.remove("open"); }
