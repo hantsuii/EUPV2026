@@ -155,8 +155,10 @@
       border-radius: 12px;
       padding: 8px;
       background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      overflow: hidden;
     }
-    .chart { width: 100%; height: 380px; }
+    .chart-box .chart { min-width: 0; }
+    .chart { width: 100%; height: 340px; }
 
     .table-wrap {
       overflow: auto;
@@ -208,7 +210,7 @@
     .product-hierarchy-grid { grid-template-columns: repeat(4, minmax(175px, 1fr)); margin-bottom: 12px; }
     .product-control-grid { grid-template-columns: repeat(5, minmax(155px, 1fr)); margin-bottom: 0; }
     .product-filter-panel .filter-grid { gap: 12px; }
-    .product-chart-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.9fr); gap: 12px; }
+    .product-chart-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr); gap: 12px; }
     .product-chart-grid .chart-box { margin-top: 0; }
     .asp-panel + .asp-panel { margin-top: 14px; }
     .modal-backdrop {
@@ -266,7 +268,7 @@
 
     .customer-toolbar {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(150px, .65fr));
+      grid-template-columns: minmax(200px, 1fr) repeat(4, minmax(140px, .65fr));
       gap: 12px;
       margin: 10px 0 14px;
       padding: 14px;
@@ -276,6 +278,9 @@
     }
     .customer-toolbar label { display:block;margin-bottom:4px;color:#406491;font-size:13px;font-weight:700; }
     .customer-toolbar select, .customer-toolbar input { width:100%;border:1px solid #c5d9f4;border-radius:10px;padding:9px 10px;background:#fff;color:#2a4d7a; }
+    .dashboard-brand-bar { display:flex;align-items:center;gap:10px;margin-bottom:12px; }
+    .dashboard-brand-bar label { font-size:13px;font-weight:700;color:#406491;white-space:nowrap; }
+    .dashboard-brand-bar select { min-width:200px;border:1px solid #c5d9f4;border-radius:10px;padding:8px 10px;background:#fff;color:#2a4d7a; }
     .customer-scope { display:flex;align-items:center;gap:8px;margin:4px 0 12px;color:#56739f;font-size:13px; }
     .customer-scope strong { color:#1f4a7a;font-size:15px; }
     .customer-subnav { display:flex;flex-wrap:wrap;gap:8px;margin:12px 0; }
@@ -283,7 +288,7 @@
     .customer-subnav button.active { background:#245fbd;border-color:#245fbd;color:#fff; }
     .customer-view { display:none; }
     .customer-view.active { display:block; }
-    .customer-chart-grid { display:grid;grid-template-columns:1.25fr .75fr;gap:12px; }
+    .customer-chart-grid { display:grid;grid-template-columns:1.15fr .85fr;gap:12px; }
     .status-pill { display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:800; }
     .status-active { background:#dcf7ee;color:#16725e; }
     .status-sleep { background:#fff1ce;color:#8b5b00; }
@@ -299,11 +304,13 @@
       .product-chart-grid { grid-template-columns: 1fr; }
       .customer-toolbar { grid-template-columns:repeat(2,minmax(180px,1fr)); }
       .customer-chart-grid { grid-template-columns:1fr; }
+      .chart { height: 300px; }
     }
     @media (max-width: 920px) {
       .repo-row input[type="text"] { min-width: 100%; }
       .filter-grid { grid-template-columns: 1fr; }
       .customer-toolbar { grid-template-columns:1fr; }
+      .chart { height: 280px; }
     }
   </style>
   <link rel="stylesheet" href="../../theme.css" />
@@ -362,6 +369,10 @@
       </div>
 
       <div id="block-total" class="content-block active">
+        <div class="dashboard-brand-bar">
+          <label for="dashboardBrandSel" data-i18n="brand">品牌</label>
+          <select id="dashboardBrandSel"></select>
+        </div>
         <h3 data-i18n="overviewTitle">2026年总览</h3>
 
         <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
@@ -377,12 +388,6 @@
         <div class="table-wrap"><table id="quarterProgressTable"></table></div>
 
         <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
-        <div class="asp-panel">
-          <div class="sub-title" data-i18n="filterBrand">品牌筛选</div>
-          <div class="filter-grid compact">
-            <div><label data-i18n="brand">品牌</label><select id="dashboardBrandSel" multiple size="4"></select></div>
-          </div>
-        </div>
         <div class="asp-panel">
           <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
           <div class="filter-grid compact">
@@ -496,6 +501,7 @@
           <div><label for="customerRegionSel" data-i18n="customerRegion">分析地区</label><select id="customerRegionSel"></select></div>
           <div><label for="customerYearSel" data-i18n="customerYear">分析年份</label><select id="customerYearSel"></select></div>
           <div><label for="customerProductSel" data-i18n="customerProduct">产品线</label><select id="customerProductSel"><option value="__ALL__">全部</option><option value="PV">PV</option><option value="ESS">ESS</option><option value="HP">HP</option></select></div>
+          <div><label for="customerBrandSel" data-i18n="customerBrand">品牌</label><select id="customerBrandSel"></select></div>
           <div><label for="customerSearch" data-i18n="customerSearch">搜索客户</label><input id="customerSearch" type="search" placeholder="客户名称 / 国家" data-i18n-placeholder="customerSearchPlaceholder" /></div>
         </div>
         <div class="customer-scope"><span data-i18n="customerCurrentScope">当前分析范围</span><strong id="customerScopeLabel">全球总览</strong></div>
@@ -519,7 +525,7 @@
         <div id="customer-view-activity" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerActivityChart" class="chart"></div></div><div class="chart-box"><div id="customerStatusChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerActivityTable"></table></div></div>
         <div id="customer-view-value" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerValueChart" class="chart"></div></div><div class="chart-box"><div id="customerConcentrationChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerValueTable"></table></div></div>
         <div id="customer-view-detail" class="customer-view"><div class="table-wrap"><table id="customerDetailTable"></table></div></div>
-        <p class="customer-note" data-i18n="customerDefinition">活跃客户：数据中最近月份往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。</p>
+        <p class="customer-note" data-i18n="customerDefinition">活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。</p>
       </div>
     </section>
   </main>
@@ -530,6 +536,10 @@
         <h2 id="regionDetailTitle">地区总计 Dashboard</h2>
         <button id="regionDetailClose" class="modal-close" type="button" aria-label="关闭" data-i18n-aria-label="close">×</button>
       </div>
+      <div class="dashboard-brand-bar">
+        <label data-i18n="brand">品牌</label>
+        <select id="detailBrandSel"></select>
+      </div>
       <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
       <div id="detailYearKpiRow" class="kpi-grid kpi-grid-4"></div>
       <div class="sub-title" data-i18n="futureTitle">未来销售指标（2027+）</div>
@@ -539,12 +549,6 @@
       <div class="sub-title" data-i18n="row3Title">未结束季度进度</div>
       <div class="table-wrap"><table id="detailQuarterProgressTable"></table></div>
       <div class="chart-box"><div id="detailMonthlyTrendChart" class="chart"></div></div>
-      <div class="asp-panel">
-        <div class="sub-title" data-i18n="filterBrand">品牌筛选</div>
-        <div class="filter-grid compact">
-          <div><label data-i18n="brand">品牌</label><select id="detailBrandSel" multiple size="4"></select></div>
-        </div>
-      </div>
       <div class="asp-panel">
         <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
         <div class="filter-grid compact">

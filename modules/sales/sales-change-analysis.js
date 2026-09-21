@@ -42,7 +42,7 @@ const I18N = {
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)", chartPvQty: "组件销量(MW)", chartEssQty: "储能销量(Sets)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
     productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
-    customerTitle:"客户分析", customerSubtitle:"先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。", customerRegion:"分析地区", customerYear:"分析年份", customerProduct:"产品线", customerSearch:"搜索客户", customerSearchPlaceholder:"客户名称 / 国家", customerCurrentScope:"当前分析范围", customerTabRegion:"地区概览", customerTabProduct:"产品结构", customerTabActivity:"活跃度", customerTabValue:"客户价值", customerTabDetail:"客户明细", customerDefinition:"活跃客户：数据中最近月份往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。",
+    customerTitle:"客户分析", customerSubtitle:"先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。", customerRegion:"分析地区", customerYear:"分析年份", customerProduct:"产品线", customerBrand:"品牌", customerSearch:"搜索客户", customerSearchPlaceholder:"客户名称 / 国家", customerCurrentScope:"当前分析范围", customerTabRegion:"地区概览", customerTabProduct:"产品结构", customerTabActivity:"活跃度", customerTabValue:"客户价值", customerTabDetail:"客户明细", customerDefinition:"活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。",
   },
   en: {
     pageTitle: "Sales Analytics Dashboard (PV / ESS)", pageSubtitle: "Sales, target achievement, ASP and product-mix trends.", backHome: "← Back to Home",
@@ -55,7 +55,7 @@ const I18N = {
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)", chartPvQty: "PV Qty (MW)", chartEssQty: "ESS Qty (Sets)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
     productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
-    customerTitle:"Customer Analysis", customerSubtitle:"Start with the overview, then choose a region for product, activity, value and customer details.", customerRegion:"Analysis Region", customerYear:"Analysis Year", customerProduct:"Product Line", customerSearch:"Search Customer", customerSearchPlaceholder:"Customer name / country", customerCurrentScope:"Current scope", customerTabRegion:"Regional Overview", customerTabProduct:"Product Mix", customerTabActivity:"Activity", customerTabValue:"Customer Value", customerTabDetail:"Customer Details", customerDefinition:"Active: ordered in the latest 3 months in the dataset; sleeping: no order for 4–6 months; at risk: no order for more than 6 months.",
+    customerTitle:"Customer Analysis", customerSubtitle:"Start with the overview, then choose a region for product, activity, value and customer details.", customerRegion:"Analysis Region", customerYear:"Analysis Year", customerProduct:"Product Line", customerBrand:"Brand", customerSearch:"Search Customer", customerSearchPlaceholder:"Customer name / country", customerCurrentScope:"Current scope", customerTabRegion:"Regional Overview", customerTabProduct:"Product Mix", customerTabActivity:"Activity", customerTabValue:"Customer Value", customerTabDetail:"Customer Details", customerDefinition:"Active: ordered in the last 3 months from current date; sleeping: no order for 4–6 months; at risk: no order for more than 6 months.",
   },
 };
 
@@ -194,14 +194,14 @@ function initFilters() {
 }
 
 function filterByDashboardBrand(rows) {
-  const brands = selected(dashboardBrandSel);
-  if (!brands.length || brands.includes("__ALL__")) return rows;
-  const set = new Set(brands);
-  return rows.filter((r) => set.has(r.brand));
+  const brand = dashboardBrandSel.value;
+  if (!brand || brand === "__ALL__") return rows;
+  return rows.filter((r) => r.brand === brand);
 }
 function refreshDashboardBrandOptions(reset = false) {
   const allOption = { value: "__ALL__", label: t("all") };
-  fillSelect(dashboardBrandSel, [allOption, ...optionsForRows(allRows, "brand")], reset ? ["__ALL__"] : selected(dashboardBrandSel));
+  const prev = dashboardBrandSel.value;
+  fillSelect(dashboardBrandSel, [allOption, ...optionsForRows(allRows, "brand")], reset ? ["__ALL__"] : [prev || "__ALL__"]);
 }
 function renderOverview() {
   const brandFilteredRows = filterByDashboardBrand(allRows);
@@ -298,10 +298,9 @@ function openRegionDetails(region) {
 }
 function filterByDetailBrand(rows) {
   if (!detailBrandSel) return rows;
-  const brands = selected(detailBrandSel);
-  if (!brands.length || brands.includes("__ALL__")) return rows;
-  const set = new Set(brands);
-  return rows.filter((r) => set.has(r.brand));
+  const brand = detailBrandSel.value;
+  if (!brand || brand === "__ALL__") return rows;
+  return rows.filter((r) => r.brand === brand);
 }
 function renderRegionDetails(resetFilters = false) {
   if (!activeDetailRegion) return;
@@ -389,7 +388,7 @@ Object.values(detailEssAspFilters).forEach((el) => el.addEventListener("change",
 productLevelSel.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); });
 productLevelValuesSel.addEventListener("change", renderProduct);
 Object.values(productHierarchyFilters).forEach((el) => el.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); }));
-[incomeTypeSel, yearSel, quarterSel, monthSel, dashboardBrandSel, detailBrandSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters), ...Object.values(productHierarchyFilters), productLevelValuesSel].forEach(bindMultiSelectToggle);
+[incomeTypeSel, yearSel, quarterSel, monthSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters), ...Object.values(productHierarchyFilters), productLevelValuesSel].forEach(bindMultiSelectToggle);
 byId("regionGrid").addEventListener("click", (event) => { const button = event.target.closest("button[data-region]"); if (button) openRegionDetails(button.dataset.region); });
 regionDetailClose.addEventListener("click", closeRegionDetails);
 regionDetailModal.addEventListener("click", (event) => { if (event.target === regionDetailModal) closeRegionDetails(); });
