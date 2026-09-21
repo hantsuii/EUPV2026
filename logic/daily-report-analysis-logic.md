@@ -8,9 +8,10 @@
 - 收入读取 `Revenue EUR`；退货负金额直接参与求和。
 - `Order Status2 = invoiced` 为开票收入，`confirm` 为待确认收入；“总计”包含全部行。
 - 地区读取 `Order details.Region`。
-- Target 读取 `Target` sheet。地区优先读取 `Region`；为兼容旧日报样例，在 `Region` 不存在时回退到 `Country`。
+- Target 读取 `Target` sheet。地区优先读取 `Region`；为兼容旧日报样例，在 `Region` 不存在时回退到 `Country`。Target 中的 `Brand` 列一并读取，用于品牌筛选时联动 Target 金额和数量。
 - 实际和 Target 都应用同一套 H1/H2 地区归并：Italy & Adriatics → Italy、Germany & Austria → DACH、Emerging Market → Central and Eastern Europe、lberia → Southern Europe。
 - Target 后台同时汇总 `Revenue EUR` 和 `Quantity`。PV Quantity 对应 MW；ESS Quantity 只汇总 `category Sub = Kits` 的行，对应 Sets；当前不输出 country/category/Product-Sub 层级目标。
+- 总计 Dashboard 和地区详情弹窗的品牌筛选同时作用于实际销售和 Target：选中品牌后，KPI 卡的目标金额/数量和达成率、季度进度表中的 BP 金额和达成率均按所选品牌的 Target 行重新计算。
 
 ## 数量与 ASP
 

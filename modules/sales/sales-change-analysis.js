@@ -123,7 +123,8 @@ function normalizeTargets(rawRows) {
     const month = normalizeMonth(row["Month"]), rawYear = n(row["Year"] ?? row["year"]), year = rawYear > 0 ? Math.trunc(rawYear) : (month ? Number(month.slice(0, 4)) : null);
     const category = String(row["category"] ?? row["Category"] ?? "Unknown").trim().toUpperCase(), quantity = n(row["Quantity"]);
     const categorySub = String(row["category Sub"] ?? row["Category Sub"] ?? row["Sub Type"] ?? "").trim().toUpperCase();
-    return { year, month, quarter: normalizeQuarter(row["Quartely"], month), region: mapRegionForStats(row["Region"] ?? row["Country"]), category, revenue: n(row["Revenue EUR"]), quantity, pvQty: category === "PV" ? quantity : 0, essQty: category === "ESS" && categorySub === "KITS" ? quantity : 0 };
+    const brand = String(row["Brand"] ?? row["brand"] ?? "Unknown").trim() || "Unknown";
+    return { year, month, quarter: normalizeQuarter(row["Quartely"], month), region: mapRegionForStats(row["Region"] ?? row["Country"]), category, brand, revenue: n(row["Revenue EUR"]), quantity, pvQty: category === "PV" ? quantity : 0, essQty: category === "ESS" && categorySub === "KITS" ? quantity : 0 };
   }).filter((r) => Number.isFinite(r.year) && r.month && r.quarter && r.region !== "Unknown");
 }
 
@@ -198,6 +199,11 @@ function filterByDashboardBrand(rows) {
   if (!brand || brand === "__ALL__") return rows;
   return rows.filter((r) => r.brand === brand);
 }
+function filterTargetsByDashboardBrand(rows) {
+  const brand = dashboardBrandSel.value;
+  if (!brand || brand === "__ALL__") return rows;
+  return rows.filter((r) => r.brand === brand);
+}
 function refreshDashboardBrandOptions(reset = false) {
   const allOption = { value: "__ALL__", label: t("all") };
   const prev = dashboardBrandSel.value;
@@ -205,7 +211,8 @@ function refreshDashboardBrandOptions(reset = false) {
 }
 function renderOverview() {
   const brandFilteredRows = filterByDashboardBrand(allRows);
-  renderDashboard(brandFilteredRows, allTargets, {
+  const brandFilteredTargets = filterTargetsByDashboardBrand(allTargets);
+  renderDashboard(brandFilteredRows, brandFilteredTargets, {
     year: "yearKpiRow", future: "futureKpiRow", h1: "h1KpiRow", quarter: "quarterProgressTable",
     trend: "monthlyTrendChart", pvAsp: "monthlyPvAspChart", essAsp: "monthlyEssAspChart",
   }, { pv: pvAspFilters, ess: essAspFilters });
@@ -302,10 +309,16 @@ function filterByDetailBrand(rows) {
   if (!brand || brand === "__ALL__") return rows;
   return rows.filter((r) => r.brand === brand);
 }
+function filterTargetsByDetailBrand(rows) {
+  if (!detailBrandSel) return rows;
+  const brand = detailBrandSel.value;
+  if (!brand || brand === "__ALL__") return rows;
+  return rows.filter((r) => r.brand === brand);
+}
 function renderRegionDetails(resetFilters = false) {
   if (!activeDetailRegion) return;
   const region = activeDetailRegion;
-  const rows = filterByDetailBrand(allRows.filter((r) => r.region === region)), targets = allTargets.filter((r) => r.region === region);
+  const rows = filterByDetailBrand(allRows.filter((r) => r.region === region)), targets = filterTargetsByDetailBrand(allTargets.filter((r) => r.region === region));
   regionDetailTitle.textContent = t("regionDetailTitle", { region });
   if (resetFilters) {
     const allOption = { value: "__ALL__", label: t("all") };
