@@ -41,7 +41,7 @@ const I18N = {
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)", chartPvQty: "组件销量(MW)", chartEssQty: "储能销量(Sets)", chartPvQtyTitle: "2026 月度组件销量(MW)", chartEssQtyTitle: "2026 月度储能销量(Sets)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
-    productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
+    productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", velocityTitle: "PV 动销率（月度销量矩阵）", velocityNote: "展示每个地区 × 版型（Level2）在 2026 年各月的 PV 销量（MW），右列为月均。复用上方产品层级筛选与分析条件。", velocityRegion: "地区", velocityProduct: "版型", velocityAvg: "月均", velocityHeatmapTitle: "PV 月度销量热力图（MW）", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
     customerTitle:"客户分析", customerSubtitle:"先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。", customerRegion:"分析地区", customerYear:"分析年份", customerProduct:"产品线", customerBrand:"品牌", customerSearch:"搜索客户", customerSearchPlaceholder:"客户名称 / 国家", customerCurrentScope:"当前分析范围", customerTabRegion:"地区概览", customerTabProduct:"产品结构", customerTabActivity:"活跃度", customerTabValue:"客户价值", customerTabDetail:"客户明细", customerDefinition:"活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。",
   },
   en: {
@@ -54,7 +54,7 @@ const I18N = {
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Pending Confirmation (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)", chartPvQty: "PV Qty (MW)", chartEssQty: "ESS Qty (Sets)", chartPvQtyTitle: "2026 Monthly PV Qty (MW)", chartEssQtyTitle: "2026 Monthly ESS Qty (Sets)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
-    productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
+    productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", velocityTitle: "PV Sales Velocity (Monthly Matrix)", velocityNote: "PV MW per Region × Level2 (product family) for each month of 2026, with monthly average on the right. Reuses the product filters and settings above.", velocityRegion: "Region", velocityProduct: "Product", velocityAvg: "Avg", velocityHeatmapTitle: "PV Monthly Qty Heatmap (MW)", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
     customerTitle:"Customer Analysis", customerSubtitle:"Start with the overview, then choose a region for product, activity, value and customer details.", customerRegion:"Analysis Region", customerYear:"Analysis Year", customerProduct:"Product Line", customerBrand:"Brand", customerSearch:"Search Customer", customerSearchPlaceholder:"Customer name / country", customerCurrentScope:"Current scope", customerTabRegion:"Regional Overview", customerTabProduct:"Product Mix", customerTabActivity:"Activity", customerTabValue:"Customer Value", customerTabDetail:"Customer Details", customerDefinition:"Active: ordered in the last 3 months from current date; sleeping: no order for 4–6 months; at risk: no order for more than 6 months.",
   },
 };
@@ -353,6 +353,77 @@ function renderProduct() {
   table("productRankingTable", [t("rankName"), t("rankValue"), t("rankShare"), `${t("rankLatest")} (${latest || "-"})`, `${t("rankPrevious")} (${previous || "-"})`, t("rankMom")], rankRows);
 }
 
+function renderVelocity() {
+  if (!allRows.length) return;
+  let start = productStartMonthSel.value, end = productEndMonthSel.value;
+  if (start > end) [start, end] = [end, start];
+  const allMonths = Array.from({ length: 12 }, (_, i) => `${TARGET_YEAR}-${String(i + 1).padStart(2, "0")}`);
+  const months = allMonths.filter((m) => m >= start && m <= end);
+  let rows = filterIncome([...allRows], productIncomeSel.value).filter((r) => r.isPV && r.month >= start && r.month <= end);
+  if (productRegionSel.value !== "__ALL__") rows = rows.filter((r) => r.region === productRegionSel.value);
+  rows = applyProductHierarchyFilters(rows);
+
+  const dim = productLevelSel.value || "level2";
+  const levelValues = selected(productLevelValuesSel);
+  if (levelValues.length && !levelValues.includes("__ALL__")) {
+    const set = new Set(levelValues);
+    rows = rows.filter((r) => set.has(r[dim]));
+  }
+
+  const keyList = [];
+  const keySet = new Set();
+  rows.forEach((r) => {
+    const key = `${r.region}\u0001${r[dim]}`;
+    if (!keySet.has(key)) { keySet.add(key); keyList.push(key); }
+  });
+
+  const cellMap = new Map();
+  rows.forEach((r) => {
+    const key = `${r.region}\u0001${r[dim]}\u0001${r.month}`;
+    cellMap.set(key, (cellMap.get(key) || 0) + r.pvQty);
+  });
+
+  keyList.sort((a, b) => {
+    const [rA, pA] = a.split("\u0001"), [rB, pB] = b.split("\u0001");
+    return rA.localeCompare(rB) || pA.localeCompare(pB);
+  });
+
+  const headers = [t("velocityRegion"), t("velocityProduct"), ...months, t("velocityAvg")];
+  const tableRows = keyList.map((key) => {
+    const [region, product] = key.split("\u0001");
+    const monthValues = months.map((m) => {
+      const v = cellMap.get(`${key}\u0001${m}`) || 0;
+      return v;
+    });
+    const nonZero = monthValues.filter((v) => v > 0);
+    const avg = nonZero.length ? monthValues.reduce((s, v) => s + v, 0) / nonZero.length : 0;
+    const rowValues = [region, product, ...monthValues.map((v) => fmtOne(v)), fmtOne(avg)];
+    return { values: rowValues, _numeric: monthValues };
+  });
+
+  table("velocityTable", headers, tableRows.map((r) => r.values));
+
+  applyVelocityHeatmap(keyList, months, cellMap);
+}
+
+function applyVelocityHeatmap(keyList, months, cellMap) {
+  const z = keyList.map((key) => {
+    const [region, product] = key.split("\u0001");
+    return months.map((m) => cellMap.get(`${key}\u0001${m}`) || 0);
+  });
+  const yLabels = keyList.map((key) => {
+    const [region, product] = key.split("\u0001");
+    return `${region} / ${product}`;
+  });
+  const maxVal = Math.max(0, ...z.flat());
+  renderPlot("velocityHeatmap", [{
+    z, x: months, y: yLabels, type: "heatmap",
+    colorscale: [[0, "#F0F6FF"], [0.01, "#D6E8FF"], [0.15, "#9AC8FF"], [0.4, "#5A9BFF"], [0.7, "#2E7CFF"], [1, "#1547B5"]],
+    showscale: true, colorbar: { title: "MW", len: 0.8 },
+    hovertemplate: "%{y}<br>%{x}: %{z:.1f} MW<extra></extra>"
+  }], { title: t("velocityHeatmapTitle"), margin: { l: 200, r: 60, t: 52, b: 62 }, yaxis: { automargin: true }, xaxis: { side: "bottom" } });
+}
+
 function applyLanguage() {
   document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
   document.title = t("pageTitle");
@@ -375,6 +446,7 @@ function applyLanguage() {
     renderOverview();
     renderRegion();
     renderProduct();
+    renderVelocity();
     if (typeof renderCustomerAnalysis === "function") renderCustomerAnalysis(false);
   } else {
     setStatus(lastStatus.key, lastStatus.vars);
@@ -387,7 +459,7 @@ function bindMultiSelectToggle(el) { el.addEventListener("mousedown", (event) =>
 
 document.querySelectorAll("input[name='salesSource']").forEach((radio) => radio.addEventListener("change", () => { const useRepo = document.querySelector("input[name='salesSource']:checked")?.value === "repo"; repoRow.classList.toggle("active", useRepo); uploadRow.style.display = useRepo ? "none" : "grid"; }));
 byId("jumpWrap").querySelectorAll(".jump-btn").forEach((btn) => btn.addEventListener("click", () => { byId("jumpWrap").querySelectorAll(".jump-btn").forEach((x) => x.classList.toggle("active", x === btn)); document.querySelectorAll(".content-block").forEach((panel) => panel.classList.toggle("active", panel.id === btn.dataset.target)); window.dispatchEvent(new Event("resize")); }));
-runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); if (!allRows.length) { setStatus("statusNoRows"); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); if (typeof initCustomerAnalysis === "function") initCustomerAnalysis(); } catch (error) { setStatus("statusFail", { msg: error.message || error }); } });
+runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); if (!allRows.length) { setStatus("statusNoRows"); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); renderVelocity(); if (typeof initCustomerAnalysis === "function") initCustomerAnalysis(); } catch (error) { setStatus("statusFail", { msg: error.message || error }); } });
 [incomeTypeSel, monthSel].forEach((el) => el.addEventListener("change", renderRegion));
 yearSel.addEventListener("change", () => { refreshRegionMonthOptions(); renderRegion(); });
 quarterSel.addEventListener("change", () => { refreshRegionMonthOptions(); renderRegion(); });
@@ -397,10 +469,10 @@ dashboardBrandSel.addEventListener("change", renderOverview);
 detailBrandSel.addEventListener("change", () => renderRegionDetails(false));
 Object.values(detailPvAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailPvAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isPV)); renderRegionDetails(false); }));
 Object.values(detailEssAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailEssAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isESS)); renderRegionDetails(false); }));
-[productMetricSel, productIncomeSel, productRegionSel, productStartMonthSel, productEndMonthSel].forEach((el) => el.addEventListener("change", renderProduct));
-productLevelSel.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); });
-productLevelValuesSel.addEventListener("change", renderProduct);
-Object.values(productHierarchyFilters).forEach((el) => el.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); }));
+[productMetricSel, productIncomeSel, productRegionSel, productStartMonthSel, productEndMonthSel].forEach((el) => el.addEventListener("change", () => { renderProduct(); renderVelocity(); }));
+productLevelSel.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); renderVelocity(); });
+productLevelValuesSel.addEventListener("change", () => { renderProduct(); renderVelocity(); });
+Object.values(productHierarchyFilters).forEach((el) => el.addEventListener("change", () => { refreshProductCascade(false); renderProduct(); renderVelocity(); }));
 [incomeTypeSel, yearSel, quarterSel, monthSel, ...Object.values(pvAspFilters), ...Object.values(essAspFilters), ...Object.values(detailPvAspFilters), ...Object.values(detailEssAspFilters), ...Object.values(productHierarchyFilters), productLevelValuesSel].forEach(bindMultiSelectToggle);
 byId("regionGrid").addEventListener("click", (event) => { const button = event.target.closest("button[data-region]"); if (button) openRegionDetails(button.dataset.region); });
 regionDetailClose.addEventListener("click", closeRegionDetails);

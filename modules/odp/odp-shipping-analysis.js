@@ -14,6 +14,7 @@ let mergeReview = { blankPopvRows: 0, groups: [], missingHeaders: [] };
 let mappings = loadMappings();
 const modelFilters = { order: null, departure: null, arrival: null };
 let portFilterSelection = null; /* null = all ports; Set = selected port keys */
+let portSkuFilterSelection = null; /* null = all SKUs; Set = selected SKU keys */
 const MERGE_COMPARE_FIELDS = ["New Ark SKU", "Model", "B/L Consignee", "POL", "PORT DESTINATION"];
 const MERGE_DISPLAY_FIELDS = [...MERGE_COMPARE_FIELDS, "TCL REFERENCE", "QUANTITY"];
 
@@ -92,9 +93,11 @@ function commitModelFilter(root){
   const chosen=new Set((query?boxes:boxes.filter((x)=>x.checked)).map((x)=>x.value));
   modelFilters[root.dataset.scope]=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
 }
+function skuKey(record){return record.sku==null||String(record.sku).trim()===""?"__UNKNOWN__":normalizeText(record.sku);}
+function skuLabel(record){return skuKey(record)==="__UNKNOWN__"?t("unknown"):String(record.sku).trim();}
 function renderModelFilters(){
   const options=availableModels();
-  document.querySelectorAll(".model-filter:not(.port-filter)").forEach((root)=>{
+  document.querySelectorAll(".model-filter:not(.port-filter):not(.port-sku-filter)").forEach((root)=>{
     const scope=root.dataset.scope,selected=modelFilters[scope],selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
     const summary=selected===null?t("allModels"):t("selectedModels",{count:selectedCount,total:options.length});
     root.innerHTML=`<label>${escapeHtml(t("modelFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
@@ -119,6 +122,26 @@ function renderPortFilter(){
   const selected=portFilterSelection,selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
   const summary=selected===null?t("allPorts"):t("selectedModels",{count:selectedCount,total:options.length});
   root.innerHTML=`<label>${escapeHtml(t("portFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
+}
+function availablePortSkuOptions(){
+  const skus=new Map();
+  panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(!a.date)return;const key=skuKey(r);if(!skus.has(key))skus.set(key,skuLabel(r));});
+  return[...skus].map(([key,label])=>({key,label})).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:"base"}));
+}
+function commitPortSkuFilter(root){
+  if(!root)return;
+  const query=normalizeText(root.querySelector('.model-filter-search')?.value),allBoxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')];
+  const boxes=query?allBoxes.filter((x)=>!x.closest('.model-filter-option')?.hidden):allBoxes;
+  const chosen=new Set((query?boxes:boxes.filter((x)=>x.checked)).map((x)=>x.value));
+  portSkuFilterSelection=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
+}
+function renderPortSkuFilter(){
+  const root=document.querySelector(".port-sku-filter");
+  if(!root)return;
+  const options=availablePortSkuOptions();
+  const selected=portSkuFilterSelection,selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
+  const summary=selected===null?t("allSkus"):t("selectedModels",{count:selectedCount,total:options.length});
+  root.innerHTML=`<label>${escapeHtml(t("skuFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("skuSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
 }
 
 function saveMappings(){mappings=mappings.map((x)=>({type:x.type==="POL"?"POL":"DEST",raw:normalizeText(x.raw),standard:normalizeText(x.standard),country:String(x.country||"").trim(),note:String(x.note||"").trim()})).filter((x)=>x.raw&&x.standard);localStorage.setItem(PORT_MAPPING_KEY,JSON.stringify(mappings));}
@@ -215,7 +238,7 @@ function parseWorkbook(workbook,skuModelMap){
   essSources.flatMap(([name,row])=>readSheet(workbook,name,row,"ESS")).forEach((record)=>{if(record.quantity==null){invalidQuantityCount++;return;}if(record.quantity<=0){quantityZeroCount++;return;}const dedupKey=`ESS|${record.reference}`;if(!unique.has(dedupKey))unique.set(dedupKey,record);});
   records=[...unique.values()];assumptionRows=parseAssumptionRows(workbook);mergeReview=parseMergeReview(workbook);skuModelMatched=0;
   records.forEach((record)=>{const mapped=skuModelMap.get(normalizeText(record.sku));if(mapped){record.model=mapped;if(record.source==="PV SUPPLY DATA"||record.source==="ESS SUPPLY DATA")skuModelMatched++;}});
-  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});portFilterSelection=null;ensureDiscoveredMappings();renderMappingTable();
+  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});portFilterSelection=null;portSkuFilterSelection=null;ensureDiscoveredMappings();renderMappingTable();
   setDefaultMonthRanges();
   const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
   /* Port daily default months: same as arrival month range (current month → next month) */
@@ -321,12 +344,13 @@ function buildPortDailyData(){
   /* month inputs are YYYY-MM; convert to date range: start=1st of start month, end=last day of end month */
   const start=startMonth?new Date(startMonth+"-01T00:00:00"):null;
   const end=endMonth?new Date(new Date(endMonth+"-01T00:00:00").getFullYear(),new Date(endMonth+"-01T00:00:00").getMonth()+1,0,23,59,59):null;
-  const portSet=portFilterSelection;
+  const portSet=portFilterSelection,skuSet=portSkuFilterSelection;
   const data=new Map();
   panelMainRecords("portDaily").forEach((r)=>{
     if(!isArrivalValid(r))return;
     const a=arrivalInfo(r);if(!a.date)return;
     if(start&&a.date<start||end&&a.date>end)return;
+    if(skuSet&&!skuSet.has(skuKey(r)))return;
     const dest=resolvePort(r.rawDestination,"DEST");if(!dest)return;
     if(portSet&&!portSet.has(dest))return;
     const dayKey=isoDate(a.date);
@@ -383,7 +407,7 @@ function renderPortDailyTable(){
   const body=rows.length?rows.map((row)=>`<tr>${row.map((v)=>`<td>${v}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;
   byId("portDailyTable").innerHTML=head+`<tbody>${body}</tbody>`;
 }
-function renderPortDailyFilters(){renderPortFilter();}
+function renderPortDailyFilters(){renderPortFilter();renderPortSkuFilter();}
 function exportPortDaily(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
@@ -428,11 +452,11 @@ byId("routePolFilter").addEventListener("change",()=>{renderRouteFilters(true);r
 byId("routeDestinationFilter").addEventListener("change",renderRoutes);
 byId("performanceApplyBtn").addEventListener("click",renderPerformance);
 byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
-byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));commitPortSkuFilter(document.querySelector(".port-sku-filter"));renderPortDailyChart();renderPortDailyTable();});
 byId("exportPortDailyBtn").addEventListener("click",exportPortDaily);
 byId("productTypeSelect").addEventListener("change",()=>{renderAll();});
 byId("arrivalProductType").addEventListener("change",(e)=>{panelProductTypes.arrival=e.target.value;renderBusinessViews();});
-byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;portFilterSelection=null;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;portFilterSelection=null;portSkuFilterSelection=null;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
 document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter:not(.port-filter)"));renderBusinessViews();}));
 document.addEventListener("click",(event)=>{
   const root=event.target.closest(".model-filter, .port-filter");
@@ -442,7 +466,7 @@ document.addEventListener("click",(event)=>{
   if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
   if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
   if(event.target.closest(".model-filter-apply")){
-    if(root.classList.contains("port-filter")){commitPortFilter(root);renderPortDailyChart();renderPortDailyTable();}
+    if(root.classList.contains("port-filter")||root.classList.contains("port-sku-filter")){commitPortFilter(document.querySelector(".port-filter"));commitPortSkuFilter(document.querySelector(".port-sku-filter"));renderPortDailyChart();renderPortDailyTable();}
     else{commitModelFilter(root);renderBusinessViews();}
     return;
   }
