@@ -14,7 +14,7 @@ let mergeReview = { blankPopvRows: 0, groups: [], missingHeaders: [] };
 let mappings = loadMappings();
 const modelFilters = { order: null, departure: null, arrival: null };
 let portFilterSelection = null; /* null = all ports; Set = selected port keys */
-let portSkuFilterSelection = null; /* null = all SKUs; Set = selected SKU keys */
+let portModelFilterSelection = null; /* null = all Models; Set = selected Model keys */
 const MERGE_COMPARE_FIELDS = ["New Ark SKU", "Model", "B/L Consignee", "POL", "PORT DESTINATION"];
 const MERGE_DISPLAY_FIELDS = [...MERGE_COMPARE_FIELDS, "TCL REFERENCE", "QUANTITY"];
 
@@ -93,11 +93,9 @@ function commitModelFilter(root){
   const chosen=new Set((query?boxes:boxes.filter((x)=>x.checked)).map((x)=>x.value));
   modelFilters[root.dataset.scope]=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
 }
-function skuKey(record){return record.sku==null||String(record.sku).trim()===""?"__UNKNOWN__":normalizeText(record.sku);}
-function skuLabel(record){return skuKey(record)==="__UNKNOWN__"?t("unknown"):String(record.sku).trim();}
 function renderModelFilters(){
   const options=availableModels();
-  document.querySelectorAll(".model-filter:not(.port-filter):not(.port-sku-filter)").forEach((root)=>{
+  document.querySelectorAll(".model-filter:not(.port-filter):not(.port-model-filter)").forEach((root)=>{
     const scope=root.dataset.scope,selected=modelFilters[scope],selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
     const summary=selected===null?t("allModels"):t("selectedModels",{count:selectedCount,total:options.length});
     root.innerHTML=`<label>${escapeHtml(t("modelFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
@@ -123,23 +121,23 @@ function renderPortFilter(){
   const summary=selected===null?t("allPorts"):t("selectedModels",{count:selectedCount,total:options.length});
   root.innerHTML=`<label>${escapeHtml(t("portFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("modelSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
 }
-function availablePortSkuOptions(){
-  const skus=new Map();
-  panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(!a.date)return;const key=skuKey(r);if(!skus.has(key))skus.set(key,skuLabel(r));});
-  return[...skus].map(([key,label])=>({key,label})).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:"base"}));
+function availablePortModelOptions(){
+  const models=new Map();
+  panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(!a.date)return;const key=modelKey(r);if(!models.has(key))models.set(key,modelLabel(r));});
+  return[...models].map(([key,label])=>({key,label})).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:"base"}));
 }
-function commitPortSkuFilter(root){
+function commitPortModelFilter(root){
   if(!root)return;
   const query=normalizeText(root.querySelector('.model-filter-search')?.value),allBoxes=[...root.querySelectorAll('.model-filter-options input[type="checkbox"]')];
   const boxes=query?allBoxes.filter((x)=>!x.closest('.model-filter-option')?.hidden):allBoxes;
   const chosen=new Set((query?boxes:boxes.filter((x)=>x.checked)).map((x)=>x.value));
-  portSkuFilterSelection=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
+  portModelFilterSelection=!allBoxes.length||chosen.size===allBoxes.length?null:chosen;
 }
-function renderPortSkuFilter(){
-  const root=document.querySelector(".port-sku-filter");
+function renderPortModelFilter(){
+  const root=document.querySelector(".port-model-filter");
   if(!root)return;
-  const options=availablePortSkuOptions();
-  const selected=portSkuFilterSelection,selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
+  const options=availablePortModelOptions();
+  const selected=portModelFilterSelection,selectedCount=selected===null?options.length:options.filter((x)=>selected.has(x.key)).length;
   const summary=selected===null?t("allSkus"):t("selectedModels",{count:selectedCount,total:options.length});
   root.innerHTML=`<label>${escapeHtml(t("skuFilter"))}</label><button class="model-filter-toggle" type="button"><span>${escapeHtml(summary)}</span></button><div class="model-filter-menu"><input class="model-filter-search" type="text" placeholder="${escapeHtml(t("skuSearch"))}"><div class="model-filter-actions"><button class="secondary model-select-all" type="button">${escapeHtml(t("selectAll"))}</button><button class="secondary model-clear-all" type="button">${escapeHtml(t("clearAll"))}</button></div><div class="model-filter-options">${options.map((x)=>`<label class="model-filter-option" data-search="${escapeHtml(normalizeText(x.label))}"><input type="checkbox" value="${escapeHtml(x.key)}"${selected===null||selected.has(x.key)?" checked":""}><span>${escapeHtml(x.label)}</span></label>`).join("")||`<span class="model-filter-option">${escapeHtml(t("noData"))}</span>`}</div><button class="model-filter-apply" type="button">${escapeHtml(t("apply"))}</button></div>`;
 }
@@ -238,7 +236,7 @@ function parseWorkbook(workbook,skuModelMap){
   essSources.flatMap(([name,row])=>readSheet(workbook,name,row,"ESS")).forEach((record)=>{if(record.quantity==null){invalidQuantityCount++;return;}if(record.quantity<=0){quantityZeroCount++;return;}const dedupKey=`ESS|${record.reference}`;if(!unique.has(dedupKey))unique.set(dedupKey,record);});
   records=[...unique.values()];assumptionRows=parseAssumptionRows(workbook);mergeReview=parseMergeReview(workbook);skuModelMatched=0;
   records.forEach((record)=>{const mapped=skuModelMap.get(normalizeText(record.sku));if(mapped){record.model=mapped;if(record.source==="PV SUPPLY DATA"||record.source==="ESS SUPPLY DATA")skuModelMatched++;}});
-  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});portFilterSelection=null;portSkuFilterSelection=null;ensureDiscoveredMappings();renderMappingTable();
+  const main=records.filter((r)=>r.source==="PV SUPPLY DATA");mainRecordCount=main.length;hasLoadedWorkbook=true;Object.keys(modelFilters).forEach((key)=>{modelFilters[key]=null;});portFilterSelection=null;portModelFilterSelection=null;ensureDiscoveredMappings();renderMappingTable();
   setDefaultMonthRanges();
   const dates=records.flatMap((r)=>r.atd?[r.atd]:[]).sort((a,b)=>a-b);if(dates.length){["startDate","performanceStartDate"].forEach((id)=>byId(id).value=isoDate(dates[0]));["endDate","performanceEndDate"].forEach((id)=>byId(id).value=isoDate(dates.at(-1)));}
   /* Port daily default months: same as arrival month range (current month → next month) */
@@ -344,19 +342,22 @@ function buildPortDailyData(){
   /* month inputs are YYYY-MM; convert to date range: start=1st of start month, end=last day of end month */
   const start=startMonth?new Date(startMonth+"-01T00:00:00"):null;
   const end=endMonth?new Date(new Date(endMonth+"-01T00:00:00").getFullYear(),new Date(endMonth+"-01T00:00:00").getMonth()+1,0,23,59,59):null;
-  const portSet=portFilterSelection,skuSet=portSkuFilterSelection;
+  const portSet=portFilterSelection,modelSet=portModelFilterSelection;
+  /* data: Map<port, Map<dayKey, Map<modelKey, containers>>> */
   const data=new Map();
   panelMainRecords("portDaily").forEach((r)=>{
     if(!isArrivalValid(r))return;
     const a=arrivalInfo(r);if(!a.date)return;
     if(start&&a.date<start||end&&a.date>end)return;
-    if(skuSet&&!skuSet.has(skuKey(r)))return;
+    if(modelSet&&!modelSet.has(modelKey(r)))return;
     const dest=resolvePort(r.rawDestination,"DEST");if(!dest)return;
     if(portSet&&!portSet.has(dest))return;
-    const dayKey=isoDate(a.date);
+    const dayKey=isoDate(a.date),mk=modelKey(r);
     if(!data.has(dest))data.set(dest,new Map());
     const dayMap=data.get(dest);
-    dayMap.set(dayKey,(dayMap.get(dayKey)||0)+(r.containers||0));
+    if(!dayMap.has(dayKey))dayMap.set(dayKey,new Map());
+    const modelMap=dayMap.get(dayKey);
+    modelMap.set(mk,(modelMap.get(mk)||0)+(r.containers||0));
   });
   return data;
 }
@@ -368,28 +369,36 @@ function renderPortDailyChart(){
   if(!allDays.length){target.innerHTML=`<div class="port-daily-chart-empty">${escapeHtml(t("noData"))}</div>`;return;}
   /* Fixed-size chart per port: 680x300 viewBox */
   const W=680,H=300,left=60,right=20,top=24,bottom=56,plotW=W-left-right,plotH=H-top-bottom;
-  const maxVal=Math.max(1,...ports.flatMap((p)=>[...data.get(p).values()]));
+  const maxVal=Math.max(1,...ports.flatMap((p)=>[...data.get(p).values()].map((m)=>[...m.values()].reduce((s,v)=>s+v,0))));
   const yMax=Math.max(10,Math.ceil(maxVal*1.1));
   const barW=Math.max(4,Math.min(30,plotW/Math.max(allDays.length,1)-4));
   const gap=(plotW-barW*allDays.length)/Math.max(allDays.length,1);
   const x=(di)=>left+di*(barW+gap)+gap/2;
   const y=(val)=>top+(1-val/yMax)*plotH;
   const yTicks=Array.from({length:Math.min(6,yMax+1)},(_,i)=>Math.round(yMax*i/Math.min(5,yMax)));
-  const charts=ports.map((port,pi)=>{
-    const color=PORT_DAILY_COLORS[pi%PORT_DAILY_COLORS.length];
+  /* Collect all models across the data, assign fixed color indices */
+  const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
+  const modelColor=(mk)=>PORT_DAILY_COLORS[modelList.indexOf(mk)%PORT_DAILY_COLORS.length];
+  const charts=ports.map((port)=>{
     const portDays=[...data.get(port).keys()].sort();
     const grid=yTicks.map((v)=>`<line class="grid" x1="${left}" y1="${y(v)}" x2="${W-right}" y2="${y(v)}"/><text x="${left-8}" y="${y(v)+4}" text-anchor="end" font-size="11">${v}</text>`).join("");
+    /* Stacked bars: for each day, draw a rect per model segment bottom-up */
     const bars=portDays.map((day)=>{
-      const di=allDays.indexOf(day),val=data.get(port).get(day)||0;
-      if(val<=0)return"";
-      const bx=x(di),by=y(val),bh=top+plotH-by;
-      return`<rect class="bar" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${color}" rx="2"><title>${escapeHtml(port)} | ${escapeHtml(day)} | ${fmtNumber(val,1)} ${escapeHtml(t("containerShort"))}</title></rect>`;
+      const di=allDays.indexOf(day),modelMap=data.get(port).get(day);
+      const segments=modelList.filter((mk)=>modelMap.has(mk)).map((mk)=>({mk,val:modelMap.get(mk)||0}));
+      if(!segments.length)return"";
+      let acc=0;
+      return segments.map((s)=>{const by=y(acc+s.val),bh=top+plotH-by;acc+=s.val;return`<rect class="bar" x="${x(di).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${modelColor(s.mk)}" rx="2"><title>${escapeHtml(port)} | ${escapeHtml(s.mk)} | ${escapeHtml(day)} | ${fmtNumber(s.val,1)} ${escapeHtml(t("containerShort"))}</title></rect>`;}).join("");
     }).join("");
     /* Show ~8 x-axis labels max */
     const labelStep=Math.max(1,Math.ceil(allDays.length/8));
     const dayLabels=allDays.filter((_,i)=>i%labelStep===0).map((day)=>{const di=allDays.indexOf(day);return`<text x="${x(di).toFixed(1)}" y="${top+plotH+16}" text-anchor="middle" font-size="10">${escapeHtml(day)}</text>`;}).join("");
-    const total=[...data.get(port).values()].reduce((s,v)=>s+v,0);
-    return`<div class="port-chart-item"><h4 style="margin:0 0 4px;color:${color}">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(total,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("atdDate"))}</text></svg></div>`;
+    /* Port total across all days/models */
+    let portTotal=0;
+    data.get(port).forEach((modelMap)=>modelMap.forEach((v)=>portTotal+=v));
+    /* Legend: list each model with its color swatch */
+    const legend=modelList.map((mk)=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:11px"><span style="display:inline-block;width:10px;height:10px;background:${modelColor(mk)};border-radius:2px"></span>${escapeHtml(mk)}</span>`).join("");
+    return`<div class="port-chart-item"><h4 style="margin:0 0 4px">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(portTotal,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("atdDate"))}</text></svg><div style="margin-top:4px">${legend}</div></div>`;
   }).join("");
   target.innerHTML=`<div class="port-chart-grid">${charts}</div>`;
 }
@@ -397,32 +406,52 @@ function renderPortDailyTable(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
-  const headers=[t("hDestination"),...allDays,t("hContainers")];
-  const rows=ports.map((port)=>{
-    const dayVals=allDays.map((day)=>fmtNumber(data.get(port).get(day)||0,1));
-    const total=fmtNumber([...data.get(port).values()].reduce((s,v)=>s+v,0),1);
-    return[escapeHtml(port),...dayVals.map(escapeHtml),escapeHtml(total)];
+  const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
+  const headers=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
+  const bodyParts=[];
+  ports.forEach((port)=>{
+    const portDayMap=data.get(port);
+    /* Model sub-rows */
+    modelList.filter((mk)=>portDayMap.size||[...portDayMap.values()].some((m)=>m.has(mk))).forEach((mk)=>{
+      const hasData=[...portDayMap.values()].some((m)=>m.has(mk));
+      if(!hasData)return;
+      const dayVals=allDays.map((day)=>{const m=portDayMap.get(day);return m&&m.has(mk)?fmtNumber(m.get(mk),1):"";});
+      const total=[...portDayMap.values()].reduce((s,m)=>s+(m.get(mk)||0),0);
+      bodyParts.push(`<tr class="port-model-row"><td></td><td>${escapeHtml(mk)}</td>${dayVals.map((v)=>`<td>${escapeHtml(v)}</td>`).join("")}<td>${escapeHtml(fmtNumber(total,1))}</td></tr>`);
+    });
+    /* Port subtotal row */
+    const dayTotals=allDays.map((day)=>{const m=portDayMap.get(day);return m?[...m.values()].reduce((s,v)=>s+v,0):0;});
+    const portTotal=dayTotals.reduce((s,v)=>s+v,0);
+    bodyParts.push(`<tr class="port-subtotal-row" style="font-weight:700;background:#eef6ff"><td>${escapeHtml(port)}</td><td>${escapeHtml(t("hContainers"))}</td>${dayTotals.map((v)=>`<td>${escapeHtml(fmtNumber(v,1))}</td>`).join("")}<td>${escapeHtml(fmtNumber(portTotal,1))}</td></tr>`);
   });
   const head=`<thead><tr>${headers.map((h)=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`;
-  const body=rows.length?rows.map((row)=>`<tr>${row.map((v)=>`<td>${v}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;
+  const body=bodyParts.length?bodyParts.join(""):`<tr><td colspan="${headers.length}">${escapeHtml(t("noData"))}</td></tr>`;
   byId("portDailyTable").innerHTML=head+`<tbody>${body}</tbody>`;
 }
-function renderPortDailyFilters(){renderPortFilter();renderPortSkuFilter();}
+function renderPortDailyFilters(){renderPortFilter();renderPortModelFilter();}
 function exportPortDaily(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
+  const modelList=[...new Set(ports.flatMap((p)=>[p[0]&&[...data.get(p).values()].flatMap((m)=>[...m.keys()])]))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
   if(!ports.length||!allDays.length)return;
-  const headerRow=[t("hDestination"),...allDays];
-  const rows=ports.map((port)=>{
-    const dayVals=allDays.map((day)=>data.get(port).get(day)||0);
-    const total=dayVals.reduce((s,v)=>s+v,0);
-    return[port,...dayVals,total];
+  const headerRow=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
+  const rows=[];
+  ports.forEach((port)=>{
+    const portDayMap=data.get(port);
+    modelList.forEach((mk)=>{
+      const hasData=[...portDayMap.values()].some((m)=>m.has(mk));
+      if(!hasData)return;
+      const dayVals=allDays.map((day)=>{const m=portDayMap.get(day);return m&&m.has(mk)?m.get(mk):0;});
+      const total=dayVals.reduce((s,v)=>s+v,0);
+      rows.push([port,mk,...dayVals,total]);
+    });
+    const dayTotals=allDays.map((day)=>{const m=portDayMap.get(day);return m?[...m.values()].reduce((s,v)=>s+v,0):0;});
+    const portTotal=dayTotals.reduce((s,v)=>s+v,0);
+    rows.push([port,t("hContainers"),...dayTotals,portTotal]);
   });
-  const totalRow=["Total",...allDays.map((day)=>ports.reduce((s,p)=>s+(data.get(p).get(day)||0),0)),ports.reduce((s,p)=>s+[...data.get(p).values()].reduce((a,b)=>a+b,0),0)];
-  const ws=XLSX.utils.aoa_to_sheet([headerRow,...rows,totalRow]);
-  ws["!cols"]=[{wch:18},...allDays.map(()=>({wch:14})),{wch:14}];
-  ws["!autofilter"]={ref:`A1:${String.fromCharCode(65+allDays.length)}${rows.length+2}`};
+  const ws=XLSX.utils.aoa_to_sheet([headerRow,...rows]);
+  ws["!cols"]=[{wch:18},{wch:18},...allDays.map(()=>({wch:14})),{wch:14}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Port Daily Containers");
   XLSX.writeFile(wb,`Port_Daily_Containers_${isoDate(new Date()).replaceAll("-","")}.xlsx`);
   statusEl.textContent=t("portDailyExported");
@@ -452,11 +481,11 @@ byId("routePolFilter").addEventListener("change",()=>{renderRouteFilters(true);r
 byId("routeDestinationFilter").addEventListener("change",renderRoutes);
 byId("performanceApplyBtn").addEventListener("click",renderPerformance);
 byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
-byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));commitPortSkuFilter(document.querySelector(".port-sku-filter"));renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));commitPortModelFilter(document.querySelector(".port-model-filter"));renderPortDailyChart();renderPortDailyTable();});
 byId("exportPortDailyBtn").addEventListener("click",exportPortDaily);
 byId("productTypeSelect").addEventListener("change",()=>{renderAll();});
 byId("arrivalProductType").addEventListener("change",(e)=>{panelProductTypes.arrival=e.target.value;renderBusinessViews();});
-byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;portFilterSelection=null;portSkuFilterSelection=null;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyProductType").addEventListener("change",(e)=>{panelProductTypes.portDaily=e.target.value;portFilterSelection=null;portModelFilterSelection=null;renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
 document.querySelectorAll(".month-apply").forEach((button)=>button.addEventListener("click",()=>{commitModelFilter(button.closest(".tab")?.querySelector(".model-filter:not(.port-filter)"));renderBusinessViews();}));
 document.addEventListener("click",(event)=>{
   const root=event.target.closest(".model-filter, .port-filter");
@@ -466,7 +495,7 @@ document.addEventListener("click",(event)=>{
   if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
   if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
   if(event.target.closest(".model-filter-apply")){
-    if(root.classList.contains("port-filter")||root.classList.contains("port-sku-filter")){commitPortFilter(document.querySelector(".port-filter"));commitPortSkuFilter(document.querySelector(".port-sku-filter"));renderPortDailyChart();renderPortDailyTable();}
+    if(root.classList.contains("port-filter")||root.classList.contains("port-model-filter")){commitPortFilter(document.querySelector(".port-filter"));commitPortModelFilter(document.querySelector(".port-model-filter"));renderPortDailyChart();renderPortDailyTable();}
     else{commitModelFilter(root);renderBusinessViews();}
     return;
   }
