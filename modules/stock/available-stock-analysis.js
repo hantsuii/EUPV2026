@@ -238,6 +238,33 @@ function weekLabelFromDate(dateObj) {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
+/**
+ * Returns today's date as "YYYY-MM-DD".
+ */
+function todayISO() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Returns a date string `months` months after `startDateISO` (or today if omitted).
+ */
+function addMonthsISO(startDateISO, months) {
+  const start = startDateISO ? new Date(`${startDateISO}T00:00:00`) : new Date();
+  const result = new Date(start.getFullYear(), start.getMonth() + months, start.getDate());
+  return `${result.getFullYear()}-${String(result.getMonth() + 1).padStart(2, "0")}-${String(result.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Sets the transit start date to today and end date to today + 6 months.
+ */
+function setDefaultTransitDates() {
+  const today = todayISO();
+  const sixMonthsLater = addMonthsISO(today, 6);
+  if (transitStartInput) transitStartInput.value = today;
+  if (transitEndInput) transitEndInput.value = sixMonthsLater;
+}
+
 function getRowValueByLevel(row, def) {
   if (def.key === "ProductKey") return row.ProductKey;
   return row[def.key];
@@ -855,6 +882,22 @@ function hasAnyActivityInRange(row, inRangeHeaders) {
   return false;
 }
 
+/**
+ * Finds the index of the last date header that has any transit/arrival activity
+ * across all rows. Used to truncate the display: we calculate the full range
+ * (e.g. 6 months) but only show up to the last date with actual arrivals.
+ * Returns -1 if no activity is found.
+ */
+function findLastActivityDateIndex(dateHeaders) {
+  for (let i = dateHeaders.length - 1; i >= 0; i--) {
+    const header = dateHeaders[i];
+    for (const row of vizState.rows) {
+      if (Number(row.Transit?.[header] || 0) !== 0) return i;
+    }
+  }
+  return -1;
+}
+
 
 function buildDailySeriesByTransitSource(rows, inRangeHeaders) {
   const dailyLabels = inRangeHeaders
@@ -933,6 +976,14 @@ function renderChartAndTable() {
     throw new Error(t("noTransitHeaders"));
   }
 
+  // --- Truncate display to last arrival date ---
+  // The analysis range may extend 6 months, but we only display up to the
+  // last date that has any real transit/arrival activity. After that point
+  // the available-stock curve is flat (no new arrivals), so those trailing
+  // dates carry no information and should be hidden.
+  const lastActivityIdx = findLastActivityDateIndex(inRangeHeaders);
+  const displayHeaders = lastActivityIdx >= 0 ? inRangeHeaders.slice(0, lastActivityIdx + 1) : inRangeHeaders;
+
   const analysisRows = matchedRows.filter((row) => hasAnyActivityInRange(row, inRangeHeaders));
 
   if (!analysisRows.length) {
@@ -970,7 +1021,7 @@ function renderChartAndTable() {
     }
 
     const entries = Array.from(groups.entries()).map(([key, g]) => {
-      const daily = buildDailySeriesForProductRows(g.rows, inRangeHeaders);
+      const daily = buildDailySeriesForProductRows(g.rows, displayHeaders);
       const bucket = buildBucketSeries(daily, granularity);
       const finalValue = bucket.values[bucket.values.length - 1] || 0;
       return { key, label: g.label, bucket, finalValue };
@@ -1011,7 +1062,7 @@ function renderChartAndTable() {
     }
 
     const entries = Array.from(groups.entries()).map(([key, g]) => {
-      const daily = buildDailySeriesForProductRows(g.rows, inRangeHeaders);
+      const daily = buildDailySeriesForProductRows(g.rows, displayHeaders);
       const bucket = buildBucketSeries(daily, granularity);
       const finalValue = bucket.values[bucket.values.length - 1] || 0;
       return { key, label: g.label, bucket, finalValue };
@@ -1037,7 +1088,7 @@ function renderChartAndTable() {
       });
     }
   } else {
-    const daily = buildDailySeriesForProductRows(analysisRows, inRangeHeaders);
+    const daily = buildDailySeriesForProductRows(analysisRows, displayHeaders);
     const bucket = buildBucketSeries(daily, granularity);
     bucketLabels = bucket.labels;
     bucketValuesForAllocRef = bucket.values;
@@ -1059,7 +1110,7 @@ function renderChartAndTable() {
       },
     });
 
-    const sourceDaily = buildDailySeriesByTransitSource(analysisRows, inRangeHeaders);
+    const sourceDaily = buildDailySeriesByTransitSource(analysisRows, displayHeaders);
     const sourceBucketInv = buildBucketSeries(sourceDaily.invDsp, granularity);
     const sourceBucketOdp = buildBucketSeries(sourceDaily.odp, granularity);
     const sourceBucketMixed = buildBucketSeries(sourceDaily.mixed, granularity);
@@ -1195,7 +1246,7 @@ function renderChartAndTable() {
   }, true);
 
   chart.resize();
-  renderDetailTable(analysisRows, inRangeHeaders, start, end);
+  renderDetailTable(analysisRows, displayHeaders, start, end);
 }
 
 function buildProductAllocationMap(filteredRows, startDate, endDate) {
@@ -1597,8 +1648,8 @@ async function runPythonAnalysis() {
       required: false,
     });
 
-    const startDate = transitStartInput.value || "2026-08-01";
-    const endDate = transitEndInput.value || "2026-12-31";
+    const startDate = transitStartInput.value || todayISO();
+    const endDate = transitEndInput.value || addMonthsISO(startDate, 6);
 
     const dailySupplyPy = dailySupplyPath ? `'${dailySupplyPath}'` : "None";
     const odpMasterPy = odpMasterPath ? `'${odpMasterPath}'` : "None";
@@ -1697,8 +1748,8 @@ async function runJavascriptAnalysis() {
       dailySupplyBytes,
       odpBytes,
       orderBytes,
-      startDate: transitStartInput.value || "2026-08-01",
-      endDate: transitEndInput.value || "2026-12-31",
+      startDate: transitStartInput.value || todayISO(),
+      endDate: transitEndInput.value || addMonthsISO(transitStartInput.value || todayISO(), 6),
     });
 
     const blob = new Blob([result.outputBytes], {
@@ -1761,8 +1812,8 @@ function resetForm() {
   if (useRepoDailySupplyEl) useRepoDailySupplyEl.checked = false;
   if (useRepoOdpMasterEl) useRepoOdpMasterEl.checked = false;
   if (useRepoOrderfileEl) useRepoOrderfileEl.checked = false;
-  transitStartInput.value = "2026-08-01";
-  transitEndInput.value = "2026-12-31";
+  transitStartInput.value = todayISO();
+  transitEndInput.value = addMonthsISO(todayISO(), 6);
   resetDownloadLink();
   vizPanelEl.style.display = "none";
   detailTableEl.innerHTML = "";
@@ -1852,6 +1903,9 @@ if (savedGithub.branch) githubBranchEl.value = savedGithub.branch;
 if (savedGithub.token) githubTokenEl.value = savedGithub.token;
 saveGithubBtn.addEventListener("click", () => { saveGithubConfig(); setGithubStatus("githubSaved"); });
 loadHistoryBtn.addEventListener("click", loadStockHistory);
+
+// Auto-fill transit dates: start = today, end = today + 6 months
+setDefaultTransitDates();
 
 window.addEventListener("app-language-change", () => {
   statusEl.textContent = t(lastStatus.key, lastStatus.params);

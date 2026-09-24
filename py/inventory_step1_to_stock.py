@@ -3,6 +3,19 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+
+# Default: start = today, end = today + 6 months (used only if no explicit dates passed)
+
+def _default_start():
+    return date.today()
+
+def _default_end():
+    today = date.today()
+    # add 6 months
+    m = today.month + 6
+    y = today.year + (m - 1) // 12
+    m = ((m - 1) % 12) + 1
+    return date(y, m, today.day)
 from pathlib import Path
 from typing import Any
 
@@ -12,8 +25,8 @@ from openpyxl.styles import PatternFill
 
 OUTPUT_SHEET_NAME = "stock"
 SKU_SHEET_CANDIDATES = ["SKU", "SKU Mapping", "Legacy Mapping Product"]
-TRANSIT_START_DATE = date(2026, 8, 1)
-TRANSIT_END_DATE = date(2026, 12, 31)
+TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
+TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
 ALLOC_SHEET_NAME = "To be allocated"
 TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map"
 
@@ -521,9 +534,13 @@ def write_output_sheet(
     odp_transit_qty: dict[tuple[str, str, str], float] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
-    start_date: date = TRANSIT_START_DATE,
-    end_date: date = TRANSIT_END_DATE,
+    start_date: date = None,
+    end_date: date = None,
 ) -> dict[str, Any]:
+    if start_date is None:
+        start_date = _default_start()
+    if end_date is None:
+        end_date = _default_end()
     wb = load_workbook(stock_wb_path)
 
     if OUTPUT_SHEET_NAME in wb.sheetnames:
@@ -773,9 +790,13 @@ def run(
     daily_supply_plan_path: Path | None = None,
     odp_master_path: Path | None = None,
     order_file_path: Path | None = None,
-    transit_start_date: date = TRANSIT_START_DATE,
-    transit_end_date: date = TRANSIT_END_DATE,
+    transit_start_date: date = None,
+    transit_end_date: date = None,
 ) -> None:
+    if transit_start_date is None:
+        transit_start_date = _default_start()
+    if transit_end_date is None:
+        transit_end_date = _default_end()
     inventory_rows = extract_inventory_rows(inventory_path)
 
     wb_probe = load_workbook(stock_path, read_only=True)
@@ -893,8 +914,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--daily-supply-plan", default=None, type=Path, help="DailySupplyPlan path (optional)")
     parser.add_argument("--odp-master", default=None, type=Path, help="EUPV_ODP_MASTER path (optional)")
     parser.add_argument("--order-file", default=None, type=Path, help="Orderfile_Base_Realtime path (optional)")
-    parser.add_argument("--transit-start", default="2026-08-01", help="Transit start date YYYY-MM-DD")
-    parser.add_argument("--transit-end", default="2026-12-31", help="Transit end date YYYY-MM-DD")
+    parser.add_argument("--transit-start", default=None, help="Transit start date YYYY-MM-DD (default: today)")
+    parser.add_argument("--transit-end", default=None, help="Transit end date YYYY-MM-DD (default: today + 6 months)")
     return parser.parse_args()
 
 
@@ -914,7 +935,7 @@ if __name__ == "__main__":
         daily_supply_plan_path=args.daily_supply_plan,
         odp_master_path=args.odp_master,
         order_file_path=args.order_file,
-        transit_start_date=_parse_cli_date(args.transit_start),
-        transit_end_date=_parse_cli_date(args.transit_end),
+        transit_start_date=_parse_cli_date(args.transit_start) if args.transit_start else None,
+        transit_end_date=_parse_cli_date(args.transit_end) if args.transit_end else None,
     )
 

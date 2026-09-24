@@ -398,7 +398,7 @@ function renderPortDailyChart(){
     data.get(port).forEach((modelMap)=>modelMap.forEach((v)=>portTotal+=v));
     /* Legend: list each model with its color swatch */
     const legend=modelList.map((mk)=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:11px"><span style="display:inline-block;width:10px;height:10px;background:${modelColor(mk)};border-radius:2px"></span>${escapeHtml(mk)}</span>`).join("");
-    return`<div class="port-chart-item"><h4 style="margin:0 0 4px">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(portTotal,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("atdDate"))}</text></svg><div style="margin-top:4px">${legend}</div></div>`;
+    return`<div class="port-chart-item"><h4 style="margin:0 0 4px">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(portTotal,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("hArrivalDate"))}</text></svg><div style="margin-top:4px">${legend}</div></div>`;
   }).join("");
   target.innerHTML=`<div class="port-chart-grid">${charts}</div>`;
 }
@@ -433,7 +433,7 @@ function exportPortDaily(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
-  const modelList=[...new Set(ports.flatMap((p)=>[p[0]&&[...data.get(p).values()].flatMap((m)=>[...m.keys()])]))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
+  const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
   if(!ports.length||!allDays.length)return;
   const headerRow=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
   const rows=[];
@@ -481,7 +481,7 @@ byId("routePolFilter").addEventListener("change",()=>{renderRouteFilters(true);r
 byId("routeDestinationFilter").addEventListener("change",renderRoutes);
 byId("performanceApplyBtn").addEventListener("click",renderPerformance);
 byId("exportAssumptionBtn").addEventListener("click",exportAssumptionATP);
-byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));commitPortModelFilter(document.querySelector(".port-model-filter"));renderPortDailyChart();renderPortDailyTable();});
+byId("portDailyApply").addEventListener("click",()=>{commitPortFilter(document.querySelector(".port-filter"));commitPortModelFilter(document.querySelector(".port-model-filter"));renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();});
 byId("exportPortDailyBtn").addEventListener("click",exportPortDaily);
 byId("productTypeSelect").addEventListener("change",()=>{renderAll();});
 byId("arrivalProductType").addEventListener("change",(e)=>{panelProductTypes.arrival=e.target.value;renderBusinessViews();});
@@ -495,7 +495,7 @@ document.addEventListener("click",(event)=>{
   if(event.target.closest(".model-select-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=true;});return;}
   if(event.target.closest(".model-clear-all")){root.querySelectorAll('.model-filter-options input[type="checkbox"]').forEach((x)=>{x.checked=false;});return;}
   if(event.target.closest(".model-filter-apply")){
-    if(root.classList.contains("port-filter")||root.classList.contains("port-model-filter")){commitPortFilter(document.querySelector(".port-filter"));commitPortModelFilter(document.querySelector(".port-model-filter"));renderPortDailyChart();renderPortDailyTable();}
+    if(root.classList.contains("port-filter")||root.classList.contains("port-model-filter")){commitPortFilter(document.querySelector(".port-filter"));commitPortModelFilter(document.querySelector(".port-model-filter"));renderPortDailyFilters();renderPortDailyChart();renderPortDailyTable();root.classList.remove("open");}
     else{commitModelFilter(root);renderBusinessViews();}
     return;
   }
