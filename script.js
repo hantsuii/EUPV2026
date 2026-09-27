@@ -24,6 +24,10 @@ const MODULE_I18N = {
     zh: { name:"销售预测分析", desc:"比较 M+1、M+3、M+6 与累计预测，分析准确率、偏差及权重效果。", badge:"预测分析" },
     en: { name:"Sales Forecast Accuracy", desc:"Compare M+1, M+3, M+6 and cumulative forecasts for accuracy, bias, and weighting effectiveness.", badge:"Forecasting" }, icon:"forecast", accent:"violet"
   },
+  "./modules/forecast-sales/forecast-sales-analysis.html": {
+    zh: { name:"组件预测与实际销售", desc:"按地区和统一产品分类比较FCST、实际销售、销售速率与需求参考。", badge:"需求分析" },
+    en: { name:"PV Forecast vs Actual", desc:"Compare forecast, actual sales, product velocity, and demand reference by region and normalized product group.", badge:"Demand Planning" }, icon:"forecast", accent:"teal"
+  },
   "./modules/stock/available-stock-analysis.html": {
     zh: { name:"可用库存分析", desc:"整合库存、在途和待分配数据，生成可下载工作簿。", badge:"运营工具" },
     en: { name:"Available Stock", desc:"Combine stock, in-transit, and allocation data in a downloadable workbook.", badge:"Operations" }, icon:"boxes", accent:"teal"

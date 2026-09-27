@@ -15,6 +15,12 @@
                         "badge":  "Interactive"
                     },
                     {
+                        "name":  "PV Forecast vs Actual Sales",
+                        "desc":  "Compare Country FCST with invoiced PV sales by region and normalized product group, including sales velocity and demand reference.",
+                        "url":  "./modules/forecast-sales/forecast-sales-analysis.html",
+                        "badge":  "Forecasting"
+                    },
+                    {
                         "name":  "Available Stock Analysis",
                         "desc":  "Upload source files and generate a downloadable stock workbook.",
                         "url":  "./modules/stock/available-stock-analysis.html",

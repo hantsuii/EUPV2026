@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN" data-i18n-title-key="pageTitle">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="PV forecast, actual sales, velocity and demand reference analysis" />
+  <title>组件预测与实际销售</title>
+  <link rel="stylesheet" href="../../style.css" />
+  <link rel="stylesheet" href="../../theme.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body[data-page="forecast-sales"] .hero h1::before { content: "≈"; }
+    .tool-wrap { max-width: 1500px; }
+    .hero .lang-switch { position:absolute;top:18px;right:22px; }
+    .panel { margin-bottom:16px; }
+    .source-grid,.controls { display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:12px; }
+    .controls { grid-template-columns:repeat(5,minmax(150px,1fr));align-items:end;margin-bottom:14px; }
+    .field label { display:block;margin-bottom:5px;font-size:12px;font-weight:750;color:#496579; }
+    .field input,.field select { width:100%;min-height:42px;padding:9px 10px; }
+    .method-note,.section-note { margin:10px 0 0;color:#607889;font-size:12px;line-height:1.55; }
+    .dashboard { display:none; }.dashboard.ready { display:block; }
+    .kpi-grid { display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:10px; }
+    .kpi-card { min-height:112px;padding:14px;border:1px solid #d9e4eb;background:#fff; }
+    .kpi-name { color:#607889;font-size:12px; }.kpi-value { margin-top:7px;color:#173a50;font-size:24px;font-weight:760;line-height:1.2; }
+    .kpi-detail { margin-top:7px;color:#728796;font-size:11px; }
+    .chart-grid { display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:12px; }
+    .chart-box { min-height:370px;padding:8px;border:1px solid #dbe5ee;background:#fff; }
+    .chart { width:100%;height:355px; }
+    .table-wrap { overflow:auto;max-height:520px;border:1px solid #dbe5ee;background:#fff; }
+    table { width:100%;border-collapse:collapse;min-width:900px; }
+    th,td { padding:9px 10px;border-bottom:1px solid #e5edf2;text-align:right;white-space:nowrap;font-size:12px; }
+    th { position:sticky;top:0;z-index:1;background:#edf4f7;color:#29495d; }
+    th:first-child,td:first-child { text-align:left; }
+    tbody tr:hover td { background:#edf7f5; }
+    .quality-grid { display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px; }
+    .quality-item { padding:12px;border:1px solid #dce7ed;border-radius:12px;background:#f8fbfc; }
+    .quality-item span { display:block;color:#667d8c;font-size:11px; }.quality-item strong { display:block;margin-top:5px;color:#203f52;font-size:20px; }
+    .warning-note { margin-top:10px;padding:10px 12px;border-left:4px solid #d69442;border-radius:8px;background:#fff7eb;color:#725024;font-size:12px; }
+    .positive { color:#a4531a; }.negative { color:#177765; }
+    @media(max-width:1100px){.controls{grid-template-columns:repeat(2,minmax(220px,1fr))}.kpi-grid{grid-template-columns:repeat(3,1fr)}.quality-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:760px){.hero .lang-switch{position:static;margin-bottom:10px}.source-grid,.controls,.chart-grid,.kpi-grid,.quality-grid{grid-template-columns:1fr}.tool-wrap{padding:12px}}
+  </style>
+</head>
+<body class="light-ui" data-page="forecast-sales">
+  <main class="tool-wrap">
+    <header class="hero">
+      <div class="lang-switch"><button class="lang-btn" type="button" data-lang="zh">中文</button><button class="lang-btn" type="button" data-lang="en">EN</button></div>
+      <a class="btn-link" href="../../index.html" data-i18n="backHome">返回主页</a>
+      <h1 data-i18n="pageTitle">组件预测与实际销售</h1>
+      <p data-i18n="pageSubtitle">按地区和统一产品分类比较FCST、已开票实际、销售速度与需求参考。</p>
+    </header>
+
+    <section class="panel">
+      <h2 data-i18n="sourceTitle">读取数据</h2>
+      <div class="source-grid">
+        <div class="field"><label for="forecastFile" data-i18n="forecastFileLabel">Country FCST工作簿</label><input id="forecastFile" type="file" accept=".xlsx,.xlsm,.xls" /></div>
+        <div class="field"><label for="salesFile" data-i18n="salesFileLabel">EU DG销售工作簿</label><input id="salesFile" type="file" accept=".xlsx,.xlsm,.xls" /></div>
+      </div>
+      <div class="actions"><button id="runBtn" class="btn-primary" type="button" data-i18n="runButton">读取并分析</button><button id="exportBtn" class="btn-secondary" type="button" data-i18n="exportButton" disabled>下载分析明细</button></div>
+      <div id="status" class="status" role="status" aria-live="polite" data-i18n="statusInitial">请选择Country FCST和EU DG销售文件。</div>
+      <p class="method-note" data-i18n="methodNote">仅分析PV。历史实际只计已开票；当前月与未来月份的confirm单独显示。TCL与SunPower、CFP与非CFP分别统计。</p>
+    </section>
+
+    <div id="dashboard" class="dashboard">
+      <section class="panel">
+        <h2 data-i18n="scopeTitle">分析范围</h2>
+        <div class="controls">
+          <div class="field"><label for="regionSel" data-i18n="regionLabel">地区</label><select id="regionSel"></select></div>
+          <div class="field"><label for="productSel" data-i18n="productLabel">聚合产品</label><select id="productSel"></select></div>
+          <div class="field"><label for="startMonthSel" data-i18n="startMonthLabel">开始月份</label><select id="startMonthSel"></select></div>
+          <div class="field"><label for="endMonthSel" data-i18n="endMonthLabel">结束月份</label><select id="endMonthSel"></select></div>
+          <div class="field"><label for="velocityWindowSel" data-i18n="velocityWindowLabel">销售速率窗口</label><select id="velocityWindowSel"><option value="1">1个月</option><option value="3" selected>3个月</option><option value="6">6个月</option></select></div>
+        </div>
+        <div id="kpiGrid" class="kpi-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="chart-grid">
+          <div class="chart-box"><div id="monthlyChart" class="chart"></div></div>
+          <div class="chart-box"><div id="mixChart" class="chart"></div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 data-i18n="monthlyTitle">月度预测与实际明细</h2>
+        <div class="table-wrap"><table id="monthlyTable"></table></div>
+      </section>
+
+      <section class="panel">
+        <h2 data-i18n="velocityTitle">各地区产品销售速率</h2>
+        <p class="section-note" data-i18n="velocityNote">按完整月份的已开票MW计算；零销售月份计入平均值。“全部地区”为先求和后计算，不是地区平均。</p>
+        <div id="velocityHeatmap" class="chart"></div>
+        <div class="table-wrap"><table id="velocityTable"></table></div>
+      </section>
+
+      <section class="panel">
+        <h2 data-i18n="demandTitle">产品需求参考</h2>
+        <p class="section-note" data-i18n="demandNote">将近期实际销售速度与经过历史Bias修正的未来FCST按历史准确率加权；结果为月均MW参考。</p>
+        <div class="table-wrap"><table id="demandTable"></table></div>
+      </section>
+
+      <section class="panel">
+        <h2 data-i18n="mappingTitle">产品映射与数据检查</h2>
+        <div id="qualityGrid" class="quality-grid"></div>
+        <div id="qualityWarning" class="warning-note"></div>
+        <div class="table-wrap" style="margin-top:12px"><table id="mappingTable"></table></div>
+      </section>
+    </div>
+  </main>
+  <script src="../../module-i18n.js"></script>
+  <script src="./forecast-sales-core.js"></script>
+  <script src="./forecast-sales-analysis.js"></script>
+</body>
+</html>
