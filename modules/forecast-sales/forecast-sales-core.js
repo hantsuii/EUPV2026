@@ -343,26 +343,67 @@
   function prepare(forecastRawRows, actualRawRows, now = new Date()) {
     const forecast = normalizeForecastRows(forecastRawRows);
     const actual = normalizeActualRows(actualRawRows);
-    const actualMonths = [...new Set(actual.records.map((row) => row.month))].sort();
+    const forecastProductSet = new Set(forecast.mappings.map((row) => row.product));
+    const scopedActualRecords = actual.records.filter((row) => forecastProductSet.has(row.product));
+    const scopedActualMappings = actual.mappings.filter((row) => forecastProductSet.has(row.product));
+    actual.quality.excludedEolRows = actual.records.length - scopedActualRecords.length;
+    actual.quality.unmappedRows = scopedActualRecords.filter((row) => row.product.startsWith("Unmapped")).length;
+    const actualMonths = [...new Set(scopedActualRecords.map((row) => row.month))].sort();
     const months = [...new Set([...forecast.months, ...actualMonths])].sort();
-    const products = [...new Set([...forecast.records.map((row) => row.product), ...actual.records.map((row) => row.product)])].sort();
+    const products = [...forecastProductSet].sort();
     const stages = [...new Set(forecast.records.map((row) => row.stage))].sort((a, b) => {
       const ai = Number(a.match(/^\d+/)?.[0] || 99), bi = Number(b.match(/^\d+/)?.[0] || 99);
       return ai - bi || a.localeCompare(b);
     });
     return {
       forecastRecords: forecast.records,
-      actualRecords: actual.records,
+      actualRecords: scopedActualRecords,
       forecastMonths: forecast.months,
       actualMonths,
       months,
       regions: [...REGIONS],
       products,
       stages,
-      mappings: [...forecast.mappings, ...actual.mappings],
+      mappings: [...forecast.mappings, ...scopedActualMappings],
       quality: { forecast: forecast.quality, actual: actual.quality },
       now,
     };
+  }
+
+  function futureComparison(data, options = {}) {
+    const now = options.now || new Date();
+    const current = currentMonthKey(now);
+    const requestedStart = normalizeMonth(options.startMonth) || current;
+    const startMonth = monthIndex(requestedStart) < monthIndex(current) ? current : requestedStart;
+    const endMonth = normalizeMonth(options.endMonth) || data.forecastMonths.at(-1) || current;
+    if (monthIndex(startMonth) > monthIndex(endMonth)) return [];
+    const monthSet = new Set(monthRange(startMonth, endMonth));
+    const region = options.region || "__ALL__";
+    const product = options.product || "__ALL__";
+    const rows = new Map();
+    const entryFor = (row) => {
+      const key = `${row.month}|${row.region}|${row.product}`;
+      if (!rows.has(key)) rows.set(key, { month:row.month, region:row.region, product:row.product, forecast:0, actual:0, confirm:0 });
+      return rows.get(key);
+    };
+    data.forecastRecords.forEach((row) => {
+      if (!monthSet.has(row.month) || !matchesScope(row, region, product) || !matchesForecastStage(row, options.stages)) return;
+      entryFor(row).forecast += row.mw;
+    });
+    data.actualRecords.forEach((row) => {
+      if (!monthSet.has(row.month) || !matchesScope(row, region, product)) return;
+      const entry = entryFor(row);
+      if (row.status === "invoiced") entry.actual += row.mw;
+      if (row.status === "confirm") entry.confirm += row.mw;
+    });
+    const regionOrder = new Map(data.regions.map((name, index) => [name, index]));
+    return [...rows.values()].map((row) => ({
+      ...row,
+      orders:row.actual + row.confirm,
+      gap:row.forecast - row.actual - row.confirm,
+    })).sort((a, b) => a.month.localeCompare(b.month)
+      || (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99)
+      || a.product.localeCompare(b.product));
   }
 
   function velocityMatrix(data, window = 3, now = new Date()) {
@@ -398,6 +439,7 @@
     normalizeActualRows,
     prepare,
     summarize,
+    futureComparison,
     velocityMatrix,
     productSummary,
   };

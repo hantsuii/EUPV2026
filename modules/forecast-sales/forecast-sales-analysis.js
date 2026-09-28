@@ -5,26 +5,28 @@ window.PAGE_I18N = {
     pageTitle:"组件预测与实际销售", pageSubtitle:"按地区和统一产品分类比较FCST、已开票实际、销售速度与需求参考。", backHome:"返回主页",
     sourceTitle:"读取数据", forecastFileLabel:"Country FCST工作簿", salesFileLabel:"EU DG销售工作簿", runButton:"读取并分析", exportButton:"下载分析明细",
     statusInitial:"请选择Country FCST和EU DG销售文件。", statusReading:"正在读取并统一地区、产品和月份……", statusNoFiles:"请同时选择两个工作簿。", statusNoConso:"Country FCST中未找到Conso工作表。", statusNoOrders:"EU DG文件中未找到Order details工作表。", statusNoRows:"没有找到可比较的PV数据。", statusDone:"完成：{forecast}条预测明细，{actual}条销售明细，{products}个聚合产品。", statusFailed:"分析失败：{message}",
-    methodNote:"仅分析PV。历史实际只计已开票；当前月与未来月份的confirm单独显示。TCL与SunPower、CFP与非CFP分别统计。",
+    methodNote:"仅分析PV，并以Country FCST中出现的聚合产品为产品范围；仅存在于销售历史中的EOL产品不纳入统计。历史实际只计已开票；当前月与未来月份的Confirm单独显示。TCL与SunPower、CFP与非CFP分别统计。",
     scopeTitle:"分析范围", regionLabel:"地区", productLabel:"聚合产品", stageLabel:"预测阶段", allStages:"全部阶段", selectedStages:"已选{count}个阶段", unspecifiedStage:"未指定", stageScopeNote:"Stage仅筛选FCST；实际销售没有Stage字段。", startMonthLabel:"开始月份", endMonthLabel:"结束月份", velocityWindowLabel:"销售速率窗口", allRegions:"全部地区", allProducts:"全部产品", month1:"1个月", month3:"3个月", month6:"6个月",
     historicalForecast:"历史FCST", historicalActual:"历史实际", accuracy:"准确率", bias:"Bias", runRate:"近期销售速率", suggestedDemand:"建议月均需求", completedMonths:"{count}个完整月份", nextMonths:"未来{count}个月", rateWindow:"最近{count}个月",
     monthlyChartTitle:"月度FCST、已开票与待确认", productMixTitle:"产品组合对比", forecast:"FCST", actual:"已开票实际", confirm:"Confirm", variance:"FCST-实际", month:"月份", status:"月份状态", completed:"完整月份", current:"当前月", future:"未来月份", unavailable:"—",
     monthlyTitle:"月度预测与实际明细", velocityTitle:"各地区产品销售速率", velocityNote:"按完整月份的已开票MW计算；零销售月份计入平均值。“全部地区”为先求和后计算，不是地区平均。热力图显示销量最高的12个产品，完整明细见下表。", velocityTableTitle:"全部产品明细", all:"全部地区", product:"聚合产品", mwPerMonth:"MW/月",
+    futureDetailTitle:"后续月份地区产品预测与订单", futureDetailNote:"从当前月起，按地区和聚合产品展示FCST、已开票、Confirm及订单合计；沿用上方地区、产品、Stage和结束月份筛选。", orderTotal:"订单合计", forecastOrderGap:"FCST-订单",
     demandTitle:"产品需求参考", demandNote:"将近期实际销售速度与经过历史Bias修正的未来FCST按历史准确率加权；结果为月均MW参考。", priorRate:"前期速率", trend:"速率变化", futureRate:"未来FCST速率", correction:"Bias修正", reliability:"预测可信度", calibrationBasis:"校准层级", direct:"地区×产品", productAll:"全部地区×产品", regionAll:"地区×全部产品", global:"全部PV", actualOnly:"仅实际速度",
-    mappingTitle:"产品映射与数据检查", source:"来源", sourceModel:"源型号", mappedProduct:"聚合分类", fcstPvRows:"FCST PV行", salesPvRows:"销售PV行", manualRegions:"人工地区映射", outsideScope:"范围外行", unmapped:"未映射行", qualityWarning:"Solarmarkt与Solexis的6条#N/A地区记录已按确认归入法国及瑞士地区；UPP及非欧洲地区不参与本模块。", mappingRows:"显示{shown}条型号映射，共{total}条。",
+    mappingTitle:"产品映射与数据检查", source:"来源", sourceModel:"源型号", mappedProduct:"聚合分类", fcstPvRows:"FCST PV行", salesPvRows:"销售PV行", manualRegions:"人工地区映射", outsideScope:"范围外行", excludedEol:"排除EOL销售行", unmapped:"未映射行", qualityWarning:"Solarmarkt与Solexis的6条#N/A地区记录已按确认归入法国及瑞士地区；UPP、非欧洲地区及仅存在于销售历史中的EOL产品不参与本模块。", mappingRows:"显示{shown}条型号映射，共{total}条。",
     exportFile:"PV_FCST_Actual_Detail.csv"
   },
   en: {
     pageTitle:"PV Forecast vs Actual Sales", pageSubtitle:"Compare forecast, invoiced actuals, sales velocity, and demand reference by region and normalized product group.", backHome:"Back to Home",
     sourceTitle:"Load data", forecastFileLabel:"Country FCST workbook", salesFileLabel:"EU DG sales workbook", runButton:"Read and analyze", exportButton:"Download detail",
     statusInitial:"Select both the Country FCST and EU DG sales workbooks.", statusReading:"Reading and normalizing regions, products, and months…", statusNoFiles:"Select both workbooks.", statusNoConso:"Sheet 'Conso' was not found in Country FCST.", statusNoOrders:"Sheet 'Order details' was not found in the EU DG workbook.", statusNoRows:"No comparable PV data was found.", statusDone:"Done: {forecast} forecast records, {actual} sales records, {products} product groups.", statusFailed:"Analysis failed: {message}",
-    methodNote:"PV only. Historical actuals use invoiced sales; current and future confirm orders are shown separately. TCL vs SunPower and CFP vs non-CFP remain separate.",
+    methodNote:"PV only. The product scope is limited to groups found in Country FCST; EOL products found only in sales history are excluded. Historical actuals use invoiced sales; current and future Confirm orders are shown separately. TCL vs SunPower and CFP vs non-CFP remain separate.",
     scopeTitle:"Analysis scope", regionLabel:"Region", productLabel:"Product group", stageLabel:"Forecast stage", allStages:"All stages", selectedStages:"{count} stages selected", unspecifiedStage:"Unspecified", stageScopeNote:"Stage filters FCST only; actual sales do not contain a Stage field.", startMonthLabel:"Start month", endMonthLabel:"End month", velocityWindowLabel:"Sales velocity window", allRegions:"All regions", allProducts:"All products", month1:"1 month", month3:"3 months", month6:"6 months",
     historicalForecast:"Historical FCST", historicalActual:"Historical actual", accuracy:"Accuracy", bias:"Bias", runRate:"Recent sales velocity", suggestedDemand:"Suggested monthly demand", completedMonths:"{count} complete months", nextMonths:"Next {count} months", rateWindow:"Last {count} months",
     monthlyChartTitle:"Monthly FCST, invoiced, and confirmed", productMixTitle:"Product mix comparison", forecast:"FCST", actual:"Invoiced actual", confirm:"Confirm", variance:"FCST - actual", month:"Month", status:"Month status", completed:"Complete", current:"Current month", future:"Future", unavailable:"—",
     monthlyTitle:"Monthly forecast and actual detail", velocityTitle:"Product sales velocity by region", velocityNote:"Calculated from invoiced MW in complete months; zero-sales months remain in the average. All Regions is calculated after summing regions. The heatmap shows the top 12 products; the full detail is below.", velocityTableTitle:"All product details", all:"All Regions", product:"Product group", mwPerMonth:"MW/month",
+    futureDetailTitle:"Future forecast and orders by region and product", futureDetailNote:"From the current month onward, shows FCST, invoiced, Confirm, and total orders by region and product. It follows the region, product, Stage, and end-month filters above.", orderTotal:"Total orders", forecastOrderGap:"FCST - orders",
     demandTitle:"Product demand reference", demandNote:"Blends recent actual velocity with bias-corrected future FCST using historical accuracy. Results are monthly MW references.", priorRate:"Prior velocity", trend:"Velocity change", futureRate:"Future FCST rate", correction:"Bias correction", reliability:"Forecast confidence", calibrationBasis:"Calibration level", direct:"Region × product", productAll:"All regions × product", regionAll:"Region × all products", global:"All PV", actualOnly:"Actual velocity only",
-    mappingTitle:"Product mapping and data checks", source:"Source", sourceModel:"Source model", mappedProduct:"Product group", fcstPvRows:"FCST PV rows", salesPvRows:"Sales PV rows", manualRegions:"Manual region mappings", outsideScope:"Out-of-scope rows", unmapped:"Unmapped rows", qualityWarning:"Six #N/A rows for Solarmarkt and Solexis were assigned to France and Switzerland as confirmed. UPP and non-European regions are excluded.", mappingRows:"Showing {shown} model mappings out of {total}.",
+    mappingTitle:"Product mapping and data checks", source:"Source", sourceModel:"Source model", mappedProduct:"Product group", fcstPvRows:"FCST PV rows", salesPvRows:"Sales PV rows", manualRegions:"Manual region mappings", outsideScope:"Out-of-scope rows", excludedEol:"Excluded EOL sales rows", unmapped:"Unmapped rows", qualityWarning:"Six #N/A rows for Solarmarkt and Solexis were assigned to France and Switzerland as confirmed. UPP, non-European regions, and EOL products found only in sales history are excluded.", mappingRows:"Showing {shown} model mappings out of {total}.",
     exportFile:"PV_FCST_Actual_Detail.csv"
   }
 };
@@ -144,6 +146,13 @@ function renderMonthly(summary) {
   }));
 }
 
+function renderFutureDetail(options) {
+  const rows = Core.futureComparison(data, options);
+  renderTable("futureTable", [t("month"), t("regionLabel"), t("product"), `${t("forecast")} (MW)`, `${t("actual")} (MW)`, `${t("confirm")} (MW)`, `${t("orderTotal")} (MW)`, `${t("forecastOrderGap")} (MW)`], rows.map((row) => [
+    escapeHtml(row.month), escapeHtml(row.region), escapeHtml(row.product), fmt(row.forecast, 2), fmt(row.actual, 2), fmt(row.confirm, 2), fmt(row.orders, 2), fmt(row.gap, 2),
+  ]));
+}
+
 function renderMix(options) {
   const rows = Core.productSummary(data, options).slice(0, 12).reverse();
   plot("mixChart", [
@@ -192,7 +201,7 @@ function renderDemand(options) {
   const historyEnd = data.forecastMonths.filter((month) => Core.isCompleteMonth(month, now)).at(-1) || historyStart;
   const region = options.region;
   const rows = data.products.map((product) => {
-    const direct = Core.summarize(data, { region, product, startMonth:historyStart, endMonth:historyEnd, velocityWindow:Number(velocityWindowSel.value), now });
+    const direct = Core.summarize(data, { region, product, stages:options.stages, startMonth:historyStart, endMonth:historyEnd, velocityWindow:Number(velocityWindowSel.value), now });
     if (direct.runRate === 0 && direct.futureForecastRate === 0) return null;
     const calibration = calibrationFor(product, region, historyStart, historyEnd, options.stages);
     const reliability = calibration?.reliability || 0;
@@ -216,7 +225,7 @@ function renderQuality() {
   const fq = data.quality.forecast, aq = data.quality.actual;
   byId("qualityGrid").innerHTML = [
     qualityCard(t("fcstPvRows"), fq.pvRows), qualityCard(t("salesPvRows"), aq.pvRows), qualityCard(t("manualRegions"), fq.manualRegionRows),
-    qualityCard(t("outsideScope"), fq.outsideScope + aq.outsideScope), qualityCard(t("unmapped"), fq.unmappedRows + aq.unmappedRows),
+    qualityCard(t("outsideScope"), fq.outsideScope + aq.outsideScope), qualityCard(t("excludedEol"), aq.excludedEolRows || 0), qualityCard(t("unmapped"), fq.unmappedRows + aq.unmappedRows),
   ].join("");
   byId("qualityWarning").textContent = t("qualityWarning");
   const unique = [...new Map(data.mappings.map((row) => [`${row.source}|${row.sourceModel}|${row.product}`, row])).values()]
@@ -236,6 +245,7 @@ function renderAll() {
   const summary = Core.summarize(data, options);
   renderKpis(summary);
   renderMonthly(summary);
+  renderFutureDetail(options);
   renderMix(options);
   renderVelocity();
   renderDemand(options);
@@ -283,10 +293,14 @@ function csvCell(value) {
 
 function exportDetail() {
   if (!data) return;
-  const summary = Core.summarize(data, currentOptions());
+  const options = currentOptions();
+  const summary = Core.summarize(data, options);
+  const future = Core.futureComparison(data, options);
   const stageLabel = selectedStages().length === data.stages.length ? t("allStages") : selectedStages().map(stageDisplay).join(" + ");
   const rows = [[t("month"), t("regionLabel"), t("product"), t("stageLabel"), t("forecast"), t("actual"), t("confirm"), t("variance"), t("status")]];
   summary.monthly.forEach((month) => rows.push([month.month, regionSel.value === "__ALL__" ? t("allRegions") : regionSel.value, productSel.value === "__ALL__" ? t("allProducts") : productSel.value, stageLabel, month.forecast, month.actual, month.confirm, month.variance, monthState(month)]));
+  rows.push([], [t("futureDetailTitle")], [t("month"), t("regionLabel"), t("product"), t("stageLabel"), t("forecast"), t("actual"), t("confirm"), t("orderTotal"), t("forecastOrderGap")]);
+  future.forEach((row) => rows.push([row.month, row.region, row.product, stageLabel, row.forecast, row.actual, row.confirm, row.orders, row.gap]));
   const csv = "\ufeff" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8" }));
   const link = document.createElement("a"); link.href = url; link.download = t("exportFile"); link.click(); URL.revokeObjectURL(url);

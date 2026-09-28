@@ -551,7 +551,7 @@
 
       <div id="block-orders" class="content-block">
         <h3 data-i18n="orderAnalysisTitle">订单分析</h3>
-        <p class="mini-tip" data-i18n="orderAnalysisSubtitle">查看各地区当月订单状态及季度客户 × Model 数量矩阵。</p>
+        <p class="mini-tip" data-i18n="orderAnalysisSubtitle">查看各地区当月订单状态及季度客户 × Model MW矩阵。</p>
         <div class="customer-toolbar">
           <div><label for="orderRegionSel" data-i18n="customerRegion">分析地区</label><select id="orderRegionSel"></select></div>
           <div><label for="orderYearSel" data-i18n="customerYear">分析年份</label><select id="orderYearSel"></select></div>
@@ -564,14 +564,14 @@
         <div class="customer-analysis-toolbar">
           <div><label for="customerStatusMonthSel" data-i18n="customerStatusMonth">分析月份</label><select id="customerStatusMonthSel"></select></div>
         </div>
-        <p class="filter-note" data-i18n="customerStatusNote">按地区、客户和 Model 汇总 Ordered Qty；状态列来自 Order Status，CRD/SAD/SSD 展示不重复日期。</p>
+        <p class="filter-note" data-i18n="customerStatusNote">按地区、客户和 Model 汇总 Total MW；状态列来自 Order Status，MW全为0的状态列自动隐藏，CRD/SAD/SSD 展示不重复日期。</p>
         <div class="table-wrap" style="max-height:560px;"><table id="customerOrderStatusTable"></table></div>
 
         <div class="sub-title" style="margin-top:20px;" data-i18n="orderQuarterSectionTitle">季度订单矩阵</div>
         <div class="customer-analysis-toolbar">
           <div><label for="customerQuarterSel" data-i18n="customerQuarter">分析季度</label><select id="customerQuarterSel"></select></div>
         </div>
-        <p class="filter-note" data-i18n="customerQuarterNote">按客户和 Model 展示所选季度各月的 Ordered Qty，并提供订单数和数量汇总；地区使用上方筛选。</p>
+        <p class="filter-note" data-i18n="customerQuarterNote">按客户和 Model 展示所选季度各月的 Total MW，并提供订单数和 MW 汇总；地区使用上方筛选。</p>
         <div class="table-wrap" style="max-height:560px;"><table id="customerQuarterOrderTable"></table></div>
       </div>
     </section>
@@ -623,7 +623,6 @@
   <script src="./customer-analysis.js"></script>
 </body>
 </html>
-
 
 
 

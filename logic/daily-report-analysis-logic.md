@@ -70,7 +70,8 @@
 ## 独立订单分析子版块
 
 - 销售分析顶部新增独立“订单分析”子版块，不嵌套在客户分析内部。该版块具有自己的年份、地区、产品线、品牌和客户/Model 搜索条件。
-- “当月订单状态”月份默认当前自然月；若数据中没有当前月，则默认数据中的最新月份。表格按 Region → Customer → Model 汇总 `Ordered Qty`，状态列从源数据的 `Order Status` 动态生成，并兼容 `Order Status2` 和 `Status`；`invoiced` 固定排在首列，其余状态按名称排序。
+- “当月订单状态”月份默认当前自然月；若数据中没有当前月，则默认数据中的最新月份。表格按 Region → Customer → Model 汇总 `Total MW`，状态分类只读取源数据的 `Order Status`。状态列优先按 `invoiced`、`customer signed`、`shipped`、`si`、`prepare truck`、`created` 排列，其他非零状态排在其后；当前筛选结果中 MW 全部为 0 的状态列不显示。该字段不参与其他销售模块的开票/待确认判断。
+- 总计 Dashboard、地区看板、产品销售分析和客户分析继续只使用 `Order Status2`：`invoiced` 为开票，`confirm` 为待确认。
 - 当月状态表同时展示每个 Region × Customer × Model 组合内不重复的 CRD、SAD、SSD 日期。Model 兼容 `Model`、`Product Model`、`Model Name`、`Material Description` 和 `SKU` 字段。
-- 客户分析新增“季度订单矩阵”：选择 Q1–Q4 后，以 Customer 和 Model 为行、季度内三个自然月为列，单元格汇总 `Ordered Qty`，并增加数量汇总及唯一订单号数量。地区沿用客户分析顶部的地区筛选。
+- “季度订单矩阵”选择 Q1–Q4 后，以 Customer 和 Model 为行、季度内三个自然月为列，单元格汇总 `Total MW`，并增加 MW 汇总及唯一订单号数量。
 - 两个订单视图共用订单分析子版块内的年份、地区、产品线、品牌和客户/Model 搜索条件。

@@ -14,11 +14,11 @@ const orderSearchEl = byId("orderSearch");
 
 const CUSTOMER_TEXT = {
   zh: {
-    allRegions:"全球总览", customers:"下单客户数", active:"近3个月活跃客户", activeRate:"活跃率", newCustomers:"新增客户", repeat:"复购客户 / 复购率", orders:"订单数", avgOrders:"客户平均下单次数", model:"Model", orderedQty:"订购数量", totalQty:"数量汇总", orderStatus:"订单状态", orderTotal:"订单汇总",
+    allRegions:"全球总览", customers:"下单客户数", active:"近3个月活跃客户", activeRate:"活跃率", newCustomers:"新增客户", repeat:"复购客户 / 复购率", orders:"订单数", avgOrders:"客户平均下单次数", model:"Model", orderedQty:"MW", totalQty:"MW汇总", orderStatus:"订单状态", orderTotal:"订单汇总",
     trend:"客户数量月度变化", monthly:"当月下单客户", newMonthly:"当月新增客户", activeMonthly:"滚动3个月活跃客户", regionRanking:"地区客户数", region:"地区", countries:"覆盖国家", revenue:"销售额(万€)", qty:"销售数量", pvCustomers:"PV客户", essCustomers:"ESS客户", hpCustomers:"HP客户", growth:"客户同比", status:"客户状态", sleeping:"沉睡", risk:"风险", lastOrder:"最近下单", customer:"客户", country:"国家", orderCount:"下单次数", pvQty:"PV数量(MW)", essQty:"ESS数量(Sets)", hpQty:"HP数量", products:"产品线", firstOrder:"首次下单", avgOrderValue:"平均订单额(万€)", segment:"价值分层", highValue:"高价值", frequent:"高频复购", potential:"潜力", newLabel:"新客户", maintain:"需要维护", concentration:"Top 10客户销售贡献", valueRank:"客户价值排名", productCustomers:"各产品线客户数", productMix:"客户产品组合", only:"仅", cross:"跨产品线", regionRequired:"请选择一个地区查看该分析。", noCustomerField:"源表未识别客户字段，当前按“Unknown Customer”汇总；请确认客户列名。"
   },
   en: {
-    allRegions:"Global Overview", customers:"Ordering Customers", active:"Active in Last 3 Months", activeRate:"Active Rate", newCustomers:"New Customers", repeat:"Repeat Customers / Rate", orders:"Orders", avgOrders:"Avg. Orders per Customer", model:"Model", orderedQty:"Ordered Qty", totalQty:"Total Qty", orderStatus:"Order Status", orderTotal:"Order Total",
+    allRegions:"Global Overview", customers:"Ordering Customers", active:"Active in Last 3 Months", activeRate:"Active Rate", newCustomers:"New Customers", repeat:"Repeat Customers / Rate", orders:"Orders", avgOrders:"Avg. Orders per Customer", model:"Model", orderedQty:"MW", totalQty:"Total MW", orderStatus:"Order Status", orderTotal:"Order Total",
     trend:"Monthly Customer Change", monthly:"Monthly Ordering Customers", newMonthly:"New Customers", activeMonthly:"Rolling 3-Month Active", regionRanking:"Customers by Region", region:"Region", countries:"Countries", revenue:"Revenue (10k €)", qty:"Sales Quantity", pvCustomers:"PV Customers", essCustomers:"ESS Customers", hpCustomers:"HP Customers", growth:"Customer YoY", status:"Status", sleeping:"Sleeping", risk:"At Risk", lastOrder:"Last Order", customer:"Customer", country:"Country", orderCount:"Order Count", pvQty:"PV Qty (MW)", essQty:"ESS Qty (Sets)", hpQty:"HP Qty", products:"Product Lines", firstOrder:"First Order", avgOrderValue:"Avg. Order Value (10k €)", segment:"Value Segment", highValue:"High Value", frequent:"Frequent", potential:"Potential", newLabel:"New", maintain:"Maintain", concentration:"Top 10 Revenue Contribution", valueRank:"Customer Value Ranking", productCustomers:"Customers by Product Line", productMix:"Customer Product Mix", only:"Only", cross:"Cross-sell", regionRequired:"Choose a region to view this analysis.", noCustomerField:"No customer field was detected; rows are grouped as 'Unknown Customer'. Please confirm the customer column name."
   }
 };
@@ -97,15 +97,16 @@ function renderCustomerOrderStatus() {
   if(!customerStatusMonthSel) return;
   const month=customerStatusMonthSel.value;
   const rows=operationalScopeRows().filter((r)=>r.month===month);
-  const statuses=[...new Map(rows.map((r)=>[r.status,r.statusLabel])).entries()].sort((a,b)=>a[0]==="invoiced"?-1:b[0]==="invoiced"?1:a[1].localeCompare(b[1]));
+  const statusSequence=["invoiced","customer signed","shipped","si","prepare truck","created"],statusRank=new Map(statusSequence.map((status,index)=>[status,index]));
+  const statuses=[...new Map(rows.filter((r)=>r.totalMw!==0).map((r)=>[r.orderStatus,r.orderStatusLabel])).entries()].sort((a,b)=>(statusRank.get(a[0])??999)-(statusRank.get(b[0])??999)||a[1].localeCompare(b[1]));
   const groups=new Map();
   rows.forEach((row)=>{const key=`${row.region}\u0001${row.customer}\u0001${row.model}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);});
   const result=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([key,groupRows])=>{
     const [region,customer,model]=key.split("\u0001");
-    const statusQty=statuses.map(([status])=>groupRows.filter((r)=>r.status===status).reduce((sum,r)=>sum+r.orderedQty,0));
-    return [region,customer,model,...statusQty.map(fmtOne),fmtOne(groupRows.reduce((sum,r)=>sum+r.orderedQty,0)),distinctDateLabels(groupRows,"crd"),distinctDateLabels(groupRows,"sad"),distinctDateLabels(groupRows,"ssd")];
+    const statusQty=statuses.map(([status])=>groupRows.filter((r)=>r.orderStatus===status).reduce((sum,r)=>sum+r.totalMw,0));
+    return [region,customer,model,...statusQty.map(fmtOne),fmtOne(groupRows.reduce((sum,r)=>sum+r.totalMw,0)),distinctDateLabels(groupRows,"crd"),distinctDateLabels(groupRows,"sad"),distinctDateLabels(groupRows,"ssd")];
   });
-  if(result.length) result.push({className:"quarter-total",values:[t("all"),"","",...statuses.map(([status])=>fmtOne(rows.filter((r)=>r.status===status).reduce((sum,r)=>sum+r.orderedQty,0))),fmtOne(rows.reduce((sum,r)=>sum+r.orderedQty,0)),"","",""]});
+  if(result.length) result.push({className:"quarter-total",values:[t("all"),"","",...statuses.map(([status])=>fmtOne(rows.filter((r)=>r.orderStatus===status).reduce((sum,r)=>sum+r.totalMw,0))),fmtOne(rows.reduce((sum,r)=>sum+r.totalMw,0)),"","",""]});
   table("customerOrderStatusTable",[ct("region"),ct("customer"),ct("model"),...statuses.map(([,label])=>label),ct("totalQty"),"CRD","SAD","SSD"],result);
 }
 function renderCustomerQuarterOrders() {
@@ -116,10 +117,10 @@ function renderCustomerQuarterOrders() {
   const groups=new Map();
   rows.forEach((row)=>{const key=`${row.region}\u0001${row.customer}\u0001${row.model}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);});
   const result=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([key,groupRows])=>{
-    const [region,customer,model]=key.split("\u0001"),monthlyQty=months.map((month)=>groupRows.filter((r)=>r.month===month).reduce((sum,r)=>sum+r.orderedQty,0));
+    const [region,customer,model]=key.split("\u0001"),monthlyQty=months.map((month)=>groupRows.filter((r)=>r.month===month).reduce((sum,r)=>sum+r.totalMw,0));
     return [region,customer,model,...monthlyQty.map(fmtOne),fmtOne(monthlyQty.reduce((sum,value)=>sum+value,0)),fmtInt(new Set(groupRows.map((r)=>r.orderId)).size)];
   });
-  if(result.length) result.push({className:"quarter-total",values:[t("all"),"","",...months.map((month)=>fmtOne(rows.filter((r)=>r.month===month).reduce((sum,r)=>sum+r.orderedQty,0))),fmtOne(rows.reduce((sum,r)=>sum+r.orderedQty,0)),fmtInt(new Set(rows.map((r)=>r.orderId)).size)]});
+  if(result.length) result.push({className:"quarter-total",values:[t("all"),"","",...months.map((month)=>fmtOne(rows.filter((r)=>r.month===month).reduce((sum,r)=>sum+r.totalMw,0))),fmtOne(rows.reduce((sum,r)=>sum+r.totalMw,0)),fmtInt(new Set(rows.map((r)=>r.orderId)).size)]});
   table("customerQuarterOrderTable",[ct("region"),ct("customer"),ct("model"),...months,ct("totalQty"),ct("orderTotal")],result);
 }
 function customerReferenceMonth() {
