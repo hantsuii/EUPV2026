@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Available Stock Analysis</title>
+  <title>Stock Analysis</title>
   <link rel="stylesheet" href="../../style.css" />
   <style>
     body.light-ui {
@@ -413,8 +413,8 @@
         <button class="lang-btn" type="button" data-lang="zh">中文</button>
         <button class="lang-btn" type="button" data-lang="en">EN</button>
       </div>
-      <h1 data-i18n="heading">可用库存分析</h1>
-      <p data-i18n="subtitle">生成库存结果，并通过交互式图表查看可用库存趋势。</p>
+      <h1 data-i18n="heading">库存分析</h1>
+      <p data-i18n="subtitle">生成库存结果，并在总库存与可用库存两种口径间切换。</p>
     </header>
 
     <section class="panel">
@@ -426,6 +426,14 @@
           <option value="python" data-i18n="enginePy">Python 旧版（备用）</option>
         </select>
         <div class="small-tip" data-i18n="engineTip">JavaScript 直接在浏览器中运行；如遇 Excel 兼容问题，可使用 Python 旧版。</div>
+      </div>
+      <div class="engine-row">
+        <label for="stockMode" data-i18n="stockMode">库存口径</label>
+        <select id="stockMode" class="engine-select">
+          <option value="available" selected data-i18n="stockModeAvailable">可用库存</option>
+          <option value="total" data-i18n="stockModeTotal">总库存</option>
+        </select>
+        <div class="small-tip" data-i18n="stockModeTip">可用库存使用 Available 字段；总库存使用 Actual/Scheduled 字段且不扣减占用。</div>
       </div>
             <div class="form-grid">
         <div>
@@ -493,8 +501,8 @@
     </section>
 
     <section id="vizPanel" class="panel viz-panel" style="display:none;">
-      <h2 data-i18n="step2">步骤 2：可用库存可视化</h2>
-      <p class="tip" data-i18n="formulaTip">可用库存公式：库存 + 累计在途到货。按 CRD 计算的待分配数量会按月标记在图表上。</p>
+      <h2 data-i18n="step2">步骤 2：库存可视化</h2>
+      <p id="formulaTip" class="tip" data-i18n="formulaTip">可用库存公式：库存 + 累计在途到货。按 CRD 计算的待分配数量会按月标记在图表上。</p>
       <p class="small-tip" data-i18n="multiTip">多选提示：直接点击选项即可切换选中/取消，无需按 Ctrl。</p>
       <div class="source-legend">
         <span class="source-chip"><span class="source-dot dot-inv-dsp"></span> <span data-i18n="sourceInv">Inventory / Daily Supply Plan</span></span>
@@ -615,6 +623,12 @@
       <div class="table-wrap">
         <div id="detailTable"></div>
       </div>
+
+      <h3 style="margin-top:18px;" data-i18n="domesticStockTitle">未匹配 Arrival Plan 仓库的国内库存（按 SKU 汇总）</h3>
+      <div id="domesticStockSummary" class="small-tip" data-i18n="noData">暂无数据。</div>
+      <div class="table-wrap">
+        <div id="domesticStockTable"></div>
+      </div>
     </section>
 
     <section class="panel">
@@ -637,4 +651,3 @@
   <script type="module" src="./available-stock-analysis.js"></script>
 </body>
 </html>
-

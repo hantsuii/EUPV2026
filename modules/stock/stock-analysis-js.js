@@ -2,6 +2,7 @@ const SOURCE_INV_DSP = "INV_DSP";
 const SOURCE_ODP = "ODP";
 const SOURCE_MIXED = "MIXED";
 const UNMATCHED_SKU_MARK = "SKU not matched";
+const DOMESTIC_WH = "CN";
 const ALLOC_SHEET_NAME = "To be allocated";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
 
@@ -258,12 +259,12 @@ function buildSkuLookup(workbook, sheetName) {
   return lookup;
 }
 
-function extractInventoryRows(workbook) {
+function extractInventoryRows(workbook, stockMode = "available") {
   const { rows, index } = readSheetRows(getFirstWorksheet(workbook));
   const required = [
     "customer model",
     "category",
-    "available stock",
+    stockMode === "total" ? "actual stock" : "available stock",
     "sales organization name",
     "virtual warehouse name",
     "brand",
@@ -271,6 +272,7 @@ function extractInventoryRows(workbook) {
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "Inventory Detail", columns: missing.join(", ") });
 
+  const stockColumn = stockMode === "total" ? "actual stock" : "available stock";
   const grouped = new Map();
   for (const row of rows) {
     const brand = row[index.brand];
@@ -282,7 +284,7 @@ function extractInventoryRows(workbook) {
     const category = normalizeText(row[index.category]);
     const salesOrg = normalizeText(salesOrgName);
     const key = `${sku}\u0000${category}\u0000${salesOrg}`;
-    grouped.set(key, (grouped.get(key) || 0) + safeFloat(row[index["available stock"]]));
+    grouped.set(key, (grouped.get(key) || 0) + safeFloat(row[index[stockColumn]]));
   }
 
   return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, stock]) => {
@@ -291,9 +293,10 @@ function extractInventoryRows(workbook) {
   });
 }
 
-function extractTransitData(workbook, startValue, endValue) {
+function extractTransitData(workbook, startValue, endValue, stockMode = "available") {
   const { rows, index } = readSheetRows(getFirstWorksheet(workbook));
-  const required = ["in-transit warehouse(code)", "customer model", "supply date", "available quantity"];
+  const quantityColumn = stockMode === "total" ? "scheduled quantity" : "available quantity";
+  const required = ["in-transit warehouse(code)", "customer model", "supply date", quantityColumn];
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "DailySupplyPlan", columns: missing.join(", ") });
 
@@ -307,7 +310,7 @@ function extractTransitData(workbook, startValue, endValue) {
     if (!sku || !wh || !parts) continue;
     const dateKey = partsToDateKey(parts);
     if (!isWithinRange(dateKey, startValue, endValue)) continue;
-    addMapNumber(qty, `${sku}||${wh}||${dateKey}`, safeFloat(row[index["available quantity"]]));
+    addMapNumber(qty, `${sku}||${wh}||${dateKey}`, safeFloat(row[index[quantityColumn]]));
     if (hasCategory) {
       const categoryValue = normalizeText(row[index.category]);
       const key = `${sku}||${wh}`;
@@ -328,27 +331,34 @@ function extractOdpTransitData(workbook, startValue, endValue) {
   if (missing.length) throw localizedError("missingColumns", { sheet: "ODP Total Stock", columns: missing.join(", ") });
 
   const qty = new Map();
+  const domesticQty = new Map();
   const category = new Map();
   const hasProductType = index["product type"] != null;
   for (const row of rows) {
     const sku = normalizeText(row[index["new ark sku"]]);
     const rawWh = row[index["new ark wh"]];
-    const rawEta = row[index["eta for new ark update"]];
-    if (!sku || ["", "n/a", "na", "none", "null"].includes(normalizeLower(rawWh))) continue;
-    if (["", "n/a", "na", "none", "null"].includes(normalizeLower(rawEta))) continue;
+    if (!sku) continue;
+    const quantity = safeFloat(row[index.quantity]);
     const wh = mapTransitWhCode(rawWh);
+    const isArrivalPlanWarehouse = normalizeLower(rawWh).includes("arrival plan") && Boolean(wh);
+    if (!isArrivalPlanWarehouse) {
+      addMapNumber(domesticQty, sku, quantity);
+      continue;
+    }
+    const rawEta = row[index["eta for new ark update"]];
+    if (["", "n/a", "na", "none", "null"].includes(normalizeLower(rawEta))) continue;
     const parts = parseDateParts(rawEta);
     if (!wh || !parts || parts.year <= 1900) continue;
     const dateKey = partsToDateKey(parts);
     if (!isWithinRange(dateKey, startValue, endValue)) continue;
-    addMapNumber(qty, `${sku}||${wh}||${dateKey}`, safeFloat(row[index.quantity]));
+    addMapNumber(qty, `${sku}||${wh}||${dateKey}`, quantity);
     if (hasProductType) {
       const categoryValue = normalizeText(row[index["product type"]]);
       const key = `${sku}||${wh}`;
       if (categoryValue && !category.has(key)) category.set(key, categoryValue);
     }
   }
-  return { qty, category };
+  return { qty, category, domesticQty };
 }
 
 function extractAllocatedOrders(workbook) {
@@ -405,7 +415,7 @@ function makeUnmatchedMapping() {
   };
 }
 
-function createStockRecord(wh, sku, mapped, stock = 0) {
+function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0) {
   return {
     WH: wh,
     SKU: sku,
@@ -418,6 +428,7 @@ function createStockRecord(wh, sku, mapped, stock = 0) {
     Bin: mapped.Bin,
     MOQ: mapped.MOQ,
     Stock: stock,
+    DomesticStock: domesticStock,
     ToBeAllocated: 0,
     Transit: {},
     TransitSource: {},
@@ -486,11 +497,12 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
     Bin: safeFloat(record.Bin),
     StockMW: isPvCategory(record.Category) ? (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000 : 0,
     Stock: safeFloat(record.Stock),
+    DomesticStock: safeFloat(record.DomesticStock),
     ToBeAllocated: safeFloat(record.ToBeAllocated),
     StatusQuantity: {
       Inventory: safeFloat(record.StatusQuantity?.Inventory ?? record.Stock),
       DailySupplyPlan: safeFloat(record.StatusQuantity?.DailySupplyPlan),
-      ODP: safeFloat(record.StatusQuantity?.ODP),
+      ODP: safeFloat(record.StatusQuantity?.ODP) + safeFloat(record.DomesticStock),
     },
     Transit: transit,
     TransitSource: transitSource,
@@ -507,10 +519,16 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
   return item;
 }
 
-function buildVisualizationPayload(records, dateKeys, orders) {
+function buildVisualizationPayload(records, dateKeys, orders, stockMode) {
   const dateSourceTags = {};
   const keyMeta = {};
   const rows = records.map((record) => normalizeRecordForVisualization(record, dateKeys, dateSourceTags, keyMeta)).filter(Boolean);
+  const domesticStockBySku = {};
+  for (const record of records) {
+    const qty = safeFloat(record.DomesticStock);
+    if (!qty) continue;
+    domesticStockBySku[record.SKU] = safeFloat(domesticStockBySku[record.SKU]) + qty;
+  }
   const allocations = orders
     .filter((order) => normalizeText(order.SKU) && normalizeText(order.WH) && safeFloat(order["Ordered Qty"]) !== 0)
     .map((order) => ({
@@ -526,6 +544,8 @@ function buildVisualizationPayload(records, dateKeys, orders) {
     allocations,
     keyMeta,
     dateSourceTags,
+    domesticStockBySku,
+    stockMode,
   };
 }
 
@@ -535,7 +555,7 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
   const ws = workbook.addWorksheet("stock");
   const baseHeaders = [
     "WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
-    "To be allocated", "Total QTY", "Total MW", "MW", "Stock",
+    "To be allocated", "Total QTY", "Total MW", "MW", "Stock", "Domestic Stock",
   ];
   const dateHeaders = dateKeys.map(dateKeyToHeader);
   const headers = [...baseHeaders, ...dateHeaders];
@@ -554,8 +574,10 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
   }
 
   const stockCol = baseHeaders.indexOf("Stock") + 1;
+  const domesticStockCol = baseHeaders.indexOf("Domestic Stock") + 1;
   const dateStartCol = baseHeaders.length + 1;
   applyFill(headerRow.getCell(stockCol), CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
+  applyFill(headerRow.getCell(domesticStockCol), CELL_FILL_BY_SOURCE[SOURCE_ODP]);
   for (let i = 0; i < dateHeaders.length; i += 1) {
     const header = dateHeaders[i];
     const source = sourceTags[header] || SOURCE_INV_DSP;
@@ -564,7 +586,7 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
 
   for (const record of records) {
     const transitTotal = dateKeys.reduce((sum, dateKey) => sum + safeFloat(record.Transit[dateKey]), 0);
-    const totalQty = safeFloat(record.Stock) + transitTotal;
+    const totalQty = safeFloat(record.Stock) + safeFloat(record.DomesticStock) + transitTotal;
     const pv = isPvCategory(record.Category);
     const mw = pv ? (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000 : null;
     const totalMw = pv ? (totalQty * safeFloat(record.Bin)) / 1000000 : null;
@@ -574,11 +596,12 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
 
     const row = ws.addRow([
       record.WH, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
-      record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock,
+      record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock, record.DomesticStock,
       ...dateKeys.map((dateKey) => (record.Transit[dateKey] ? record.Transit[dateKey] : null)),
     ]);
     row.eachCell((cell) => { cell.numFmt = "#,##0.###"; });
     applyFill(row.getCell(stockCol), CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
+    if (safeFloat(record.DomesticStock)) applyFill(row.getCell(domesticStockCol), CELL_FILL_BY_SOURCE[SOURCE_ODP]);
     for (let i = 0; i < dateKeys.length; i += 1) {
       const dateKey = dateKeys[i];
       const qty = safeFloat(record.Transit[dateKey]);
@@ -644,6 +667,7 @@ export async function buildStockOutputJs({
   orderBytes,
   startDate,
   endDate,
+  stockMode = "available",
 }) {
   if (!globalThis.ExcelJS) throw localizedError("outputEngineMissing");
   if (!globalThis.XLSX) throw localizedError("inputEngineMissing");
@@ -675,13 +699,15 @@ export async function buildStockOutputJs({
   const dateKeys = iterDateKeys(startDate, endDate);
   const skuSheetName = pickSkuSheetName(templateWorkbook);
   const skuLookup = buildSkuLookup(templateWorkbook, skuSheetName);
-  const inventoryRows = extractInventoryRows(inventoryWorkbook);
+  const normalizedStockMode = stockMode === "total" ? "total" : "available";
+  const inventoryRows = extractInventoryRows(inventoryWorkbook, normalizedStockMode);
   const transitQty = new Map();
   const dailyTransitQty = new Map();
   const odpTransitQty = new Map();
+  const domesticQty = new Map();
   const transitSourceTag = new Map();
   if (dailySupplyWorkbook) {
-    const daily = extractTransitData(dailySupplyWorkbook, startDate, endDate);
+    const daily = extractTransitData(dailySupplyWorkbook, startDate, endDate, normalizedStockMode);
     mergeMapValues(dailyTransitQty, daily.qty);
     mergeMapValues(transitQty, daily.qty);
     for (const key of daily.qty.keys()) transitSourceTag.set(key, mergeSourceTag(transitSourceTag.get(key), SOURCE_INV_DSP));
@@ -691,6 +717,7 @@ export async function buildStockOutputJs({
     mergeMapValues(odpTransitQty, odp.qty);
     mergeMapValues(transitQty, odp.qty);
     for (const key of odp.qty.keys()) transitSourceTag.set(key, mergeSourceTag(transitSourceTag.get(key), SOURCE_ODP));
+    mergeMapValues(domesticQty, odp.domesticQty);
   }
   const allocationData = orderWorkbook ? extractAllocatedOrders(orderWorkbook) : { orders: [], need: new Map() };
 
@@ -698,6 +725,7 @@ export async function buildStockOutputJs({
   for (const row of inventoryRows) if (safeFloat(row.Stock) !== 0) activeSkuKeys.add(normalizeSkuKey(row.SKU));
   for (const [key, qty] of transitQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitKey3(key)[0]));
   for (const [key, qty] of allocationData.need) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitKey2(key)[0]));
+  for (const [sku, qty] of domesticQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(sku));
 
   const records = [];
   const rowByKey = new Map();
@@ -706,8 +734,8 @@ export async function buildStockOutputJs({
     const mapped = skuLookup.get(normalizeSkuKey(sku));
     return mapped ? { mapped, unmatched: false } : { mapped: makeUnmatchedMapping(), unmatched: true };
   };
-  const appendRecord = (wh, sku, mapped, stock) => {
-    const record = createStockRecord(wh, sku, mapped, stock);
+  const appendRecord = (wh, sku, mapped, stock, domesticStock = 0) => {
+    const record = createStockRecord(wh, sku, mapped, stock, domesticStock);
     records.push(record);
     const key = recordKey(sku, wh);
     if (!rowByKey.has(key)) rowByKey.set(key, record);
@@ -728,6 +756,17 @@ export async function buildStockOutputJs({
     const { mapped, unmatched } = resolve(sku);
     if (unmatched) markedRows.push({ SKU: sku, WH: wh, Reason: UNMATCHED_SKU_MARK });
     appendRecord(wh, sku, mapped, 0);
+  }
+  for (const [sku, qty] of domesticQty) {
+    if (!safeFloat(qty)) continue;
+    const rowKey = recordKey(sku, DOMESTIC_WH);
+    let record = rowByKey.get(rowKey);
+    if (!record) {
+      const { mapped, unmatched } = resolve(sku);
+      if (unmatched) markedRows.push({ SKU: sku, WH: DOMESTIC_WH, Reason: UNMATCHED_SKU_MARK });
+      record = appendRecord(DOMESTIC_WH, sku, mapped, 0, 0);
+    }
+    record.DomesticStock += safeFloat(qty);
   }
   for (const [key, qty] of transitQty) {
     if (!safeFloat(qty)) continue;
@@ -763,7 +802,7 @@ export async function buildStockOutputJs({
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty);
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
-  const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders);
+  const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode);
 
   return {
     outputBytes,

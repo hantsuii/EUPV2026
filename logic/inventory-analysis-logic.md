@@ -45,6 +45,11 @@ Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行�
 
 ## 3. 各来源取数和清洗
 
+库存分析支持两种口径：
+
+- 可用库存：Inventory 使用 `Available stock`，Daily Supply Plan 使用 `Available Quantity`，其余逻辑保持原样。
+- 总库存：Inventory 使用 `Actual stock`，Daily Supply Plan 使用 `Scheduled Quantity`，不考虑占用；ODP 数量在两种口径下保持一致。
+
 ### 3.1 Inventory
 
 - 读取第一个 sheet，表头为第 1 行。
@@ -65,7 +70,8 @@ Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行�
 
 - 读取 `Total Stcok`；不存在时读取 `Total Stock`。
 - 必需字段：`New Ark WH`、`New Ark SKU`、`Quantity`、`ETA for New Ark Update`。
-- 仓库为空、N/A、NA、None、Null 或无法识别时跳过。
+- `New Ark WH` 能匹配 Arrival Plan 标准仓库的行按 ETA 进入到货日期列。
+- 不能匹配 Arrival Plan 标准仓库的行不进入到货日期列，按 SKU 汇总为 `Domestic Stock`，计入 `Total QTY` 和总库存概览，并在页面底部单独展示。
 - ETA 为空、无效、1900 年及以前或不在日期范围内时跳过。
 - 按 `(New Ark SKU, WH, ETA 日期)` 汇总 `Quantity`，来源标记为 `ODP`。
 
@@ -98,7 +104,7 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 每次运行删除并重建 `stock`、`To be allocated`、`_Transit Source Map`。stock 基础列顺序为：
 
-`WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock`
+`WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock | Domestic Stock`
 
 后面追加起止日期内每日列，表头为 `YYYY.M.D`。
 
@@ -106,7 +112,7 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 - `To be allocated` = 同 SKU/WH 的 Ordered Qty 汇总。
 - `Transit Total` = 所有日期列在途数量之和。
-- `Total QTY = Stock + Transit Total`。
+- `Total QTY = Stock + Domestic Stock + Transit Total`。
 - 仅 PV 产品计算 `MW = Stock × Bin / 1,000,000` 和 `Total MW = Total QTY × Bin / 1,000,000`。
 - ESS、HP 产品的 `MW`、`Total MW` 留空，只保留 Quantity。
 - To be allocated 不从 Total QTY 或 Total MW 中扣除。

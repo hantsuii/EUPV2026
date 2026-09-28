@@ -34,6 +34,7 @@ SOURCE_INV_DSP = "INV_DSP"
 SOURCE_ODP = "ODP"
 SOURCE_MIXED = "MIXED"
 UNMATCHED_SKU_MARK = "SKU not matched"
+DOMESTIC_WH = "CN"
 
 CELL_FILL_BY_SOURCE = {
     SOURCE_INV_DSP: PatternFill(fill_type="solid", fgColor="DDEBFF"),
@@ -251,7 +252,7 @@ def merge_source_tag(curr: str, incoming: str) -> str:
     return SOURCE_MIXED
 
 
-def extract_inventory_rows(inventory_path: Path) -> list[dict[str, Any]]:
+def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") -> list[dict[str, Any]]:
     wb = load_workbook(inventory_path, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
 
@@ -261,7 +262,7 @@ def extract_inventory_rows(inventory_path: Path) -> list[dict[str, Any]]:
     required = [
         "customer model",
         "category",
-        "available stock",
+        "actual stock" if stock_mode == "total" else "available stock",
         "sales organization name",
         "virtual warehouse name",
         "brand",
@@ -271,6 +272,7 @@ def extract_inventory_rows(inventory_path: Path) -> list[dict[str, Any]]:
         wb.close()
         raise ValueError(f"Inventory Detail missing columns: {missing}")
 
+    stock_column = "actual stock" if stock_mode == "total" else "available stock"
     grouped: dict[tuple[str, str, str], float] = defaultdict(float)
     for row in ws.iter_rows(min_row=2, values_only=True):
         brand = row[idx["brand"]]
@@ -285,7 +287,7 @@ def extract_inventory_rows(inventory_path: Path) -> list[dict[str, Any]]:
         if not sku:
             continue
 
-        stock = safe_float(row[idx["available stock"]])
+        stock = safe_float(row[idx[stock_column]])
         grouped[(sku, category, sales_org)] += stock
 
     wb.close()
@@ -349,13 +351,15 @@ def extract_transit_data(
     daily_supply_plan_path: Path,
     start_date: date,
     end_date: date,
+    stock_mode: str = "available",
 ) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str]]:
     wb = load_workbook(daily_supply_plan_path, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
 
     headers = [cell.value for cell in ws[1]]
     idx = build_header_index(headers)
-    required = ["in-transit warehouse(code)", "customer model", "supply date", "available quantity"]
+    quantity_column = "scheduled quantity" if stock_mode == "total" else "available quantity"
+    required = ["in-transit warehouse(code)", "customer model", "supply date", quantity_column]
     missing = [h for h in required if h not in idx]
     if missing:
         wb.close()
@@ -379,7 +383,7 @@ def extract_transit_data(
         if supply_date is None or supply_date < start_date or supply_date > end_date:
             continue
 
-        qty = safe_float(row[idx["available quantity"]])
+        qty = safe_float(row[idx[quantity_column]])
         d_header = date_header(supply_date)
         transit_qty[(sku, wh, d_header)] += qty
 
@@ -396,7 +400,7 @@ def extract_odp_transit_data(
     odp_master_path: Path,
     start_date: date,
     end_date: date,
-) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str]]:
+) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str], dict[str, float]]:
     wb = load_workbook(odp_master_path, data_only=True, read_only=True)
 
     sheet_name = None
@@ -420,6 +424,7 @@ def extract_odp_transit_data(
 
     transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
+    domestic_qty: dict[str, float] = defaultdict(float)
 
     has_product_type = "product type" in idx
 
@@ -429,10 +434,11 @@ def extract_odp_transit_data(
             continue
 
         raw_wh = row[idx["new ark wh"]]
-        if normalize_lower(raw_wh) in {"", "n/a", "na", "none", "null"}:
-            continue
         wh = map_transit_wh_code(raw_wh)
-        if not wh:
+        is_arrival_plan_warehouse = "arrival plan" in normalize_lower(raw_wh) and bool(wh)
+        qty = safe_float(row[idx["quantity"]])
+        if not is_arrival_plan_warehouse:
+            domestic_qty[sku] += qty
             continue
 
         raw_eta = row[idx["eta for new ark update"]]
@@ -444,7 +450,6 @@ def extract_odp_transit_data(
         if eta_date < start_date or eta_date > end_date:
             continue
 
-        qty = safe_float(row[idx["quantity"]])
         d_header = date_header(eta_date)
         transit_qty[(sku, wh, d_header)] += qty
 
@@ -454,7 +459,7 @@ def extract_odp_transit_data(
                 transit_category[(sku, wh)] = category_val
 
     wb.close()
-    return transit_qty, transit_category
+    return transit_qty, transit_category, domestic_qty
 
 
 def extract_to_be_allocated_orders(
@@ -532,6 +537,7 @@ def write_output_sheet(
     transit_source_tag: dict[tuple[str, str, str], str] | None = None,
     daily_transit_qty: dict[tuple[str, str, str], float] | None = None,
     odp_transit_qty: dict[tuple[str, str, str], float] | None = None,
+    domestic_qty: dict[str, float] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = None,
@@ -570,6 +576,7 @@ def write_output_sheet(
         "Total MW",
         "MW",
         "Stock",
+        "Domestic Stock",
     ]
     transit_dates = iter_dates(start_date, end_date)
     transit_headers = [date_header(d) for d in transit_dates]
@@ -598,6 +605,7 @@ def write_output_sheet(
         sku: str,
         mapped: dict[str, Any],
         stock: float,
+        domestic_stock: float = 0,
     ) -> None:
         ws.append(
             [
@@ -616,6 +624,7 @@ def write_output_sheet(
                 0,
                 0,
                 stock,
+                domestic_stock,
             ]
             + [None] * len(transit_headers)
         )
@@ -625,6 +634,7 @@ def write_output_sheet(
     transit_source_tag = transit_source_tag or {}
     daily_transit_qty = daily_transit_qty or {}
     odp_transit_qty = odp_transit_qty or {}
+    domestic_qty = domestic_qty or {}
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
 
@@ -636,6 +646,9 @@ def write_output_sheet(
         if safe_float(qty) != 0:
             active_sku_keys.add(normalize_sku_key(sku))
     for (sku, _wh), qty in allocated_need.items():
+        if safe_float(qty) != 0:
+            active_sku_keys.add(normalize_sku_key(sku))
+    for sku, qty in domestic_qty.items():
         if safe_float(qty) != 0:
             active_sku_keys.add(normalize_sku_key(sku))
 
@@ -667,10 +680,28 @@ def write_output_sheet(
         append_stock_row(wh, sku, mapped, 0)
         row_by_key[key] = ws.max_row
 
+    for sku, qty in sorted(domestic_qty.items()):
+        if not sku or safe_float(qty) == 0:
+            continue
+        key = (sku, DOMESTIC_WH)
+        if key not in row_by_key:
+            mapped, unmatched = resolve_sku_mapping(sku)
+            if unmatched:
+                marked_rows_info.append({"SKU": sku, "WH": DOMESTIC_WH, "Reason": UNMATCHED_SKU_MARK})
+            append_stock_row(DOMESTIC_WH, sku, mapped, 0, 0)
+            row_by_key[key] = ws.max_row
+        row_num = row_by_key[key]
+        current = safe_float(ws.cell(row_num, header_col["Domestic Stock"]).value)
+        ws.cell(row_num, header_col["Domestic Stock"]).value = round(current + qty, 3)
+
     stock_col = header_col["Stock"]
+    domestic_stock_col = header_col["Domestic Stock"]
     ws.cell(1, stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]
+    ws.cell(1, domestic_stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_ODP]
     for r in range(2, ws.max_row + 1):
         ws.cell(r, stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]
+        if safe_float(ws.cell(r, domestic_stock_col).value) != 0:
+            ws.cell(r, domestic_stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_ODP]
 
     date_source_summary: dict[str, str] = {}
     for (_, _, d_header), src in transit_source_tag.items():
@@ -710,6 +741,7 @@ def write_output_sheet(
 
         bin_qty = safe_float(ws.cell(r, header_col["Bin"]).value)
         stock_qty = safe_float(ws.cell(r, header_col["Stock"]).value)
+        domestic_stock_qty = safe_float(ws.cell(r, header_col["Domestic Stock"]).value)
         category_value = normalize_text(ws.cell(r, header_col["Category"]).value).upper()
         is_pv = category_value.startswith("PV")
 
@@ -717,7 +749,7 @@ def write_output_sheet(
         for d_col_name in transit_headers:
             transit_total += safe_float(ws.cell(r, header_col[d_col_name]).value)
 
-        total_qty = stock_qty + transit_total
+        total_qty = stock_qty + domestic_stock_qty + transit_total
         mw = (stock_qty * bin_qty) / 1_000_000 if is_pv else None
         total_mw = (total_qty * bin_qty) / 1_000_000 if is_pv else None
 
@@ -792,12 +824,14 @@ def run(
     order_file_path: Path | None = None,
     transit_start_date: date = None,
     transit_end_date: date = None,
+    stock_mode: str = "available",
 ) -> None:
     if transit_start_date is None:
         transit_start_date = _default_start()
     if transit_end_date is None:
         transit_end_date = _default_end()
-    inventory_rows = extract_inventory_rows(inventory_path)
+    normalized_stock_mode = "total" if stock_mode == "total" else "available"
+    inventory_rows = extract_inventory_rows(inventory_path, normalized_stock_mode)
 
     wb_probe = load_workbook(stock_path, read_only=True)
     resolved_sku_sheet = pick_sku_sheet_name(wb_probe.sheetnames, sku_sheet_name)
@@ -810,12 +844,14 @@ def run(
     transit_source_tag: dict[tuple[str, str, str], str] = {}
     daily_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     odp_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
+    domestic_qty: dict[str, float] = defaultdict(float)
 
     if daily_supply_plan_path:
         d_qty, d_category = extract_transit_data(
             daily_supply_plan_path,
             start_date=transit_start_date,
             end_date=transit_end_date,
+            stock_mode=normalized_stock_mode,
         )
         merge_transit_payload(transit_qty, transit_category, d_qty, d_category)
         daily_transit_qty.update(d_qty)
@@ -823,13 +859,14 @@ def run(
             transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_INV_DSP)
 
     if odp_master_path:
-        o_qty, o_category = extract_odp_transit_data(
+        o_qty, o_category, o_domestic_qty = extract_odp_transit_data(
             odp_master_path,
             start_date=transit_start_date,
             end_date=transit_end_date,
         )
         merge_transit_payload(transit_qty, transit_category, o_qty, o_category)
         odp_transit_qty.update(o_qty)
+        domestic_qty.update(o_domestic_qty)
         for key in o_qty:
             transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_ODP)
 
@@ -847,6 +884,7 @@ def run(
         transit_source_tag=transit_source_tag,
         daily_transit_qty=daily_transit_qty,
         odp_transit_qty=odp_transit_qty,
+        domestic_qty=domestic_qty,
         allocated_orders=allocated_orders,
         allocated_need=allocated_need,
         start_date=transit_start_date,
@@ -916,6 +954,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--order-file", default=None, type=Path, help="Orderfile_Base_Realtime path (optional)")
     parser.add_argument("--transit-start", default=None, help="Transit start date YYYY-MM-DD (default: today)")
     parser.add_argument("--transit-end", default=None, help="Transit end date YYYY-MM-DD (default: today + 6 months)")
+    parser.add_argument("--stock-mode", choices=("available", "total"), default="available", help="Stock calculation mode")
     return parser.parse_args()
 
 
@@ -937,5 +976,5 @@ if __name__ == "__main__":
         order_file_path=args.order_file,
         transit_start_date=_parse_cli_date(args.transit_start) if args.transit_start else None,
         transit_end_date=_parse_cli_date(args.transit_end) if args.transit_end else None,
+        stock_mode=args.stock_mode,
     )
-

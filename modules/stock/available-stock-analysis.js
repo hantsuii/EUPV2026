@@ -18,6 +18,7 @@ const useRepoOrderfileEl = document.getElementById("useRepoOrderfile");
 const transitStartInput = document.getElementById("transitStart");
 const transitEndInput = document.getElementById("transitEnd");
 const engineModeEl = document.getElementById("engineMode");
+const stockModeEl = document.getElementById("stockMode");
 
 const whFilterEl = document.getElementById("whFilter");
 const categoryFilterEl = document.getElementById("categoryFilter");
@@ -37,6 +38,9 @@ const applyVizBtn = document.getElementById("applyVizBtn");
 const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 const detailTableEl = document.getElementById("detailTable");
 const tableSummaryEl = document.getElementById("tableSummary");
+const formulaTipEl = document.getElementById("formulaTip");
+const domesticStockTableEl = document.getElementById("domesticStockTable");
+const domesticStockSummaryEl = document.getElementById("domesticStockSummary");
 const pvInventoryTotalEl = document.getElementById("pvInventoryTotal");
 const essInventoryTotalEl = document.getElementById("essInventoryTotal");
 const hpInventoryTotalEl = document.getElementById("hpInventoryTotal");
@@ -78,7 +82,17 @@ const vizState = {
   dateHeaders: [],
   keyMeta: new Map(),
   dateSourceTags: {},
+  domesticStockBySku: {},
+  stockMode: "available",
 };
+
+function resultQuantityLabel() {
+  return t(vizState.stockMode === "total" ? "totalQty" : "availableQty");
+}
+
+function stockSeriesLabel() {
+  return t(vizState.stockMode === "total" ? "totalStock" : "availableStock");
+}
 
 const SOURCE_TAG = {
   INV_DSP: "INV_DSP",
@@ -146,7 +160,7 @@ function stockHistoryRows(bytes, date) {
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
   const find = (row, names) => { const key = Object.keys(row).find((x) => names.includes(String(x).trim().toLowerCase())); return Number(key ? row[key] : 0) || 0; };
   const transitKeys = rows.length ? Object.keys(rows[0]).filter((key) => /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(String(key).trim()) || /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(String(key).trim())) : [];
-  return { date, stock: rows.reduce((s, r) => s + find(r, ["stock", "inventory"]), 0), transit: rows.reduce((s, r) => s + transitKeys.reduce((n, key) => n + (Number(r[key]) || 0), 0), 0), allocated: rows.reduce((s, r) => s + find(r, ["to be allocated", "allocated"]), 0) };
+  return { date, stock: rows.reduce((s, r) => s + find(r, ["stock", "inventory"]) + find(r, ["domestic stock"]), 0), transit: rows.reduce((s, r) => s + transitKeys.reduce((n, key) => n + (Number(r[key]) || 0), 0), 0), allocated: rows.reduce((s, r) => s + find(r, ["to be allocated", "allocated"]), 0) };
 }
 async function loadStockHistory() {
   const config = githubConfig();
@@ -946,6 +960,24 @@ function buildDailySeriesByTransitSource(rows, inRangeHeaders) {
   return { invDsp, odp, mixed };
 }
 
+function renderDomesticStockSummary() {
+  const entries = Object.entries(vizState.domesticStockBySku || {})
+    .filter(([sku, qty]) => String(sku).trim() && Number(qty) !== 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) {
+    domesticStockTableEl.innerHTML = `<div style='padding:10px;color:#6c86aa;'>${escapeHtml(t("noDomesticStock"))}</div>`;
+    domesticStockSummaryEl.textContent = t("noDomesticStock");
+    return;
+  }
+
+  const body = entries.map(([sku, qty]) => `<tr><td>${escapeHtml(sku)}</td><td>${fmtNumber(qty)}</td></tr>`).join("");
+  domesticStockTableEl.innerHTML = `<table><thead><tr><th>${escapeHtml(t("domesticSku"))}</th><th>${escapeHtml(t("domesticQuantity"))}</th></tr></thead><tbody>${body}</tbody></table>`;
+  domesticStockSummaryEl.textContent = t("domesticSummary", {
+    rows: entries.length,
+    quantity: fmtNumber(entries.reduce((sum, [, qty]) => sum + qty, 0)),
+  });
+}
+
 
 function renderChartAndTable() {
   const filters = getFilterState();
@@ -956,6 +988,7 @@ function renderChartAndTable() {
   const matchedRows = vizState.rows.filter((row) => matchByFilters(row, filters));
   ensureChart();
   renderInventoryOverview(matchedRows);
+  renderDomesticStockSummary();
 
   if (!matchedRows.length) {
     chart.clear();
@@ -1094,7 +1127,7 @@ function renderChartAndTable() {
     bucketValuesForAllocRef = bucket.values;
 
     allSeries.push({
-      name: t("availableStock"),
+      name: stockSeriesLabel(),
       type: "line",
       smooth: true,
       symbol: bucket.labels.length > 80 ? "none" : "circle",
@@ -1227,7 +1260,7 @@ function renderChartAndTable() {
     yAxis: [
       {
         type: "value",
-        name: t("availableStock"),
+        name: stockSeriesLabel(),
         nameTextStyle: { color: "#4f79ad" },
         axisLine: { lineStyle: { color: "#8bb0dd" } },
         axisLabel: { color: "#50719f" },
@@ -1310,7 +1343,8 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   const rows = Array.from(productMap.entries())
     .map(([productKey, item]) => {
       const allocated = Number(productAllocMap.get(productKey) || 0);
-      const available = Number(item.Stock || 0) + Number(item.TransitTotal || 0) - allocated;
+      const available = Number(item.Stock || 0) + Number(item.TransitTotal || 0)
+        - (vizState.stockMode === "total" ? 0 : allocated);
       return {
         ...item,
         Allocated: allocated,
@@ -1331,7 +1365,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
     `<th>${escapeHtml(t("inStock"))}</th>`,
     `<th>${escapeHtml(t("inTransitRange"))}</th>`,
     `<th>${escapeHtml(t("allocated"))}</th>`,
-    `<th>${escapeHtml(t("availableQty"))}</th>`,
+    `<th>${escapeHtml(resultQuantityLabel())}</th>`,
     ...arrivalDateHeaders.map((dateHeader) => {
       const sourceTag = vizState.dateSourceTags?.[dateHeader] || SOURCE_TAG.INV_DSP;
       const className = `th-${sourceClassFromTag(sourceTag)}`;
@@ -1363,7 +1397,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
   const totalAllocated = rows.reduce((sum, item) => sum + Number(item.Allocated || 0), 0);
   const totalAvailable = rows.reduce((sum, item) => sum + Number(item.Available || 0), 0);
 
-  tableSummaryEl.textContent = t("tableSummary", { rows: rows.length, dates: arrivalDateHeaders.length, stock: fmtNumber(totalStock), transit: fmtNumber(totalTransit), allocated: fmtNumber(totalAllocated), available: fmtNumber(totalAvailable) });
+  tableSummaryEl.textContent = t("tableSummary", { rows: rows.length, dates: arrivalDateHeaders.length, stock: fmtNumber(totalStock), transit: fmtNumber(totalTransit), allocated: fmtNumber(totalAllocated), resultLabel: resultQuantityLabel(), available: fmtNumber(totalAvailable) });
 }
 
 function applyVisualizationPayload(payload) {
@@ -1372,6 +1406,9 @@ function applyVisualizationPayload(payload) {
   vizState.allocations = payload?.allocations || [];
   vizState.keyMeta = new Map(Object.entries(payload?.keyMeta || {}));
   vizState.dateSourceTags = payload?.dateSourceTags || {};
+  vizState.domesticStockBySku = payload?.domesticStockBySku || {};
+  vizState.stockMode = payload?.stockMode === "total" ? "total" : "available";
+  formulaTipEl.textContent = t(vizState.stockMode === "total" ? "totalFormulaTip" : "formulaTip");
 }
 
 async function extractVisualizationData() {
@@ -1459,7 +1496,7 @@ for col in required:
     if col not in header_to_idx:
         raise ValueError(f"Missing expected column in stock sheet: {col}")
 
-base_set = set(required + ["Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW"])
+base_set = set(required + ["Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW", "Domestic Stock"])
 
 date_headers = []
 for h in headers:
@@ -1476,13 +1513,21 @@ rows = []
 key_meta = {}
 date_source_tags = {}
 stock_rows = list(ws.iter_rows(min_row=2, values_only=True))
+domestic_stock_by_sku = {}
+if 'Domestic Stock' in header_to_idx:
+    for stock_row in stock_rows:
+        domestic_sku = _text(stock_row[header_to_idx['SKU']])
+        domestic_qty = _num(stock_row[header_to_idx['Domestic Stock']])
+        if domestic_sku and domestic_qty != 0:
+            domestic_stock_by_sku[domestic_sku] = domestic_stock_by_sku.get(domestic_sku, 0) + domestic_qty
 active_sku_keys = set()
 status_assigned_keys = set()
 for row in stock_rows:
     sku = _text(row[header_to_idx['SKU']])
     if not sku:
         continue
-    has_activity = _num(row[header_to_idx['Stock']]) != 0 or _num(row[header_to_idx['To be allocated']]) != 0
+    domestic_stock_value = _num(row[header_to_idx['Domestic Stock']]) if 'Domestic Stock' in header_to_idx else 0
+    has_activity = _num(row[header_to_idx['Stock']]) != 0 or domestic_stock_value != 0 or _num(row[header_to_idx['To be allocated']]) != 0
     if not has_activity:
         has_activity = any(_num(row[header_to_idx[d]]) != 0 for d in date_headers)
     if has_activity:
@@ -1525,6 +1570,7 @@ for row in stock_rows:
     status_assigned_keys.add(status_key)
     bin_value = _num(row[header_to_idx['Bin']]) if 'Bin' in header_to_idx else 0
     stock_value = _num(row[header_to_idx['Stock']])
+    domestic_stock_value = _num(row[header_to_idx['Domestic Stock']]) if 'Domestic Stock' in header_to_idx else 0
 
     item = {
         "WH": wh,
@@ -1540,11 +1586,12 @@ for row in stock_rows:
         "Bin": bin_value,
         "StockMW": (stock_value * bin_value / 1000000) if category.upper().startswith("PV") else 0,
         "Stock": stock_value,
+        "DomesticStock": domestic_stock_value,
         "ToBeAllocated": _num(row[header_to_idx['To be allocated']]),
         "StatusQuantity": {
             "Inventory": stock_value,
             "DailySupplyPlan": _num(transit_status.get("DailySupplyPlan")),
-            "ODP": _num(transit_status.get("ODP")),
+            "ODP": _num(transit_status.get("ODP")) + domestic_stock_value,
         },
         "Transit": transit,
         "TransitSource": transit_source,
@@ -1588,6 +1635,7 @@ payload = {
     "allocations": allocations,
     "keyMeta": key_meta,
     "dateSourceTags": date_source_tags,
+    "domesticStockBySku": domestic_stock_by_sku,
 }
 
 with open('/work/stock_vis.json', 'w', encoding='utf-8') as f:
@@ -1596,6 +1644,7 @@ with open('/work/stock_vis.json', 'w', encoding='utf-8') as f:
 
   const jsonText = pyodide.FS.readFile("/work/stock_vis.json", { encoding: "utf8" });
   const payload = JSON.parse(jsonText);
+  payload.stockMode = stockModeEl?.value === "total" ? "total" : "available";
 
   applyVisualizationPayload(payload);
 }
@@ -1670,6 +1719,7 @@ run(
     order_file_path=Path(${orderPy}) if ${orderPy} is not None else None,
     transit_start_date=_parse_cli_date("${startDate}"),
     transit_end_date=_parse_cli_date("${endDate}"),
+    stock_mode="${stockModeEl?.value === "total" ? "total" : "available"}",
 )
 `);
 
@@ -1750,6 +1800,7 @@ async function runJavascriptAnalysis() {
       orderBytes,
       startDate: transitStartInput.value || todayISO(),
       endDate: transitEndInput.value || addMonthsISO(transitStartInput.value || todayISO(), 6),
+      stockMode: stockModeEl?.value === "total" ? "total" : "available",
     });
 
     const blob = new Blob([result.outputBytes], {
@@ -1808,6 +1859,7 @@ function resetForm() {
   odpMasterInput.value = "";
   orderInput.value = "";
   if (engineModeEl) engineModeEl.value = "javascript";
+  if (stockModeEl) stockModeEl.value = "available";
   if (useRepoInventoryEl) useRepoInventoryEl.checked = false;
   if (useRepoDailySupplyEl) useRepoDailySupplyEl.checked = false;
   if (useRepoOdpMasterEl) useRepoOdpMasterEl.checked = false;
@@ -1817,12 +1869,16 @@ function resetForm() {
   resetDownloadLink();
   vizPanelEl.style.display = "none";
   detailTableEl.innerHTML = "";
+  domesticStockTableEl.innerHTML = "";
+  domesticStockSummaryEl.textContent = t("noData");
   tableSummaryEl.textContent = t("noData");
   vizState.rows = [];
   vizState.allocations = [];
   vizState.dateHeaders = [];
   vizState.keyMeta = new Map();
   vizState.dateSourceTags = {};
+  vizState.domesticStockBySku = {};
+  vizState.stockMode = "available";
   inventoryBrandFilterEl.innerHTML = "";
   inventorySeriesFilterEl.innerHTML = "";
   clearOverviewFilterSelections();
@@ -1909,6 +1965,7 @@ setDefaultTransitDates();
 
 window.addEventListener("app-language-change", () => {
   statusEl.textContent = t(lastStatus.key, lastStatus.params);
+  formulaTipEl.textContent = t(vizState.stockMode === "total" ? "totalFormulaTip" : "formulaTip");
   refreshFilterSummaries();
   if (downloadLinkEl.download) {
     downloadLinkEl.textContent = t("download", { file: downloadLinkEl.download });
