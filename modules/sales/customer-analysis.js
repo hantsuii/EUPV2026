@@ -4,14 +4,16 @@ const customerYearSel = byId("customerYearSel");
 const customerProductSel = byId("customerProductSel");
 const customerBrandSel = byId("customerBrandSel");
 const customerSearchEl = byId("customerSearch");
+const customerStatusMonthSel = byId("customerStatusMonthSel");
+const customerQuarterSel = byId("customerQuarterSel");
 
 const CUSTOMER_TEXT = {
   zh: {
-    allRegions:"全球总览", customers:"下单客户数", active:"近3个月活跃客户", activeRate:"活跃率", newCustomers:"新增客户", repeat:"复购客户 / 复购率", orders:"订单数", avgOrders:"客户平均下单次数",
+    allRegions:"全球总览", customers:"下单客户数", active:"近3个月活跃客户", activeRate:"活跃率", newCustomers:"新增客户", repeat:"复购客户 / 复购率", orders:"订单数", avgOrders:"客户平均下单次数", model:"Model", orderedQty:"订购数量", totalQty:"数量汇总", orderStatus:"订单状态", orderTotal:"订单汇总",
     trend:"客户数量月度变化", monthly:"当月下单客户", newMonthly:"当月新增客户", activeMonthly:"滚动3个月活跃客户", regionRanking:"地区客户数", region:"地区", countries:"覆盖国家", revenue:"销售额(万€)", qty:"销售数量", pvCustomers:"PV客户", essCustomers:"ESS客户", hpCustomers:"HP客户", growth:"客户同比", status:"客户状态", sleeping:"沉睡", risk:"风险", lastOrder:"最近下单", customer:"客户", country:"国家", orderCount:"下单次数", pvQty:"PV数量(MW)", essQty:"ESS数量(Sets)", hpQty:"HP数量", products:"产品线", firstOrder:"首次下单", avgOrderValue:"平均订单额(万€)", segment:"价值分层", highValue:"高价值", frequent:"高频复购", potential:"潜力", newLabel:"新客户", maintain:"需要维护", concentration:"Top 10客户销售贡献", valueRank:"客户价值排名", productCustomers:"各产品线客户数", productMix:"客户产品组合", only:"仅", cross:"跨产品线", regionRequired:"请选择一个地区查看该分析。", noCustomerField:"源表未识别客户字段，当前按“Unknown Customer”汇总；请确认客户列名。"
   },
   en: {
-    allRegions:"Global Overview", customers:"Ordering Customers", active:"Active in Last 3 Months", activeRate:"Active Rate", newCustomers:"New Customers", repeat:"Repeat Customers / Rate", orders:"Orders", avgOrders:"Avg. Orders per Customer",
+    allRegions:"Global Overview", customers:"Ordering Customers", active:"Active in Last 3 Months", activeRate:"Active Rate", newCustomers:"New Customers", repeat:"Repeat Customers / Rate", orders:"Orders", avgOrders:"Avg. Orders per Customer", model:"Model", orderedQty:"Ordered Qty", totalQty:"Total Qty", orderStatus:"Order Status", orderTotal:"Order Total",
     trend:"Monthly Customer Change", monthly:"Monthly Ordering Customers", newMonthly:"New Customers", activeMonthly:"Rolling 3-Month Active", regionRanking:"Customers by Region", region:"Region", countries:"Countries", revenue:"Revenue (10k €)", qty:"Sales Quantity", pvCustomers:"PV Customers", essCustomers:"ESS Customers", hpCustomers:"HP Customers", growth:"Customer YoY", status:"Status", sleeping:"Sleeping", risk:"At Risk", lastOrder:"Last Order", customer:"Customer", country:"Country", orderCount:"Order Count", pvQty:"PV Qty (MW)", essQty:"ESS Qty (Sets)", hpQty:"HP Qty", products:"Product Lines", firstOrder:"First Order", avgOrderValue:"Avg. Order Value (10k €)", segment:"Value Segment", highValue:"High Value", frequent:"Frequent", potential:"Potential", newLabel:"New", maintain:"Maintain", concentration:"Top 10 Revenue Contribution", valueRank:"Customer Value Ranking", productCustomers:"Customers by Product Line", productMix:"Customer Product Mix", only:"Only", cross:"Cross-sell", regionRequired:"Choose a region to view this analysis.", noCustomerField:"No customer field was detected; rows are grouped as 'Unknown Customer'. Please confirm the customer column name."
   }
 };
@@ -69,6 +71,51 @@ function customerEntities(periodRows, historyRows, referenceMonth) {
 function currentMonthStr() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+function dateLabel(value) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return "";
+  return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,"0")}-${String(value.getDate()).padStart(2,"0")}`;
+}
+function distinctDateLabels(rows, field) {
+  return [...new Set(rows.map((row)=>dateLabel(row[field])).filter(Boolean))].sort().join(", ");
+}
+function operationalScopeRows() {
+  let rows = allRows.filter((r)=>r.year===Number(customerYearSel.value || TARGET_YEAR));
+  if(customerRegionSel.value&&customerRegionSel.value!=="__ALL__") rows=rows.filter((r)=>r.region===customerRegionSel.value);
+  rows=customerProductRows(rows,customerProductSel.value||"__ALL__");
+  rows=customerBrandRows(rows);
+  const query=customerSearchEl.value.trim().toLowerCase();
+  if(query) rows=rows.filter((r)=>`${r.customer} ${r.country} ${r.model}`.toLowerCase().includes(query));
+  return rows;
+}
+function renderCustomerOrderStatus() {
+  if(!customerStatusMonthSel) return;
+  const month=customerStatusMonthSel.value;
+  const rows=operationalScopeRows().filter((r)=>r.month===month);
+  const statuses=[...new Map(rows.map((r)=>[r.status,r.statusLabel])).entries()].sort((a,b)=>a[0]==="invoiced"?-1:b[0]==="invoiced"?1:a[1].localeCompare(b[1]));
+  const groups=new Map();
+  rows.forEach((row)=>{const key=`${row.region}\u0001${row.customer}\u0001${row.model}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);});
+  const result=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([key,groupRows])=>{
+    const [region,customer,model]=key.split("\u0001");
+    const statusQty=statuses.map(([status])=>groupRows.filter((r)=>r.status===status).reduce((sum,r)=>sum+r.orderedQty,0));
+    return [region,customer,model,...statusQty.map(fmtOne),fmtOne(groupRows.reduce((sum,r)=>sum+r.orderedQty,0)),distinctDateLabels(groupRows,"crd"),distinctDateLabels(groupRows,"sad"),distinctDateLabels(groupRows,"ssd")];
+  });
+  if(result.length) result.push({className:"quarter-total",values:[t("all"),"","",...statuses.map(([status])=>fmtOne(rows.filter((r)=>r.status===status).reduce((sum,r)=>sum+r.orderedQty,0))),fmtOne(rows.reduce((sum,r)=>sum+r.orderedQty,0)),"","",""]});
+  table("customerOrderStatusTable",[ct("region"),ct("customer"),ct("model"),...statuses.map(([,label])=>label),ct("totalQty"),"CRD","SAD","SSD"],result);
+}
+function renderCustomerQuarterOrders() {
+  if(!customerQuarterSel) return;
+  const year=Number(customerYearSel.value||TARGET_YEAR), quarter=customerQuarterSel.value||"Q1", quarterNumber=Number(quarter.slice(1))||1;
+  const months=Array.from({length:3},(_,index)=>`${year}-${String((quarterNumber-1)*3+index+1).padStart(2,"0")}`);
+  const rows=operationalScopeRows().filter((r)=>r.quarter===quarter);
+  const groups=new Map();
+  rows.forEach((row)=>{const key=`${row.region}\u0001${row.customer}\u0001${row.model}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);});
+  const result=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([key,groupRows])=>{
+    const [region,customer,model]=key.split("\u0001"),monthlyQty=months.map((month)=>groupRows.filter((r)=>r.month===month).reduce((sum,r)=>sum+r.orderedQty,0));
+    return [region,customer,model,...monthlyQty.map(fmtOne),fmtOne(monthlyQty.reduce((sum,value)=>sum+value,0)),fmtInt(new Set(groupRows.map((r)=>r.orderId)).size)];
+  });
+  if(result.length) result.push({className:"quarter-total",values:[t("all"),"","",...months.map((month)=>fmtOne(rows.filter((r)=>r.month===month).reduce((sum,r)=>sum+r.orderedQty,0))),fmtOne(rows.reduce((sum,r)=>sum+r.orderedQty,0)),fmtInt(new Set(rows.map((r)=>r.orderId)).size)]});
+  table("customerQuarterOrderTable",[ct("region"),ct("customer"),ct("model"),...months,ct("totalQty"),ct("orderTotal")],result);
 }
 function customerReferenceMonth() {
   return currentMonthStr();
@@ -151,6 +198,16 @@ function renderCustomerDetail(entities) {
   const query=customerSearchEl.value.trim().toLowerCase(), filtered=query?entities.filter(x=>`${x.customer} ${x.country}`.toLowerCase().includes(query)):entities;
   table("customerDetailTable",[ct("customer"),ct("region"),ct("country"),ct("products"),ct("firstOrder"),ct("lastOrder"),ct("orderCount"),ct("revenue"),ct("pvQty"),ct("essQty"),ct("hpQty"),ct("status")],filtered.sort((a,b)=>b.revenue-a.revenue).map(x=>[x.customer,x.region,x.country,x.products.join(" + "),x.firstMonth,x.lastMonth,fmtInt(x.orderCount),fmtWanInt(x.revenue),fmtOne(x.pvQty),fmtInt(x.essQty),fmtInt(x.hpQty),x.status==="active"?ct("active"):x.status==="sleeping"?ct("sleeping"):ct("risk")]));
 }
+function refreshCustomerOperationalOptions(reset = false) {
+  const year=Number(customerYearSel.value||TARGET_YEAR), months=[...new Set(allRows.filter((r)=>r.year===year).map((r)=>r.month))].sort();
+  const previousMonth=customerStatusMonthSel?.value;
+  const preferredMonth=!reset&&months.includes(previousMonth)?previousMonth:months.includes(currentMonthStr())?currentMonthStr():months[months.length-1];
+  if(customerStatusMonthSel) fillSelect(customerStatusMonthSel,months.map((value)=>({value,label:value})),preferredMonth?[preferredMonth]:[]);
+  const defaultQuarter=preferredMonth?`Q${Math.floor((Number(preferredMonth.slice(5,7))-1)/3)+1}`:"Q1";
+  const previousQuarter=customerQuarterSel?.value;
+  const preferredQuarter=!reset&&/^Q[1-4]$/.test(previousQuarter)?previousQuarter:defaultQuarter;
+  if(customerQuarterSel) fillSelect(customerQuarterSel,[1,2,3,4].map((q)=>({value:`Q${q}`,label:`Q${q}`})),[preferredQuarter]);
+}
 function renderCustomerAnalysis(resetFilters = false) {
   if (!allRows.length) return;
   if (resetFilters) {
@@ -164,14 +221,17 @@ function renderCustomerAnalysis(resetFilters = false) {
   } else {
     const allOption=customerRegionSel.querySelector('option[value="__ALL__"]');if(allOption)allOption.textContent=ct("allRegions");
   }
+  refreshCustomerOperationalOptions(resetFilters);
   const rows=customerScopeRows(),history=customerHistoryRows(),referenceMonth=customerReferenceMonth(),entities=customerEntities(rows,history,referenceMonth);
   byId("customerScopeLabel").textContent=`${customerRegionSel.value==="__ALL__"?ct("allRegions"):customerRegionSel.value} · ${customerYearSel.value} · ${customerProductSel.value==="__ALL__"?t("all"):customerProductSel.value}${customerBrandSel&&customerBrandSel.value!=="__ALL__" ? " · " + customerBrandSel.value : ""}`;
   renderCustomerOverview(rows,history,entities,referenceMonth);renderCustomerRegion(rows,history,referenceMonth);
   const regionalRows=customerRegionSel.value==="__ALL__"?[]:rows, regionalEntities=customerRegionSel.value==="__ALL__"?[]:entities;
-  renderCustomerProduct(regionalRows,regionalEntities);renderCustomerActivity(regionalEntities);renderCustomerValue(regionalEntities);renderCustomerDetail(regionalEntities);
+  renderCustomerProduct(regionalRows,regionalEntities);renderCustomerActivity(regionalEntities);renderCustomerValue(regionalEntities);renderCustomerDetail(regionalEntities);renderCustomerOrderStatus();renderCustomerQuarterOrders();
 }
 function initCustomerAnalysis() { renderCustomerAnalysis(true); }
 
 [customerRegionSel,customerYearSel,customerProductSel,customerBrandSel].forEach(el=>{if(el)el.addEventListener("change",()=>renderCustomerAnalysis(false));});
+if(customerStatusMonthSel) customerStatusMonthSel.addEventListener("change",renderCustomerOrderStatus);
+if(customerQuarterSel) customerQuarterSel.addEventListener("change",renderCustomerQuarterOrders);
 customerSearchEl.addEventListener("input",()=>renderCustomerAnalysis(false));
 byId("customerSubnav").addEventListener("click",(event)=>{const btn=event.target.closest("button[data-customer-view]");if(!btn)return;byId("customerSubnav").querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===btn));document.querySelectorAll(".customer-view").forEach(x=>x.classList.toggle("active",x.id===`customer-view-${btn.dataset.customerView}`));window.dispatchEvent(new Event("resize"));});

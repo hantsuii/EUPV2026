@@ -294,6 +294,19 @@
     .status-sleep { background:#fff1ce;color:#8b5b00; }
     .status-risk { background:#ffe2df;color:#a33d35; }
     .customer-note { margin:8px 0 0;color:#6883a8;font-size:12px; }
+    .customer-analysis-toolbar {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(180px,260px));
+      gap:12px;
+      align-items:end;
+      margin:8px 0 12px;
+      padding:12px;
+      border:1px solid #d7e5f7;
+      border-radius:10px;
+      background:#f8fbff;
+    }
+    .customer-analysis-toolbar label { display:block;margin-bottom:4px;color:#406491;font-size:13px;font-weight:700; }
+    .customer-analysis-toolbar select { width:100%;border:1px solid #c5d9f4;border-radius:10px;padding:9px 10px;background:#fff;color:#2a4d7a; }
 
     @media (max-width: 1180px) {
       .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
@@ -525,6 +538,8 @@
           <button type="button" data-customer-view="activity" data-i18n="customerTabActivity">活跃度</button>
           <button type="button" data-customer-view="value" data-i18n="customerTabValue">客户价值</button>
           <button type="button" data-customer-view="detail" data-i18n="customerTabDetail">客户明细</button>
+          <button type="button" data-customer-view="order-status" data-i18n="customerTabOrderStatus">当月订单状态</button>
+          <button type="button" data-customer-view="quarter-orders" data-i18n="customerTabQuarterOrders">季度订单矩阵</button>
         </div>
 
         <div id="customer-view-region" class="customer-view active"><div class="table-wrap"><table id="customerRegionTable"></table></div></div>
@@ -532,6 +547,20 @@
         <div id="customer-view-activity" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerActivityChart" class="chart"></div></div><div class="chart-box"><div id="customerStatusChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerActivityTable"></table></div></div>
         <div id="customer-view-value" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerValueChart" class="chart"></div></div><div class="chart-box"><div id="customerConcentrationChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerValueTable"></table></div></div>
         <div id="customer-view-detail" class="customer-view"><div class="table-wrap"><table id="customerDetailTable"></table></div></div>
+        <div id="customer-view-order-status" class="customer-view">
+          <div class="customer-analysis-toolbar">
+            <div><label for="customerStatusMonthSel" data-i18n="customerStatusMonth">分析月份</label><select id="customerStatusMonthSel"></select></div>
+          </div>
+          <p class="filter-note" data-i18n="customerStatusNote">按地区、客户和 Model 汇总 Ordered Qty；状态列来自 Order Status，CRD/SAD/SSD 展示不重复日期。</p>
+          <div class="table-wrap" style="max-height:560px;"><table id="customerOrderStatusTable"></table></div>
+        </div>
+        <div id="customer-view-quarter-orders" class="customer-view">
+          <div class="customer-analysis-toolbar">
+            <div><label for="customerQuarterSel" data-i18n="customerQuarter">分析季度</label><select id="customerQuarterSel"></select></div>
+          </div>
+          <p class="filter-note" data-i18n="customerQuarterNote">按客户和 Model 展示所选季度各月的 Ordered Qty，并提供订单数和数量汇总；地区使用上方筛选。</p>
+          <div class="table-wrap" style="max-height:560px;"><table id="customerQuarterOrderTable"></table></div>
+        </div>
         <p class="customer-note" data-i18n="customerDefinition">活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。</p>
       </div>
     </section>
@@ -583,7 +612,6 @@
   <script src="./customer-analysis.js"></script>
 </body>
 </html>
-
 
 
 
