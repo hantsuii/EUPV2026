@@ -24,6 +24,15 @@
   });
 
   const MANUAL_REGION_CUSTOMERS = new Set(["SOLARMARKT", "SOLEXIS"]);
+  const STAGE_LABELS = Object.freeze({
+    1: "1 - Lead qualification",
+    2: "2 - Initial offer",
+    3: "3 - Negotiation",
+    4: "4 - BAFO",
+    5: "5 - Finalize contract",
+    6: "6 - Won",
+    7: "7 - Booked",
+  });
 
   function cleanText(value) {
     return value == null ? "" : String(value).trim();
@@ -109,6 +118,13 @@
     }
     const region = REGION_ALIASES[raw] || raw;
     return { region, manual: false, supported: REGIONS.includes(region) };
+  }
+
+  function normalizeStage(value) {
+    const raw = cleanText(value);
+    if (!raw) return "Unspecified";
+    const match = raw.match(/^([1-7])\s*-/);
+    return match ? STAGE_LABELS[Number(match[1])] : raw;
   }
 
   function brandFrom(row, source, model) {
@@ -206,6 +222,7 @@
       if (!regionInfo.supported) { quality.outsideScope += 1; return; }
       if (regionInfo.manual) quality.manualRegionRows += 1;
       const sourceModel = cleanText(rowValue(row, ["Model name"]));
+      const stage = normalizeStage(rowValue(row, ["Stage"]));
       const product = classifyPvProduct(row, "forecast");
       if (product.startsWith("Unmapped")) quality.unmappedRows += 1;
       mappings.set(`forecast|${sourceModel}|${product}`, { source: "FCST", sourceModel, product });
@@ -217,7 +234,7 @@
           return;
         }
         if (mw === 0) return;
-        records.push({ sourceRow: index + 2, month: normalizeMonth(header), region: regionInfo.region, product, sourceModel, mw });
+        records.push({ sourceRow: index + 2, month: normalizeMonth(header), region: regionInfo.region, product, sourceModel, stage, mw });
       });
     });
     return { records, months: monthHeaders.map(normalizeMonth), mappings: [...mappings.values()], quality };
@@ -260,6 +277,10 @@
     return result;
   }
 
+  function matchesForecastStage(row, stages) {
+    return !Array.isArray(stages) || stages.includes(row.stage);
+  }
+
   function clamp(value, low, high) {
     return Math.max(low, Math.min(high, value));
   }
@@ -272,7 +293,7 @@
     const startMonth = normalizeMonth(options.startMonth) || allMonths[0];
     const endMonth = normalizeMonth(options.endMonth) || allMonths.at(-1);
     const months = monthRange(startMonth, endMonth);
-    const forecast = aggregate(data.forecastRecords, { region, product }, (row) => row.mw);
+    const forecast = aggregate(data.forecastRecords, { region, product }, (row) => matchesForecastStage(row, options.stages) ? row.mw : 0);
     const invoiced = aggregate(data.actualRecords, { region, product }, (row) => row.status === "invoiced" ? row.mw : 0);
     const confirm = aggregate(data.actualRecords, { region, product }, (row) => row.status === "confirm" ? row.mw : 0);
     const forecastMonthSet = new Set(data.forecastMonths);
@@ -325,6 +346,10 @@
     const actualMonths = [...new Set(actual.records.map((row) => row.month))].sort();
     const months = [...new Set([...forecast.months, ...actualMonths])].sort();
     const products = [...new Set([...forecast.records.map((row) => row.product), ...actual.records.map((row) => row.product)])].sort();
+    const stages = [...new Set(forecast.records.map((row) => row.stage))].sort((a, b) => {
+      const ai = Number(a.match(/^\d+/)?.[0] || 99), bi = Number(b.match(/^\d+/)?.[0] || 99);
+      return ai - bi || a.localeCompare(b);
+    });
     return {
       forecastRecords: forecast.records,
       actualRecords: actual.records,
@@ -333,6 +358,7 @@
       months,
       regions: [...REGIONS],
       products,
+      stages,
       mappings: [...forecast.mappings, ...actual.mappings],
       quality: { forecast: forecast.quality, actual: actual.quality },
       now,
@@ -366,6 +392,7 @@
     isCompleteMonth,
     monthRange,
     normalizeRegion,
+    normalizeStage,
     classifyPvProduct,
     normalizeForecastRows,
     normalizeActualRows,

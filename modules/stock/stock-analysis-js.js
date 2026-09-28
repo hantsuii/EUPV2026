@@ -5,6 +5,7 @@ const UNMATCHED_SKU_MARK = "SKU not matched";
 const DOMESTIC_WH = "CN";
 const ALLOC_SHEET_NAME = "To be allocated";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
+const DOMESTIC_DETAIL_SHEET_NAME = "Domestic Stock";
 
 const CELL_FILL_BY_SOURCE = {
   [SOURCE_INV_DSP]: "FFDDEBFF",
@@ -320,19 +321,39 @@ function extractTransitData(workbook, startValue, endValue, stockMode = "availab
   return { qty, category };
 }
 
+function buildOdpFactoryLookup(workbook) {
+  const lookup = new Map();
+  for (const sheetName of workbook.SheetNames || []) {
+    const ws = workbook.Sheets[sheetName];
+    const { rows, index } = readSheetRows(ws);
+    const referenceColumn = index["tcl reference"] != null
+      ? "tcl reference"
+      : (index["tcl reference no."] != null ? "tcl reference no." : null);
+    if (!referenceColumn || index["factory location"] == null) continue;
+    for (const row of rows) {
+      const reference = normalizeText(row[index[referenceColumn]]);
+      const factory = normalizeText(row[index["factory location"]]);
+      if (reference && factory && !lookup.has(reference)) lookup.set(reference, factory);
+    }
+  }
+  return lookup;
+}
+
 function extractOdpTransitData(workbook, startValue, endValue) {
   let ws = workbook.getWorksheet
     ? (workbook.getWorksheet("Total Stcok") || workbook.getWorksheet("Total Stock"))
     : (workbook.Sheets["Total Stcok"] || workbook.Sheets["Total Stock"]);
   if (!ws) throw localizedError("odpSheetMissing");
   const { rows, index } = readSheetRows(ws);
-  const required = ["new ark wh", "new ark sku", "quantity", "eta for new ark update"];
+  const required = ["tcl reference", "new ark wh", "new ark sku", "model", "quantity", "mw", "eta for new ark update"];
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "ODP Total Stock", columns: missing.join(", ") });
 
   const qty = new Map();
   const domesticQty = new Map();
+  const domesticDetailMap = new Map();
   const category = new Map();
+  const factoryLookup = buildOdpFactoryLookup(workbook);
   const hasProductType = index["product type"] != null;
   for (const row of rows) {
     const sku = normalizeText(row[index["new ark sku"]]);
@@ -343,6 +364,14 @@ function extractOdpTransitData(workbook, startValue, endValue) {
     const isArrivalPlanWarehouse = normalizeLower(rawWh).includes("arrival plan") && Boolean(wh);
     if (!isArrivalPlanWarehouse) {
       addMapNumber(domesticQty, sku, quantity);
+      const reference = normalizeText(row[index["tcl reference"]]);
+      const model = normalizeText(row[index.model]);
+      const factory = factoryLookup.get(reference) || "";
+      const detailKey = `${sku}\u0000${model}\u0000${factory}`;
+      const detail = domesticDetailMap.get(detailKey) || { SKU: sku, Model: model, Factory: factory, Quantity: 0, MW: 0 };
+      detail.Quantity += quantity;
+      detail.MW += safeFloat(row[index.mw]);
+      domesticDetailMap.set(detailKey, detail);
       continue;
     }
     const rawEta = row[index["eta for new ark update"]];
@@ -358,7 +387,10 @@ function extractOdpTransitData(workbook, startValue, endValue) {
       if (categoryValue && !category.has(key)) category.set(key, categoryValue);
     }
   }
-  return { qty, category, domesticQty };
+  const domesticDetails = [...domesticDetailMap.values()]
+    .map((item) => ({ ...item, Quantity: Number(item.Quantity.toFixed(3)), MW: Number(item.MW.toFixed(6)) }))
+    .sort((a, b) => `${a.SKU}\u0000${a.Model}\u0000${a.Factory}`.localeCompare(`${b.SKU}\u0000${b.Model}\u0000${b.Factory}`));
+  return { qty, category, domesticQty, domesticDetails };
 }
 
 function extractAllocatedOrders(workbook) {
@@ -519,16 +551,10 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
   return item;
 }
 
-function buildVisualizationPayload(records, dateKeys, orders, stockMode) {
+function buildVisualizationPayload(records, dateKeys, orders, stockMode, domesticDetails = []) {
   const dateSourceTags = {};
   const keyMeta = {};
   const rows = records.map((record) => normalizeRecordForVisualization(record, dateKeys, dateSourceTags, keyMeta)).filter(Boolean);
-  const domesticStockBySku = {};
-  for (const record of records) {
-    const qty = safeFloat(record.DomesticStock);
-    if (!qty) continue;
-    domesticStockBySku[record.SKU] = safeFloat(domesticStockBySku[record.SKU]) + qty;
-  }
   const allocations = orders
     .filter((order) => normalizeText(order.SKU) && normalizeText(order.WH) && safeFloat(order["Ordered Qty"]) !== 0)
     .map((order) => ({
@@ -544,7 +570,7 @@ function buildVisualizationPayload(records, dateKeys, orders, stockMode) {
     allocations,
     keyMeta,
     dateSourceTags,
-    domesticStockBySku,
+    domesticDetails,
     stockMode,
   };
 }
@@ -659,6 +685,20 @@ function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty
   return ws;
 }
 
+function writeDomesticStockWorksheet(workbook, domesticDetails) {
+  const old = workbook.getWorksheet(DOMESTIC_DETAIL_SHEET_NAME);
+  if (old) workbook.removeWorksheet(old.id);
+  const ws = workbook.addWorksheet(DOMESTIC_DETAIL_SHEET_NAME);
+  ws.addRow(["SKU", "Model", "Factory", "Quantity", "MW"]);
+  for (const item of domesticDetails) {
+    ws.addRow([item.SKU, item.Model, item.Factory, item.Quantity, item.MW]);
+  }
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.getRow(1).font = { bold: true };
+  ws.columns = [18, 28, 18, 14, 14].map((width) => ({ width }));
+  return ws;
+}
+
 export async function buildStockOutputJs({
   stockTemplateBytes,
   inventoryBytes,
@@ -705,6 +745,7 @@ export async function buildStockOutputJs({
   const dailyTransitQty = new Map();
   const odpTransitQty = new Map();
   const domesticQty = new Map();
+  let domesticDetails = [];
   const transitSourceTag = new Map();
   if (dailySupplyWorkbook) {
     const daily = extractTransitData(dailySupplyWorkbook, startDate, endDate, normalizedStockMode);
@@ -718,6 +759,7 @@ export async function buildStockOutputJs({
     mergeMapValues(transitQty, odp.qty);
     for (const key of odp.qty.keys()) transitSourceTag.set(key, mergeSourceTag(transitSourceTag.get(key), SOURCE_ODP));
     mergeMapValues(domesticQty, odp.domesticQty);
+    domesticDetails = odp.domesticDetails;
   }
   const allocationData = orderWorkbook ? extractAllocatedOrders(orderWorkbook) : { orders: [], need: new Map() };
 
@@ -801,8 +843,9 @@ export async function buildStockOutputJs({
   writeStockWorksheet(templateWorkbook, records, dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty);
+  writeDomesticStockWorksheet(templateWorkbook, domesticDetails);
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
-  const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode);
+  const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode, domesticDetails);
 
   return {
     outputBytes,

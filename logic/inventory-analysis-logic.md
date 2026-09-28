@@ -45,7 +45,7 @@ Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行�
 
 ## 3. 各来源取数和清洗
 
-库存分析支持两种口径：
+库存分析一次运行同时计算两种口径，生成后在可视化区域直接切换：
 
 - 可用库存：Inventory 使用 `Available stock`，Daily Supply Plan 使用 `Available Quantity`，其余逻辑保持原样。
 - 总库存：Inventory 使用 `Actual stock`，Daily Supply Plan 使用 `Scheduled Quantity`，不考虑占用；ODP 数量在两种口径下保持一致。
@@ -71,7 +71,8 @@ Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行�
 - 读取 `Total Stcok`；不存在时读取 `Total Stock`。
 - 必需字段：`New Ark WH`、`New Ark SKU`、`Quantity`、`ETA for New Ark Update`。
 - `New Ark WH` 能匹配 Arrival Plan 标准仓库的行按 ETA 进入到货日期列。
-- 不能匹配 Arrival Plan 标准仓库的行不进入到货日期列，按 SKU 汇总为 `Domestic Stock`，计入 `Total QTY` 和总库存概览，并在页面底部单独展示。
+- 不能匹配 Arrival Plan 标准仓库的行不进入到货日期列，汇总为 `Domestic Stock`，计入 `Total QTY` 和总库存概览，并在页面底部“国内库存”表展示 SKU、Model、Factory、片数和 MW。
+- Factory 不在 `Total Stock` 中，通过 `TCL REFERENCE` 回连供应数据表的 `Factory Location`；片数和 MW 分别取 `QUANTITY` 和 `MW`。
 - ETA 为空、无效、1900 年及以前或不在日期范围内时跳过。
 - 按 `(New Ark SKU, WH, ETA 日期)` 汇总 `Quantity`，来源标记为 `ODP`。
 

@@ -4,6 +4,7 @@
 
 - Country FCST：读取 `Conso`，仅保留 `Product Category = PV`。
 - 本次提供的Country FCST作为历史预测基线；已结束月份的预测值冻结用于准确率回测，不要求按历史版本重建。
+- `Stage`支持多选筛选，并按1至7的阶段编号规范化；误写为`6 - Finalize contract`的记录归入`6 - Won`，空白显示为“未指定”。Stage仅作用于FCST，因为实际销售表没有对应字段。
 - EU DG销售：读取 `Order details`，仅保留 `Category = PV`。
 - 历史实际仅使用 `Order Status2 = invoiced`；`confirm`单独展示。
 - UPP和非欧洲地区不在当前FCST范围内，因此从本模块排除。

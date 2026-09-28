@@ -29,6 +29,7 @@ TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
 ALLOC_SHEET_NAME = "To be allocated"
 TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map"
+DOMESTIC_DETAIL_SHEET_NAME = "Domestic Stock"
 
 SOURCE_INV_DSP = "INV_DSP"
 SOURCE_ODP = "ODP"
@@ -400,7 +401,7 @@ def extract_odp_transit_data(
     odp_master_path: Path,
     start_date: date,
     end_date: date,
-) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str], dict[str, float]]:
+) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str], dict[str, float], list[dict[str, Any]]]:
     wb = load_workbook(odp_master_path, data_only=True, read_only=True)
 
     sheet_name = None
@@ -416,7 +417,7 @@ def extract_odp_transit_data(
     headers = [cell.value for cell in ws[1]]
     idx = build_header_index(headers)
 
-    required = ["new ark wh", "new ark sku", "quantity", "eta for new ark update"]
+    required = ["tcl reference", "new ark wh", "new ark sku", "model", "quantity", "mw", "eta for new ark update"]
     missing = [h for h in required if h not in idx]
     if missing:
         wb.close()
@@ -425,6 +426,24 @@ def extract_odp_transit_data(
     transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
     domestic_qty: dict[str, float] = defaultdict(float)
+    domestic_detail_map: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    factory_lookup: dict[str, str] = {}
+    for source_sheet in wb.worksheets:
+        source_header_values = next(source_sheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
+        if not source_header_values:
+            continue
+        source_idx = build_header_index(list(source_header_values))
+        reference_column = "tcl reference" if "tcl reference" in source_idx else (
+            "tcl reference no." if "tcl reference no." in source_idx else None
+        )
+        if reference_column is None or "factory location" not in source_idx:
+            continue
+        for source_row in source_sheet.iter_rows(min_row=2, values_only=True):
+            reference = normalize_text(source_row[source_idx[reference_column]])
+            factory = normalize_text(source_row[source_idx["factory location"]])
+            if reference and factory and reference not in factory_lookup:
+                factory_lookup[reference] = factory
 
     has_product_type = "product type" in idx
 
@@ -439,6 +458,16 @@ def extract_odp_transit_data(
         qty = safe_float(row[idx["quantity"]])
         if not is_arrival_plan_warehouse:
             domestic_qty[sku] += qty
+            reference = normalize_text(row[idx["tcl reference"]])
+            model = normalize_text(row[idx["model"]])
+            factory = factory_lookup.get(reference, "")
+            detail_key = (sku, model, factory)
+            detail = domestic_detail_map.setdefault(
+                detail_key,
+                {"SKU": sku, "Model": model, "Factory": factory, "Quantity": 0.0, "MW": 0.0},
+            )
+            detail["Quantity"] += qty
+            detail["MW"] += safe_float(row[idx["mw"]])
             continue
 
         raw_eta = row[idx["eta for new ark update"]]
@@ -459,7 +488,15 @@ def extract_odp_transit_data(
                 transit_category[(sku, wh)] = category_val
 
     wb.close()
-    return transit_qty, transit_category, domestic_qty
+    domestic_details = [
+        {
+            **item,
+            "Quantity": round(safe_float(item["Quantity"]), 3),
+            "MW": round(safe_float(item["MW"]), 6),
+        }
+        for _, item in sorted(domestic_detail_map.items())
+    ]
+    return transit_qty, transit_category, domestic_qty, domestic_details
 
 
 def extract_to_be_allocated_orders(
@@ -538,6 +575,7 @@ def write_output_sheet(
     daily_transit_qty: dict[tuple[str, str, str], float] | None = None,
     odp_transit_qty: dict[tuple[str, str, str], float] | None = None,
     domestic_qty: dict[str, float] | None = None,
+    domestic_details: list[dict[str, Any]] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = None,
@@ -558,6 +596,9 @@ def write_output_sheet(
     if TRANSIT_SOURCE_SHEET_NAME in wb.sheetnames:
         source_old = wb[TRANSIT_SOURCE_SHEET_NAME]
         wb.remove(source_old)
+    if DOMESTIC_DETAIL_SHEET_NAME in wb.sheetnames:
+        domestic_old = wb[DOMESTIC_DETAIL_SHEET_NAME]
+        wb.remove(domestic_old)
     ws = wb.create_sheet(OUTPUT_SHEET_NAME)
 
     base_headers = [
@@ -635,6 +676,7 @@ def write_output_sheet(
     daily_transit_qty = daily_transit_qty or {}
     odp_transit_qty = odp_transit_qty or {}
     domestic_qty = domestic_qty or {}
+    domestic_details = domestic_details or []
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
 
@@ -805,6 +847,17 @@ def write_output_sheet(
             round(safe_float(odp_transit_qty.get((sku, wh, d_header), 0)), 3),
         ])
 
+    ws_domestic = wb.create_sheet(DOMESTIC_DETAIL_SHEET_NAME)
+    ws_domestic.append(["SKU", "Model", "Factory", "Quantity", "MW"])
+    for item in domestic_details:
+        ws_domestic.append([
+            item.get("SKU"),
+            item.get("Model"),
+            item.get("Factory"),
+            round(safe_float(item.get("Quantity")), 3),
+            round(safe_float(item.get("MW")), 6),
+        ])
+
     wb.save(stock_wb_path)
     wb.close()
 
@@ -845,6 +898,7 @@ def run(
     daily_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     odp_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
     domestic_qty: dict[str, float] = defaultdict(float)
+    domestic_details: list[dict[str, Any]] = []
 
     if daily_supply_plan_path:
         d_qty, d_category = extract_transit_data(
@@ -859,7 +913,7 @@ def run(
             transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_INV_DSP)
 
     if odp_master_path:
-        o_qty, o_category, o_domestic_qty = extract_odp_transit_data(
+        o_qty, o_category, o_domestic_qty, domestic_details = extract_odp_transit_data(
             odp_master_path,
             start_date=transit_start_date,
             end_date=transit_end_date,
@@ -885,6 +939,7 @@ def run(
         daily_transit_qty=daily_transit_qty,
         odp_transit_qty=odp_transit_qty,
         domestic_qty=domestic_qty,
+        domestic_details=domestic_details,
         allocated_orders=allocated_orders,
         allocated_need=allocated_need,
         start_date=transit_start_date,

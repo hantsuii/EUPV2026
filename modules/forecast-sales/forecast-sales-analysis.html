@@ -15,7 +15,7 @@
     .hero .lang-switch { position:absolute;top:18px;right:22px; }
     .panel { margin-bottom:16px; }
     .source-grid,.controls { display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:12px; }
-    .controls { grid-template-columns:repeat(5,minmax(150px,1fr));align-items:end;margin-bottom:14px; }
+    .controls { grid-template-columns:repeat(3,minmax(220px,1fr));align-items:start;margin-bottom:14px; }
     .field label { display:block;margin-bottom:5px;font-size:12px;font-weight:750;color:#496579; }
     .field input,.field select { width:100%;min-height:42px;padding:9px 10px; }
     .method-note,.section-note { margin:10px 0 0;color:#607889;font-size:12px;line-height:1.55; }
@@ -27,6 +27,20 @@
     .chart-grid { display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:12px; }
     .chart-box { min-height:370px;padding:8px;border:1px solid #dbe5ee;background:#fff; }
     .chart { width:100%;height:355px; }
+    .velocity-chart { min-height:420px; }
+    .velocity-table-title { margin:20px 0 9px;font-size:15px;color:#29495d; }
+    .table-wrap.velocity-table-wrap { max-height:440px; }
+    #velocityTable { min-width:980px; }
+    #velocityTable th:first-child,#velocityTable td:first-child { position:sticky;left:0;z-index:2;background:#fff;box-shadow:1px 0 0 #dbe5ee; }
+    #velocityTable th:first-child { z-index:3;background:#edf4f7; }
+    .multi-filter { position:relative; }
+    .multi-filter summary { min-height:42px;padding:10px 34px 10px 11px;border:1px solid #cbdce6;border-radius:10px;background:#fff;color:#29495d;cursor:pointer;list-style:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .multi-filter summary::-webkit-details-marker { display:none; }
+    .multi-filter summary::after { content:"⌄";position:absolute;right:12px;top:8px;color:#607889;font-size:18px; }
+    .multi-options { position:absolute;z-index:12;top:48px;left:0;width:min(360px,90vw);max-height:320px;overflow:auto;padding:8px;border:1px solid #cbdce6;border-radius:12px;background:#fff;box-shadow:0 14px 34px rgba(31,62,83,.16); }
+    .multi-option { display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;color:#29495d;font-size:12px;cursor:pointer; }
+    .multi-option:hover { background:#edf7f5; }
+    .multi-option input { width:16px;height:16px;margin:0; }
     .table-wrap { overflow:auto;max-height:520px;border:1px solid #dbe5ee;background:#fff; }
     table { width:100%;border-collapse:collapse;min-width:900px; }
     th,td { padding:9px 10px;border-bottom:1px solid #e5edf2;text-align:right;white-space:nowrap;font-size:12px; }
@@ -68,6 +82,7 @@
         <div class="controls">
           <div class="field"><label for="regionSel" data-i18n="regionLabel">地区</label><select id="regionSel"></select></div>
           <div class="field"><label for="productSel" data-i18n="productLabel">聚合产品</label><select id="productSel"></select></div>
+          <div class="field"><label data-i18n="stageLabel">预测阶段</label><details id="stageFilter" class="multi-filter"><summary id="stageSummary">全部阶段</summary><div id="stageOptions" class="multi-options"></div></details></div>
           <div class="field"><label for="startMonthSel" data-i18n="startMonthLabel">开始月份</label><select id="startMonthSel"></select></div>
           <div class="field"><label for="endMonthSel" data-i18n="endMonthLabel">结束月份</label><select id="endMonthSel"></select></div>
           <div class="field"><label for="velocityWindowSel" data-i18n="velocityWindowLabel">销售速率窗口</label><select id="velocityWindowSel"><option value="1">1个月</option><option value="3" selected>3个月</option><option value="6">6个月</option></select></div>
@@ -90,8 +105,9 @@
       <section class="panel">
         <h2 data-i18n="velocityTitle">各地区产品销售速率</h2>
         <p class="section-note" data-i18n="velocityNote">按完整月份的已开票MW计算；零销售月份计入平均值。“全部地区”为先求和后计算，不是地区平均。</p>
-        <div id="velocityHeatmap" class="chart"></div>
-        <div class="table-wrap"><table id="velocityTable"></table></div>
+        <div id="velocityHeatmap" class="chart velocity-chart"></div>
+        <h3 class="velocity-table-title" data-i18n="velocityTableTitle">全部产品明细</h3>
+        <div class="table-wrap velocity-table-wrap"><table id="velocityTable"></table></div>
       </section>
 
       <section class="panel">

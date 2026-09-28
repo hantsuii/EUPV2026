@@ -82,7 +82,9 @@ const vizState = {
   dateHeaders: [],
   keyMeta: new Map(),
   dateSourceTags: {},
-  domesticStockBySku: {},
+  domesticDetails: [],
+  modePayloads: {},
+  modeDownloads: {},
   stockMode: "available",
 };
 
@@ -92,6 +94,31 @@ function resultQuantityLabel() {
 
 function stockSeriesLabel() {
   return t(vizState.stockMode === "total" ? "totalStock" : "availableStock");
+}
+
+function setModeDownloads(availableBytes, totalBytes) {
+  for (const item of Object.values(vizState.modeDownloads || {})) {
+    if (item?.url) URL.revokeObjectURL(item.url);
+  }
+  const now = new Date();
+  const dateStamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const makeItem = (bytes, suffix) => ({
+    url: URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
+    fileName: `Stock_${suffix}_${dateStamp}.xlsx`,
+  });
+  vizState.modeDownloads = {
+    available: makeItem(availableBytes, "Available"),
+    total: makeItem(totalBytes, "Total"),
+  };
+}
+
+function showModeDownload(mode) {
+  const item = vizState.modeDownloads?.[mode];
+  if (!item) return;
+  downloadLinkEl.href = item.url;
+  downloadLinkEl.download = item.fileName;
+  downloadLinkEl.textContent = t("download", { file: item.fileName });
+  downloadLinkEl.style.display = "inline-block";
 }
 
 const SOURCE_TAG = {
@@ -197,6 +224,10 @@ function setStatus(key, params = {}) {
 }
 
 function resetDownloadLink() {
+  for (const item of Object.values(vizState.modeDownloads || {})) {
+    if (item?.url) URL.revokeObjectURL(item.url);
+  }
+  vizState.modeDownloads = {};
   downloadLinkEl.style.display = "none";
   downloadLinkEl.removeAttribute("href");
   downloadLinkEl.removeAttribute("download");
@@ -961,20 +992,21 @@ function buildDailySeriesByTransitSource(rows, inRangeHeaders) {
 }
 
 function renderDomesticStockSummary() {
-  const entries = Object.entries(vizState.domesticStockBySku || {})
-    .filter(([sku, qty]) => String(sku).trim() && Number(qty) !== 0)
-    .sort(([a], [b]) => a.localeCompare(b));
+  const entries = (vizState.domesticDetails || [])
+    .filter((item) => String(item.SKU || "").trim() && Number(item.Quantity || 0) !== 0)
+    .sort((a, b) => `${a.SKU}\u0000${a.Model}\u0000${a.Factory}`.localeCompare(`${b.SKU}\u0000${b.Model}\u0000${b.Factory}`));
   if (!entries.length) {
     domesticStockTableEl.innerHTML = `<div style='padding:10px;color:#6c86aa;'>${escapeHtml(t("noDomesticStock"))}</div>`;
     domesticStockSummaryEl.textContent = t("noDomesticStock");
     return;
   }
 
-  const body = entries.map(([sku, qty]) => `<tr><td>${escapeHtml(sku)}</td><td>${fmtNumber(qty)}</td></tr>`).join("");
-  domesticStockTableEl.innerHTML = `<table><thead><tr><th>${escapeHtml(t("domesticSku"))}</th><th>${escapeHtml(t("domesticQuantity"))}</th></tr></thead><tbody>${body}</tbody></table>`;
+  const body = entries.map((item) => `<tr><td>${escapeHtml(item.SKU)}</td><td>${escapeHtml(item.Model || "")}</td><td>${escapeHtml(item.Factory || "")}</td><td>${fmtNumber(item.Quantity)}</td><td>${fmtMw(item.MW)}</td></tr>`).join("");
+  domesticStockTableEl.innerHTML = `<table><thead><tr><th>${escapeHtml(t("domesticSku"))}</th><th>${escapeHtml(t("domesticModel"))}</th><th>${escapeHtml(t("domesticFactory"))}</th><th>${escapeHtml(t("domesticQuantity"))}</th><th>${escapeHtml(t("domesticMw"))}</th></tr></thead><tbody>${body}</tbody></table>`;
   domesticStockSummaryEl.textContent = t("domesticSummary", {
     rows: entries.length,
-    quantity: fmtNumber(entries.reduce((sum, [, qty]) => sum + qty, 0)),
+    quantity: fmtNumber(entries.reduce((sum, item) => sum + Number(item.Quantity || 0), 0)),
+    mw: fmtMw(entries.reduce((sum, item) => sum + Number(item.MW || 0), 0)),
   });
 }
 
@@ -1406,12 +1438,30 @@ function applyVisualizationPayload(payload) {
   vizState.allocations = payload?.allocations || [];
   vizState.keyMeta = new Map(Object.entries(payload?.keyMeta || {}));
   vizState.dateSourceTags = payload?.dateSourceTags || {};
-  vizState.domesticStockBySku = payload?.domesticStockBySku || {};
+  vizState.domesticDetails = payload?.domesticDetails || [];
   vizState.stockMode = payload?.stockMode === "total" ? "total" : "available";
   formulaTipEl.textContent = t(vizState.stockMode === "total" ? "totalFormulaTip" : "formulaTip");
 }
 
-async function extractVisualizationData() {
+function applyModePayloads(modePayloads, preferredMode = "available") {
+  vizState.modePayloads = modePayloads || {};
+  const mode = preferredMode === "total" && modePayloads?.total ? "total" : "available";
+  stockModeEl.value = mode;
+  applyVisualizationPayload(modePayloads?.[mode] || {});
+  showModeDownload(mode);
+}
+
+function switchStockMode(mode) {
+  const payload = vizState.modePayloads?.[mode];
+  if (!payload) return;
+  applyVisualizationPayload(payload);
+  showModeDownload(mode);
+  initializeCascadeFilters();
+  renderChartAndTable();
+  setTimeout(() => chart && chart.resize(), 30);
+}
+
+async function extractVisualizationData(outputPath, stockMode) {
   await pyodide.runPythonAsync(`
 import json
 from datetime import date, datetime
@@ -1463,7 +1513,7 @@ def _merge_tag(curr, incoming):
         return incoming
     return "MIXED"
 
-wb = load_workbook('/work/stock_output.xlsx', data_only=True)
+wb = load_workbook('${outputPath}', data_only=True)
 ws = wb['stock']
 headers = [cell.value for cell in ws[1]]
 header_to_idx = {str(h).strip(): i for i, h in enumerate(headers) if h is not None}
@@ -1513,13 +1563,23 @@ rows = []
 key_meta = {}
 date_source_tags = {}
 stock_rows = list(ws.iter_rows(min_row=2, values_only=True))
-domestic_stock_by_sku = {}
-if 'Domestic Stock' in header_to_idx:
-    for stock_row in stock_rows:
-        domestic_sku = _text(stock_row[header_to_idx['SKU']])
-        domestic_qty = _num(stock_row[header_to_idx['Domestic Stock']])
-        if domestic_sku and domestic_qty != 0:
-            domestic_stock_by_sku[domestic_sku] = domestic_stock_by_sku.get(domestic_sku, 0) + domestic_qty
+domestic_details = []
+if 'Domestic Stock' in wb.sheetnames:
+    ws_domestic = wb['Domestic Stock']
+    domestic_headers = [cell.value for cell in ws_domestic[1]]
+    domestic_idx = {str(h).strip(): i for i, h in enumerate(domestic_headers) if h is not None}
+    if all(name in domestic_idx for name in ("SKU", "Model", "Factory", "Quantity", "MW")):
+        for domestic_row in ws_domestic.iter_rows(min_row=2, values_only=True):
+            domestic_sku = _text(domestic_row[domestic_idx["SKU"]])
+            domestic_qty = _num(domestic_row[domestic_idx["Quantity"]])
+            if domestic_sku and domestic_qty != 0:
+                domestic_details.append({
+                    "SKU": domestic_sku,
+                    "Model": _text(domestic_row[domestic_idx["Model"]]),
+                    "Factory": _text(domestic_row[domestic_idx["Factory"]]),
+                    "Quantity": domestic_qty,
+                    "MW": _num(domestic_row[domestic_idx["MW"]]),
+                })
 active_sku_keys = set()
 status_assigned_keys = set()
 for row in stock_rows:
@@ -1635,18 +1695,17 @@ payload = {
     "allocations": allocations,
     "keyMeta": key_meta,
     "dateSourceTags": date_source_tags,
-    "domesticStockBySku": domestic_stock_by_sku,
+    "domesticDetails": domestic_details,
 }
 
-with open('/work/stock_vis.json', 'w', encoding='utf-8') as f:
+with open('/work/stock_vis_${stockMode}.json', 'w', encoding='utf-8') as f:
     json.dump(payload, f, ensure_ascii=False)
 `);
 
-  const jsonText = pyodide.FS.readFile("/work/stock_vis.json", { encoding: "utf8" });
+  const jsonText = pyodide.FS.readFile(`/work/stock_vis_${stockMode}.json`, { encoding: "utf8" });
   const payload = JSON.parse(jsonText);
-  payload.stockMode = stockModeEl?.value === "total" ? "total" : "available";
-
-  applyVisualizationPayload(payload);
+  payload.stockMode = stockMode;
+  return payload;
 }
 
 async function runPythonAnalysis() {
@@ -1669,8 +1728,10 @@ async function runPythonAnalysis() {
     });
 
     const outputPath = "/work/stock_output.xlsx";
+    const totalOutputPath = "/work/stock_total_output.xlsx";
 
     pyodide.FS.writeFile(outputPath, stockTemplateBytes);
+    pyodide.FS.writeFile(totalOutputPath, stockTemplateBytes);
 
     const dailySupplyPath = await resolveInputWorkbook({
       fileInput: dailySupplyInput,
@@ -1719,28 +1780,36 @@ run(
     order_file_path=Path(${orderPy}) if ${orderPy} is not None else None,
     transit_start_date=_parse_cli_date("${startDate}"),
     transit_end_date=_parse_cli_date("${endDate}"),
-    stock_mode="${stockModeEl?.value === "total" ? "total" : "available"}",
+    stock_mode="available",
+)
+
+run(
+    inventory_path=Path("${inventoryPath}"),
+    stock_path=Path("${totalOutputPath}"),
+    sku_sheet_name=None,
+    daily_supply_plan_path=Path(${dailySupplyPy}) if ${dailySupplyPy} is not None else None,
+    odp_master_path=Path(${odpMasterPy}) if ${odpMasterPy} is not None else None,
+    order_file_path=Path(${orderPy}) if ${orderPy} is not None else None,
+    transit_start_date=_parse_cli_date("${startDate}"),
+    transit_end_date=_parse_cli_date("${endDate}"),
+    stock_mode="total",
 )
 `);
 
     const outputBytes = pyodide.FS.readFile(outputPath);
-    const blob = new Blob([outputBytes], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const objectUrl = URL.createObjectURL(blob);
+    const totalOutputBytes = pyodide.FS.readFile(totalOutputPath);
 
     const now = new Date();
     const fileName = `Stock_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
 
-    downloadLinkEl.href = objectUrl;
-    downloadLinkEl.download = fileName;
-    downloadLinkEl.textContent = t("download", { file: fileName });
-    downloadLinkEl.style.display = "inline-block";
+    setModeDownloads(outputBytes, totalOutputBytes);
     await uploadGeneratedStock(outputBytes, fileName);
 
     setStatus("generatedBuilding");
 
-    await extractVisualizationData();
+    const availableVisualization = await extractVisualizationData(outputPath, "available");
+    const totalVisualization = await extractVisualizationData(totalOutputPath, "total");
+    applyModePayloads({ available: availableVisualization, total: totalVisualization }, "available");
     initializeCascadeFilters();
 
     vizPanelEl.style.display = "block";
@@ -1792,7 +1861,7 @@ async function runJavascriptAnalysis() {
     });
 
     setStatus("runningJs");
-    const result = await buildStockOutputJs({
+    const buildOptions = {
       stockTemplateBytes,
       inventoryBytes,
       dailySupplyBytes,
@@ -1800,22 +1869,16 @@ async function runJavascriptAnalysis() {
       orderBytes,
       startDate: transitStartInput.value || todayISO(),
       endDate: transitEndInput.value || addMonthsISO(transitStartInput.value || todayISO(), 6),
-      stockMode: stockModeEl?.value === "total" ? "total" : "available",
-    });
+    };
+    const result = await buildStockOutputJs({ ...buildOptions, stockMode: "available" });
+    const totalResult = await buildStockOutputJs({ ...buildOptions, stockMode: "total" });
 
-    const blob = new Blob([result.outputBytes], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const objectUrl = URL.createObjectURL(blob);
     const now = new Date();
     const fileName = `Stock_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.xlsx`;
-    downloadLinkEl.href = objectUrl;
-    downloadLinkEl.download = fileName;
-    downloadLinkEl.textContent = t("download", { file: fileName });
-    downloadLinkEl.style.display = "inline-block";
+    setModeDownloads(result.outputBytes, totalResult.outputBytes);
     await uploadGeneratedStock(result.outputBytes, fileName);
 
-    applyVisualizationPayload(result.visualization);
+    applyModePayloads({ available: result.visualization, total: totalResult.visualization }, "available");
     initializeCascadeFilters();
     vizPanelEl.style.display = "block";
     renderChartAndTable();
@@ -1877,7 +1940,9 @@ function resetForm() {
   vizState.dateHeaders = [];
   vizState.keyMeta = new Map();
   vizState.dateSourceTags = {};
-  vizState.domesticStockBySku = {};
+  vizState.domesticDetails = [];
+  vizState.modePayloads = {};
+  vizState.modeDownloads = {};
   vizState.stockMode = "available";
   inventoryBrandFilterEl.innerHTML = "";
   inventorySeriesFilterEl.innerHTML = "";
@@ -1950,6 +2015,14 @@ if (lineModeEl) {
     }
   });
 }
+
+stockModeEl.addEventListener("change", () => {
+  try {
+    switchStockMode(stockModeEl.value === "total" ? "total" : "available");
+  } catch (err) {
+    setStatus("visualizationFailed", { message: err?.message || err });
+  }
+});
 
 runBtn.addEventListener("click", runAnalysis);
 resetBtn.addEventListener("click", resetForm);
