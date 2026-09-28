@@ -6,6 +6,11 @@ const customerBrandSel = byId("customerBrandSel");
 const customerSearchEl = byId("customerSearch");
 const customerStatusMonthSel = byId("customerStatusMonthSel");
 const customerQuarterSel = byId("customerQuarterSel");
+const orderRegionSel = byId("orderRegionSel");
+const orderYearSel = byId("orderYearSel");
+const orderProductSel = byId("orderProductSel");
+const orderBrandSel = byId("orderBrandSel");
+const orderSearchEl = byId("orderSearch");
 
 const CUSTOMER_TEXT = {
   zh: {
@@ -80,11 +85,11 @@ function distinctDateLabels(rows, field) {
   return [...new Set(rows.map((row)=>dateLabel(row[field])).filter(Boolean))].sort().join(", ");
 }
 function operationalScopeRows() {
-  let rows = allRows.filter((r)=>r.year===Number(customerYearSel.value || TARGET_YEAR));
-  if(customerRegionSel.value&&customerRegionSel.value!=="__ALL__") rows=rows.filter((r)=>r.region===customerRegionSel.value);
-  rows=customerProductRows(rows,customerProductSel.value||"__ALL__");
-  rows=customerBrandRows(rows);
-  const query=customerSearchEl.value.trim().toLowerCase();
+  let rows = allRows.filter((r)=>r.year===Number(orderYearSel.value || TARGET_YEAR));
+  if(orderRegionSel.value&&orderRegionSel.value!=="__ALL__") rows=rows.filter((r)=>r.region===orderRegionSel.value);
+  rows=customerProductRows(rows,orderProductSel.value||"__ALL__");
+  if(orderBrandSel.value&&orderBrandSel.value!=="__ALL__") rows=rows.filter((r)=>r.brand===orderBrandSel.value);
+  const query=orderSearchEl.value.trim().toLowerCase();
   if(query) rows=rows.filter((r)=>`${r.customer} ${r.country} ${r.model}`.toLowerCase().includes(query));
   return rows;
 }
@@ -105,7 +110,7 @@ function renderCustomerOrderStatus() {
 }
 function renderCustomerQuarterOrders() {
   if(!customerQuarterSel) return;
-  const year=Number(customerYearSel.value||TARGET_YEAR), quarter=customerQuarterSel.value||"Q1", quarterNumber=Number(quarter.slice(1))||1;
+  const year=Number(orderYearSel.value||TARGET_YEAR), quarter=customerQuarterSel.value||"Q1", quarterNumber=Number(quarter.slice(1))||1;
   const months=Array.from({length:3},(_,index)=>`${year}-${String((quarterNumber-1)*3+index+1).padStart(2,"0")}`);
   const rows=operationalScopeRows().filter((r)=>r.quarter===quarter);
   const groups=new Map();
@@ -199,7 +204,18 @@ function renderCustomerDetail(entities) {
   table("customerDetailTable",[ct("customer"),ct("region"),ct("country"),ct("products"),ct("firstOrder"),ct("lastOrder"),ct("orderCount"),ct("revenue"),ct("pvQty"),ct("essQty"),ct("hpQty"),ct("status")],filtered.sort((a,b)=>b.revenue-a.revenue).map(x=>[x.customer,x.region,x.country,x.products.join(" + "),x.firstMonth,x.lastMonth,fmtInt(x.orderCount),fmtWanInt(x.revenue),fmtOne(x.pvQty),fmtInt(x.essQty),fmtInt(x.hpQty),x.status==="active"?ct("active"):x.status==="sleeping"?ct("sleeping"):ct("risk")]));
 }
 function refreshCustomerOperationalOptions(reset = false) {
-  const year=Number(customerYearSel.value||TARGET_YEAR), months=[...new Set(allRows.filter((r)=>r.year===year).map((r)=>r.month))].sort();
+  if(reset){
+    const regions=[...new Set(allRows.map((r)=>r.region))].sort(),years=[...new Set(allRows.map((r)=>r.year))].sort((a,b)=>b-a),brands=[...new Set(allRows.map((r)=>r.brand))].sort();
+    fillSelect(orderRegionSel,[{value:"__ALL__",label:ct("allRegions")},...regions.map((value)=>({value,label:value}))],["__ALL__"]);
+    fillSelect(orderYearSel,years.map((value)=>({value:String(value),label:String(value)})),[String(years.includes(TARGET_YEAR)?TARGET_YEAR:years[0])]);
+    fillSelect(orderProductSel,[{value:"__ALL__",label:t("all")},...['PV','ESS','HP'].map((value)=>({value,label:value}))],["__ALL__"]);
+    fillSelect(orderBrandSel,[{value:"__ALL__",label:t("all")},...brands.map((value)=>({value,label:value}))],["__ALL__"]);
+    orderSearchEl.value="";
+  }else{
+    const regionAll=orderRegionSel.querySelector('option[value="__ALL__"]'),productAll=orderProductSel.querySelector('option[value="__ALL__"]'),brandAll=orderBrandSel.querySelector('option[value="__ALL__"]');
+    if(regionAll)regionAll.textContent=ct("allRegions");if(productAll)productAll.textContent=t("all");if(brandAll)brandAll.textContent=t("all");
+  }
+  const year=Number(orderYearSel.value||TARGET_YEAR), months=[...new Set(allRows.filter((r)=>r.year===year).map((r)=>r.month))].sort();
   const previousMonth=customerStatusMonthSel?.value;
   const preferredMonth=!reset&&months.includes(previousMonth)?previousMonth:months.includes(currentMonthStr())?currentMonthStr():months[months.length-1];
   if(customerStatusMonthSel) fillSelect(customerStatusMonthSel,months.map((value)=>({value,label:value})),preferredMonth?[preferredMonth]:[]);
@@ -207,6 +223,10 @@ function refreshCustomerOperationalOptions(reset = false) {
   const previousQuarter=customerQuarterSel?.value;
   const preferredQuarter=!reset&&/^Q[1-4]$/.test(previousQuarter)?previousQuarter:defaultQuarter;
   if(customerQuarterSel) fillSelect(customerQuarterSel,[1,2,3,4].map((q)=>({value:`Q${q}`,label:`Q${q}`})),[preferredQuarter]);
+}
+function renderOrderAnalysis(resetFilters = false) {
+  if(!allRows.length)return;
+  refreshCustomerOperationalOptions(resetFilters);renderCustomerOrderStatus();renderCustomerQuarterOrders();
 }
 function renderCustomerAnalysis(resetFilters = false) {
   if (!allRows.length) return;
@@ -221,16 +241,20 @@ function renderCustomerAnalysis(resetFilters = false) {
   } else {
     const allOption=customerRegionSel.querySelector('option[value="__ALL__"]');if(allOption)allOption.textContent=ct("allRegions");
   }
-  refreshCustomerOperationalOptions(resetFilters);
   const rows=customerScopeRows(),history=customerHistoryRows(),referenceMonth=customerReferenceMonth(),entities=customerEntities(rows,history,referenceMonth);
   byId("customerScopeLabel").textContent=`${customerRegionSel.value==="__ALL__"?ct("allRegions"):customerRegionSel.value} · ${customerYearSel.value} · ${customerProductSel.value==="__ALL__"?t("all"):customerProductSel.value}${customerBrandSel&&customerBrandSel.value!=="__ALL__" ? " · " + customerBrandSel.value : ""}`;
   renderCustomerOverview(rows,history,entities,referenceMonth);renderCustomerRegion(rows,history,referenceMonth);
   const regionalRows=customerRegionSel.value==="__ALL__"?[]:rows, regionalEntities=customerRegionSel.value==="__ALL__"?[]:entities;
-  renderCustomerProduct(regionalRows,regionalEntities);renderCustomerActivity(regionalEntities);renderCustomerValue(regionalEntities);renderCustomerDetail(regionalEntities);renderCustomerOrderStatus();renderCustomerQuarterOrders();
+  renderCustomerProduct(regionalRows,regionalEntities);renderCustomerActivity(regionalEntities);renderCustomerValue(regionalEntities);renderCustomerDetail(regionalEntities);
 }
-function initCustomerAnalysis() { renderCustomerAnalysis(true); }
+function initCustomerAnalysis() { renderCustomerAnalysis(true);renderOrderAnalysis(true); }
 
 [customerRegionSel,customerYearSel,customerProductSel,customerBrandSel].forEach(el=>{if(el)el.addEventListener("change",()=>renderCustomerAnalysis(false));});
+if(orderRegionSel)orderRegionSel.addEventListener("change",()=>renderOrderAnalysis(false));
+if(orderYearSel)orderYearSel.addEventListener("change",()=>renderOrderAnalysis(false));
+if(orderProductSel)orderProductSel.addEventListener("change",()=>renderOrderAnalysis(false));
+if(orderBrandSel)orderBrandSel.addEventListener("change",()=>renderOrderAnalysis(false));
+if(orderSearchEl)orderSearchEl.addEventListener("input",()=>renderOrderAnalysis(false));
 if(customerStatusMonthSel) customerStatusMonthSel.addEventListener("change",renderCustomerOrderStatus);
 if(customerQuarterSel) customerQuarterSel.addEventListener("change",renderCustomerQuarterOrders);
 customerSearchEl.addEventListener("input",()=>renderCustomerAnalysis(false));
