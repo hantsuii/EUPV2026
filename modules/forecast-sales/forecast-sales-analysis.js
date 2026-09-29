@@ -10,7 +10,7 @@ window.PAGE_I18N = {
     historicalForecast:"历史FCST", historicalActual:"历史实际", accuracy:"准确率", bias:"Bias", runRate:"近期销售速率", suggestedDemand:"建议月均需求", completedMonths:"{count}个完整月份", nextMonths:"未来{count}个月", rateWindow:"最近{count}个月",
     monthlyChartTitle:"月度FCST、已开票与待确认", productMixTitle:"产品组合对比", forecast:"FCST", actual:"已开票实际", confirm:"Confirm", variance:"FCST-实际", month:"月份", status:"月份状态", completed:"完整月份", current:"当前月", future:"未来月份", unavailable:"—",
     monthlyTitle:"月度预测与实际明细", velocityTitle:"各地区产品销售速率", velocityNote:"按完整月份的已开票MW计算；零销售月份计入平均值。“全部地区”为先求和后计算，不是地区平均。热力图显示销量最高的12个产品，完整明细见下表。", velocityTableTitle:"全部产品明细", all:"全部地区", product:"聚合产品", mwPerMonth:"MW/月",
-    futureDetailTitle:"后续月份地区产品预测与订单", futureDetailNote:"从当前月起，按地区和聚合产品展示FCST、已开票、Confirm及订单合计；沿用上方地区、产品、Stage和结束月份筛选。", orderTotal:"订单合计", forecastOrderGap:"FCST-订单",
+    futureDetailTitle:"后续月份地区产品预测与订单", futureDetailNote:"从当前月起，按地区和聚合产品展示FCST、已开票、Confirm及订单合计；地区和月份使用本表独立多选，产品和Stage沿用上方筛选。", futureRegionFilterLabel:"表格地区", futureMonthFilterLabel:"表格月份", allFutureMonths:"全部后续月份", selectedRegions:"已选{count}个地区", selectedMonths:"已选{count}个月份", orderTotal:"订单合计", forecastOrderGap:"FCST-订单",
     demandTitle:"产品需求参考", demandNote:"将近期实际销售速度与经过历史Bias修正的未来FCST按历史准确率加权；结果为月均MW参考。", priorRate:"前期速率", trend:"速率变化", futureRate:"未来FCST速率", correction:"Bias修正", reliability:"预测可信度", calibrationBasis:"校准层级", direct:"地区×产品", productAll:"全部地区×产品", regionAll:"地区×全部产品", global:"全部PV", actualOnly:"仅实际速度",
     mappingTitle:"产品映射与数据检查", source:"来源", sourceModel:"源型号", mappedProduct:"聚合分类", fcstPvRows:"FCST PV行", salesPvRows:"销售PV行", manualRegions:"人工地区映射", outsideScope:"范围外行", excludedEol:"排除EOL销售行", unmapped:"未映射行", qualityWarning:"Solarmarkt与Solexis的6条#N/A地区记录已按确认归入法国及瑞士地区；UPP、非欧洲地区及仅存在于销售历史中的EOL产品不参与本模块。", mappingRows:"显示{shown}条型号映射，共{total}条。",
     exportFile:"PV_FCST_Actual_Detail.csv"
@@ -24,7 +24,7 @@ window.PAGE_I18N = {
     historicalForecast:"Historical FCST", historicalActual:"Historical actual", accuracy:"Accuracy", bias:"Bias", runRate:"Recent sales velocity", suggestedDemand:"Suggested monthly demand", completedMonths:"{count} complete months", nextMonths:"Next {count} months", rateWindow:"Last {count} months",
     monthlyChartTitle:"Monthly FCST, invoiced, and confirmed", productMixTitle:"Product mix comparison", forecast:"FCST", actual:"Invoiced actual", confirm:"Confirm", variance:"FCST - actual", month:"Month", status:"Month status", completed:"Complete", current:"Current month", future:"Future", unavailable:"—",
     monthlyTitle:"Monthly forecast and actual detail", velocityTitle:"Product sales velocity by region", velocityNote:"Calculated from invoiced MW in complete months; zero-sales months remain in the average. All Regions is calculated after summing regions. The heatmap shows the top 12 products; the full detail is below.", velocityTableTitle:"All product details", all:"All Regions", product:"Product group", mwPerMonth:"MW/month",
-    futureDetailTitle:"Future forecast and orders by region and product", futureDetailNote:"From the current month onward, shows FCST, invoiced, Confirm, and total orders by region and product. It follows the region, product, Stage, and end-month filters above.", orderTotal:"Total orders", forecastOrderGap:"FCST - orders",
+    futureDetailTitle:"Future forecast and orders by region and product", futureDetailNote:"From the current month onward, shows FCST, invoiced, Confirm, and total orders by region and product. Region and month use independent multi-select filters; product and Stage follow the filters above.", futureRegionFilterLabel:"Table regions", futureMonthFilterLabel:"Table months", allFutureMonths:"All future months", selectedRegions:"{count} regions selected", selectedMonths:"{count} months selected", orderTotal:"Total orders", forecastOrderGap:"FCST - orders",
     demandTitle:"Product demand reference", demandNote:"Blends recent actual velocity with bias-corrected future FCST using historical accuracy. Results are monthly MW references.", priorRate:"Prior velocity", trend:"Velocity change", futureRate:"Future FCST rate", correction:"Bias correction", reliability:"Forecast confidence", calibrationBasis:"Calibration level", direct:"Region × product", productAll:"All regions × product", regionAll:"Region × all products", global:"All PV", actualOnly:"Actual velocity only",
     mappingTitle:"Product mapping and data checks", source:"Source", sourceModel:"Source model", mappedProduct:"Product group", fcstPvRows:"FCST PV rows", salesPvRows:"Sales PV rows", manualRegions:"Manual region mappings", outsideScope:"Out-of-scope rows", excludedEol:"Excluded EOL sales rows", unmapped:"Unmapped rows", qualityWarning:"Six #N/A rows for Solarmarkt and Solexis were assigned to France and Switzerland as confirmed. UPP, non-European regions, and EOL products found only in sales history are excluded.", mappingRows:"Showing {shown} model mappings out of {total}.",
     exportFile:"PV_FCST_Actual_Detail.csv"
@@ -37,6 +37,8 @@ const forecastFile = byId("forecastFile"), salesFile = byId("salesFile"), runBtn
 const dashboard = byId("dashboard"), statusEl = byId("status");
 const regionSel = byId("regionSel"), productSel = byId("productSel"), startMonthSel = byId("startMonthSel"), endMonthSel = byId("endMonthSel"), velocityWindowSel = byId("velocityWindowSel");
 const stageFilter = byId("stageFilter"), stageSummary = byId("stageSummary"), stageOptions = byId("stageOptions");
+const futureRegionSummary = byId("futureRegionSummary"), futureRegionOptions = byId("futureRegionOptions");
+const futureMonthSummary = byId("futureMonthSummary"), futureMonthOptions = byId("futureMonthOptions");
 let data = null;
 let lastStatus = { key: "statusInitial", params: {} };
 
@@ -95,6 +97,39 @@ function initStageOptions(preserve = null) {
   updateStageSummary();
 }
 
+function selectedFutureRegions() {
+  return [...futureRegionOptions.querySelectorAll('input[data-future-region]:checked')].map((input) => input.value);
+}
+
+function selectedFutureMonths() {
+  return [...futureMonthOptions.querySelectorAll('input[data-future-month]:checked')].map((input) => input.value);
+}
+
+function futureMonths() {
+  const current = Core.currentMonthKey(new Date());
+  return data.months.filter((month) => Core.monthIndex(month) >= Core.monthIndex(current));
+}
+
+function updateFutureFilterSummaries() {
+  const regions = selectedFutureRegions();
+  const months = selectedFutureMonths();
+  futureRegionSummary.textContent = regions.length === data.regions.length ? t("allRegions") : regions.length === 1 ? regions[0] : t("selectedRegions", { count:regions.length });
+  futureMonthSummary.textContent = months.length === futureMonths().length ? t("allFutureMonths") : months.length === 1 ? months[0] : t("selectedMonths", { count:months.length });
+  byId("futureRegionAll").checked = regions.length === data.regions.length;
+  byId("futureMonthAll").checked = months.length === futureMonths().length;
+}
+
+function initFutureFilters(preserveRegions = null, preserveMonths = null) {
+  const availableMonths = futureMonths();
+  const regions = new Set(preserveRegions == null ? data.regions : preserveRegions);
+  const months = new Set(preserveMonths == null ? availableMonths : preserveMonths);
+  futureRegionOptions.innerHTML = `<label class="multi-option"><input id="futureRegionAll" type="checkbox" ${regions.size === data.regions.length ? "checked" : ""}><strong>${escapeHtml(t("allRegions"))}</strong></label>` +
+    data.regions.map((region) => `<label class="multi-option"><input type="checkbox" data-future-region value="${escapeHtml(region)}" ${regions.has(region) ? "checked" : ""}><span>${escapeHtml(region)}</span></label>`).join("");
+  futureMonthOptions.innerHTML = `<label class="multi-option"><input id="futureMonthAll" type="checkbox" ${months.size === availableMonths.length ? "checked" : ""}><strong>${escapeHtml(t("allFutureMonths"))}</strong></label>` +
+    availableMonths.map((month) => `<label class="multi-option"><input type="checkbox" data-future-month value="${escapeHtml(month)}" ${months.has(month) ? "checked" : ""}><span>${escapeHtml(month)}</span></label>`).join("");
+  updateFutureFilterSummaries();
+}
+
 function plot(id, traces, layout = {}) {
   const base = {
     paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"#fff", margin:{ l:60, r:24, t:54, b:58 },
@@ -147,7 +182,7 @@ function renderMonthly(summary) {
 }
 
 function renderFutureDetail(options) {
-  const rows = Core.futureComparison(data, options);
+  const rows = Core.futureComparison(data, { ...options, region:"__ALL__", regions:selectedFutureRegions(), months:selectedFutureMonths() });
   renderTable("futureTable", [t("month"), t("regionLabel"), t("product"), `${t("forecast")} (MW)`, `${t("actual")} (MW)`, `${t("confirm")} (MW)`, `${t("orderTotal")} (MW)`, `${t("forecastOrderGap")} (MW)`], rows.map((row) => [
     escapeHtml(row.month), escapeHtml(row.region), escapeHtml(row.product), fmt(row.forecast, 2), fmt(row.actual, 2), fmt(row.confirm, 2), fmt(row.orders, 2), fmt(row.gap, 2),
   ]));
@@ -256,6 +291,7 @@ function initControls() {
   fillSelect(regionSel, [{ value:"__ALL__", label:t("allRegions") }, ...data.regions.map((region) => ({ value:region, label:region }))], "__ALL__");
   fillSelect(productSel, [{ value:"__ALL__", label:t("allProducts") }, ...data.products.map((product) => ({ value:product, label:product }))], "__ALL__");
   initStageOptions();
+  initFutureFilters();
   fillSelect(startMonthSel, data.months.map((month) => ({ value:month, label:month })), data.forecastMonths[0] || data.months[0]);
   fillSelect(endMonthSel, data.months.map((month) => ({ value:month, label:month })), data.forecastMonths.at(-1) || data.months.at(-1));
   [...velocityWindowSel.options].forEach((option) => { option.textContent = t(`month${option.value}`); });
@@ -295,7 +331,7 @@ function exportDetail() {
   if (!data) return;
   const options = currentOptions();
   const summary = Core.summarize(data, options);
-  const future = Core.futureComparison(data, options);
+  const future = Core.futureComparison(data, { ...options, region:"__ALL__", regions:selectedFutureRegions(), months:selectedFutureMonths() });
   const stageLabel = selectedStages().length === data.stages.length ? t("allStages") : selectedStages().map(stageDisplay).join(" + ");
   const rows = [[t("month"), t("regionLabel"), t("product"), t("stageLabel"), t("forecast"), t("actual"), t("confirm"), t("variance"), t("status")]];
   summary.monthly.forEach((month) => rows.push([month.month, regionSel.value === "__ALL__" ? t("allRegions") : regionSel.value, productSel.value === "__ALL__" ? t("allProducts") : productSel.value, stageLabel, month.forecast, month.actual, month.confirm, month.variance, monthState(month)]));
@@ -314,14 +350,25 @@ stageOptions.addEventListener("change", (event) => {
   updateStageSummary();
   renderAll();
 });
+futureRegionOptions.addEventListener("change", (event) => {
+  if (event.target.id === "futureRegionAll") futureRegionOptions.querySelectorAll("input[data-future-region]").forEach((input) => { input.checked = event.target.checked; });
+  updateFutureFilterSummaries();
+  renderFutureDetail(currentOptions());
+});
+futureMonthOptions.addEventListener("change", (event) => {
+  if (event.target.id === "futureMonthAll") futureMonthOptions.querySelectorAll("input[data-future-month]").forEach((input) => { input.checked = event.target.checked; });
+  updateFutureFilterSummaries();
+  renderFutureDetail(currentOptions());
+});
 window.addEventListener("app-language-change", () => {
   setStatus(lastStatus.key, lastStatus.params);
   if (!data) return;
   const selectedRegion = regionSel.value, selectedProduct = productSel.value;
-  const stages = selectedStages();
+  const stages = selectedStages(), futureRegions = selectedFutureRegions(), futureSelectedMonths = selectedFutureMonths();
   fillSelect(regionSel, [{ value:"__ALL__", label:t("allRegions") }, ...data.regions.map((region) => ({ value:region, label:region }))], selectedRegion);
   fillSelect(productSel, [{ value:"__ALL__", label:t("allProducts") }, ...data.products.map((product) => ({ value:product, label:product }))], selectedProduct);
   initStageOptions(stages);
+  initFutureFilters(futureRegions, futureSelectedMonths);
   [...velocityWindowSel.options].forEach((option) => { option.textContent = t(`month${option.value}`); });
   renderAll();
 });

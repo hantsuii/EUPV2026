@@ -373,25 +373,34 @@
   function futureComparison(data, options = {}) {
     const now = options.now || new Date();
     const current = currentMonthKey(now);
-    const requestedStart = normalizeMonth(options.startMonth) || current;
-    const startMonth = monthIndex(requestedStart) < monthIndex(current) ? current : requestedStart;
-    const endMonth = normalizeMonth(options.endMonth) || data.forecastMonths.at(-1) || current;
-    if (monthIndex(startMonth) > monthIndex(endMonth)) return [];
-    const monthSet = new Set(monthRange(startMonth, endMonth));
+    let monthSet;
+    if (Array.isArray(options.months)) {
+      monthSet = new Set(options.months.map(normalizeMonth).filter((month) => month && monthIndex(month) >= monthIndex(current)));
+    } else {
+      const requestedStart = normalizeMonth(options.startMonth) || current;
+      const startMonth = monthIndex(requestedStart) < monthIndex(current) ? current : requestedStart;
+      const endMonth = normalizeMonth(options.endMonth) || data.forecastMonths.at(-1) || current;
+      if (monthIndex(startMonth) > monthIndex(endMonth)) return [];
+      monthSet = new Set(monthRange(startMonth, endMonth));
+    }
+    const regionSet = Array.isArray(options.regions) ? new Set(options.regions) : null;
     const region = options.region || "__ALL__";
     const product = options.product || "__ALL__";
     const rows = new Map();
+    const matchesFutureScope = (row) => monthSet.has(row.month)
+      && (!regionSet || regionSet.has(row.region))
+      && matchesScope(row, regionSet ? "__ALL__" : region, product);
     const entryFor = (row) => {
       const key = `${row.month}|${row.region}|${row.product}`;
       if (!rows.has(key)) rows.set(key, { month:row.month, region:row.region, product:row.product, forecast:0, actual:0, confirm:0 });
       return rows.get(key);
     };
     data.forecastRecords.forEach((row) => {
-      if (!monthSet.has(row.month) || !matchesScope(row, region, product) || !matchesForecastStage(row, options.stages)) return;
+      if (!matchesFutureScope(row) || !matchesForecastStage(row, options.stages)) return;
       entryFor(row).forecast += row.mw;
     });
     data.actualRecords.forEach((row) => {
-      if (!monthSet.has(row.month) || !matchesScope(row, region, product)) return;
+      if (!matchesFutureScope(row)) return;
       const entry = entryFor(row);
       if (row.status === "invoiced") entry.actual += row.mw;
       if (row.status === "confirm") entry.confirm += row.mw;

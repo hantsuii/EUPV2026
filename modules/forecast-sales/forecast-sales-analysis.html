@@ -34,6 +34,7 @@
     #velocityTable th:first-child,#velocityTable td:first-child { position:sticky;left:0;z-index:2;background:#fff;box-shadow:1px 0 0 #dbe5ee; }
     #velocityTable th:first-child { z-index:3;background:#edf4f7; }
     #futureTable { min-width:1120px; }
+    .future-controls { display:grid;grid-template-columns:repeat(2,minmax(240px,360px));gap:12px;margin:12px 0; }
     .multi-filter { position:relative; }
     .multi-filter summary { min-height:42px;padding:10px 34px 10px 11px;border:1px solid #cbdce6;border-radius:10px;background:#fff;color:#29495d;cursor:pointer;list-style:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
     .multi-filter summary::-webkit-details-marker { display:none; }
@@ -54,7 +55,7 @@
     .warning-note { margin-top:10px;padding:10px 12px;border-left:4px solid #d69442;border-radius:8px;background:#fff7eb;color:#725024;font-size:12px; }
     .positive { color:#a4531a; }.negative { color:#177765; }
     @media(max-width:1100px){.controls{grid-template-columns:repeat(2,minmax(220px,1fr))}.kpi-grid{grid-template-columns:repeat(3,1fr)}.quality-grid{grid-template-columns:repeat(3,1fr)}}
-    @media(max-width:760px){.hero .lang-switch{position:static;margin-bottom:10px}.source-grid,.controls,.chart-grid,.kpi-grid,.quality-grid{grid-template-columns:1fr}.tool-wrap{padding:12px}}
+    @media(max-width:760px){.hero .lang-switch{position:static;margin-bottom:10px}.source-grid,.controls,.future-controls,.chart-grid,.kpi-grid,.quality-grid{grid-template-columns:1fr}.tool-wrap{padding:12px}}
   </style>
 </head>
 <body class="light-ui" data-page="forecast-sales">
@@ -105,7 +106,11 @@
 
       <section class="panel">
         <h2 data-i18n="futureDetailTitle">后续月份地区产品预测与订单</h2>
-        <p class="section-note" data-i18n="futureDetailNote">从当前月起，按地区和聚合产品展示FCST、已开票、Confirm及订单合计；沿用上方地区、产品、Stage和结束月份筛选。</p>
+        <p class="section-note" data-i18n="futureDetailNote">从当前月起，按地区和聚合产品展示FCST、已开票、Confirm及订单合计；地区和月份使用本表独立多选，产品和Stage沿用上方筛选。</p>
+        <div class="future-controls">
+          <div class="field"><label data-i18n="futureRegionFilterLabel">表格地区</label><details id="futureRegionFilter" class="multi-filter"><summary id="futureRegionSummary">全部地区</summary><div id="futureRegionOptions" class="multi-options"></div></details></div>
+          <div class="field"><label data-i18n="futureMonthFilterLabel">表格月份</label><details id="futureMonthFilter" class="multi-filter"><summary id="futureMonthSummary">全部后续月份</summary><div id="futureMonthOptions" class="multi-options"></div></details></div>
+        </div>
         <div class="table-wrap"><table id="futureTable"></table></div>
       </section>
 
