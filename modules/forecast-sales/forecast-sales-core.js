@@ -384,12 +384,14 @@
       monthSet = new Set(monthRange(startMonth, endMonth));
     }
     const regionSet = Array.isArray(options.regions) ? new Set(options.regions) : null;
+    const productSet = Array.isArray(options.products) ? new Set(options.products) : null;
     const region = options.region || "__ALL__";
     const product = options.product || "__ALL__";
     const rows = new Map();
     const matchesFutureScope = (row) => monthSet.has(row.month)
       && (!regionSet || regionSet.has(row.region))
-      && matchesScope(row, regionSet ? "__ALL__" : region, product);
+      && (!productSet || productSet.has(row.product))
+      && matchesScope(row, regionSet ? "__ALL__" : region, productSet ? "__ALL__" : product);
     const entryFor = (row) => {
       const key = `${row.month}|${row.region}|${row.product}`;
       if (!rows.has(key)) rows.set(key, { month:row.month, region:row.region, product:row.product, forecast:0, actual:0, confirm:0 });
@@ -410,9 +412,9 @@
       ...row,
       orders:row.actual + row.confirm,
       gap:row.forecast - row.actual - row.confirm,
-    })).sort((a, b) => a.month.localeCompare(b.month)
+    })).sort((a, b) => a.product.localeCompare(b.product)
       || (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99)
-      || a.product.localeCompare(b.product));
+      || a.month.localeCompare(b.month));
   }
 
   function velocityMatrix(data, window = 3, now = new Date()) {
