@@ -892,6 +892,10 @@ function dayLabelShort(dayLabel) {
   return dayLabel.slice(5);
 }
 
+function rowOpeningStock(row) {
+  return Number(row.Stock || 0) + Number(row.DomesticStock || 0);
+}
+
 function buildDailySeriesForProductRows(rows, inRangeHeaders) {
   const dailyMap = new Map();
   const dailyLabels = inRangeHeaders
@@ -904,7 +908,7 @@ function buildDailySeriesForProductRows(rows, inRangeHeaders) {
   }
 
   for (const row of rows) {
-    let running = Number(row.Stock || 0);
+    let running = rowOpeningStock(row);
     for (const header of inRangeHeaders) {
       const dateObj = parseDateLabel(header);
       if (!dateObj) continue;
@@ -919,7 +923,7 @@ function buildDailySeriesForProductRows(rows, inRangeHeaders) {
 
 
 function hasAnyActivityInRange(row, inRangeHeaders) {
-  if (Number(row.Stock || 0) !== 0) return true;
+  if (rowOpeningStock(row) !== 0) return true;
   if (Number(row.ToBeAllocated || 0) !== 0) return true;
   for (const header of inRangeHeaders) {
     if (Number(row.Transit?.[header] || 0) !== 0) return true;
@@ -1351,7 +1355,7 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
     }
 
     const item = productMap.get(key);
-    item.Stock += Number(row.Stock || 0);
+    item.Stock += rowOpeningStock(row);
 
     for (const dateHeader of inRangeHeaders) {
       const qty = Number(row.Transit?.[dateHeader] || 0);

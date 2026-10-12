@@ -80,6 +80,8 @@ Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行�
 
 Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一天同时存在两种来源时，来源标记为 `MIXED`；输出单元格使用对应来源颜色，并写入 `_Transit Source Map`。
 
+可视化中，`WH=CN` 的 `Domestic Stock` 作为期初库存加入可用库存和总库存曲线，并纳入有效行判断、产品明细及库存汇总。图表期初库存口径为 `Stock + Domestic Stock`。
+
 ### 3.5 To be allocated
 
 - Orderfile Base 的表头在第 2 行。
