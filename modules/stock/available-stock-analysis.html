@@ -361,6 +361,22 @@
     .table-wrap th:nth-child(2) {
       text-align: left;
     }
+    .high-stock-panel {
+      margin: 18px 0;
+      padding: 16px;
+      border: 1px solid #f1c98f;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fffdf8 0%, #fff7e9 100%);
+    }
+    .high-stock-panel h3 { margin: 0 0 5px; color: #744514; }
+    .high-stock-panel .table-wrap { max-height: 520px; border-color: #efd3aa; }
+    .high-stock-panel .table-wrap th { background: #fff0d8; color: #704516; }
+    .high-stock-panel .table-wrap td { color: #624725; border-bottom-color: #f2dfc2; }
+    .high-stock-trigger {
+      background: #ffe1dc !important;
+      color: #a52d20 !important;
+      font-weight: 750;
+    }
 
     .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
     .label-with-icon {
@@ -617,6 +633,14 @@
       <div class="chart-wrap">
         <div id="stockChart"></div>
       </div>
+
+      <section class="high-stock-panel" aria-labelledby="highStockTitle">
+        <h3 id="highStockTitle" data-i18n="highStockTitle">高库存产品</h3>
+        <div id="highStockSummary" class="small-tip" data-i18n="highStockRule">固定按可用口径：在库可用库存 &gt; 5,000，或所选日期范围内在途可用库存合计 &gt; 10,000。</div>
+        <div class="table-wrap">
+          <div id="highStockTable"></div>
+        </div>
+      </section>
 
       <h3 style="margin-top:14px;" data-i18n="detailTitle">库存与在途明细（仅显示到货日期列）</h3>
       <div id="tableSummary" class="small-tip" data-i18n="noData">暂无数据。</div>

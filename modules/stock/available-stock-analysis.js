@@ -41,6 +41,8 @@ const tableSummaryEl = document.getElementById("tableSummary");
 const formulaTipEl = document.getElementById("formulaTip");
 const domesticStockTableEl = document.getElementById("domesticStockTable");
 const domesticStockSummaryEl = document.getElementById("domesticStockSummary");
+const highStockTableEl = document.getElementById("highStockTable");
+const highStockSummaryEl = document.getElementById("highStockSummary");
 const pvInventoryTotalEl = document.getElementById("pvInventoryTotal");
 const essInventoryTotalEl = document.getElementById("essInventoryTotal");
 const hpInventoryTotalEl = document.getElementById("hpInventoryTotal");
@@ -126,6 +128,8 @@ const SOURCE_TAG = {
   ODP: "ODP",
   MIXED: "MIXED",
 };
+const HIGH_STOCK_THRESHOLD = 5000;
+const HIGH_TRANSIT_THRESHOLD = 10000;
 
 const DEFAULT_REPO_FILE = {
   inventory: "../../templates/inventory.xlsx",
@@ -1014,6 +1018,51 @@ function renderDomesticStockSummary() {
   });
 }
 
+function renderHighStockTable(filters, start, end) {
+  const availablePayload = vizState.modePayloads?.available;
+  const availableRows = (availablePayload?.rows || []).filter((row) => matchByFilters(row, filters));
+  const dateHeaders = (availablePayload?.dateHeaders || []).filter((header) => {
+    const date = parseDateLabel(header);
+    return date && date >= start && date <= end;
+  });
+
+  const monthLabels = Array.from(new Set(dateHeaders.map((header) => monthLabelFromDate(parseDateLabel(header)))));
+  const grouped = new Map();
+  for (const row of availableRows) {
+    const model = String(row.Model || row.ProductKeyLabel || row.SKU || "").trim() || t("unknownModel");
+    const warehouse = String(row.WH || "").trim() || t("unknownWarehouse");
+    const key = `${model}\u0000${warehouse}`;
+    if (!grouped.has(key)) grouped.set(key, { Model: model, WH: warehouse, Stock: 0, TransitTotal: 0, TransitByMonth: {} });
+    const item = grouped.get(key);
+    item.Stock += Number(row.Stock || 0);
+    for (const header of dateHeaders) {
+      const quantity = Number(row.Transit?.[header] || 0);
+      if (!quantity) continue;
+      const month = monthLabelFromDate(parseDateLabel(header));
+      item.TransitByMonth[month] = (item.TransitByMonth[month] || 0) + quantity;
+      item.TransitTotal += quantity;
+    }
+  }
+
+  const rows = Array.from(grouped.values())
+    .filter((item) => item.Stock > HIGH_STOCK_THRESHOLD || item.TransitTotal > HIGH_TRANSIT_THRESHOLD)
+    .sort((a, b) => Math.max(b.Stock / HIGH_STOCK_THRESHOLD, b.TransitTotal / HIGH_TRANSIT_THRESHOLD)
+      - Math.max(a.Stock / HIGH_STOCK_THRESHOLD, a.TransitTotal / HIGH_TRANSIT_THRESHOLD)
+      || a.Model.localeCompare(b.Model)
+      || a.WH.localeCompare(b.WH));
+
+  if (!rows.length) {
+    highStockTableEl.innerHTML = `<div style='padding:10px;color:#8b6a43;'>${escapeHtml(t("noHighStock"))}</div>`;
+    highStockSummaryEl.textContent = t("highStockSummary", { rows: 0, stockThreshold: fmtNumber(HIGH_STOCK_THRESHOLD), transitThreshold: fmtNumber(HIGH_TRANSIT_THRESHOLD) });
+    return;
+  }
+
+  const headerHtml = `<tr><th>${escapeHtml(t("highStockModel"))}</th><th>${escapeHtml(t("warehouse"))}</th><th>${escapeHtml(t("highStockAvailable"))}</th><th>${escapeHtml(t("highTransitTotal"))}</th>${monthLabels.map((month) => `<th>${escapeHtml(t("highTransitMonth", { month }))}</th>`).join("")}</tr>`;
+  const bodyHtml = rows.map((item) => `<tr><td>${escapeHtml(item.Model)}</td><td>${escapeHtml(item.WH)}</td><td class="${item.Stock > HIGH_STOCK_THRESHOLD ? "high-stock-trigger" : ""}">${fmtNumber(item.Stock)}</td><td class="${item.TransitTotal > HIGH_TRANSIT_THRESHOLD ? "high-stock-trigger" : ""}">${fmtNumber(item.TransitTotal)}</td>${monthLabels.map((month) => `<td>${fmtNumber(item.TransitByMonth[month] || 0)}</td>`).join("")}</tr>`).join("");
+  highStockTableEl.innerHTML = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
+  highStockSummaryEl.textContent = t("highStockSummary", { rows: rows.length, stockThreshold: fmtNumber(HIGH_STOCK_THRESHOLD), transitThreshold: fmtNumber(HIGH_TRANSIT_THRESHOLD) });
+}
+
 
 function renderChartAndTable() {
   const filters = getFilterState();
@@ -1025,6 +1074,7 @@ function renderChartAndTable() {
   ensureChart();
   renderInventoryOverview(matchedRows);
   renderDomesticStockSummary();
+  renderHighStockTable(filters, start, end);
 
   if (!matchedRows.length) {
     chart.clear();
@@ -1938,6 +1988,8 @@ function resetForm() {
   detailTableEl.innerHTML = "";
   domesticStockTableEl.innerHTML = "";
   domesticStockSummaryEl.textContent = t("noData");
+  highStockTableEl.innerHTML = "";
+  highStockSummaryEl.textContent = t("noData");
   tableSummaryEl.textContent = t("noData");
   vizState.rows = [];
   vizState.allocations = [];

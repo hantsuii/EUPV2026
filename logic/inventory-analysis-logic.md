@@ -143,6 +143,7 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 - 明细按 Product 聚合，列出 In-stock、日期范围内 In-transit、To be allocated、Available Qty 和非零在途日期。
 - `Available Qty = In-stock + In-transit(range) - To be allocated`。
 - 图表、筛选和明细表都不显示四来源均为零的 SKU。
+- 页面新增独立的“高库存产品”表，固定读取可用口径，不随页面切换到总库存口径而改变。按 `(Model, WH)` 汇总；在库可用库存大于 5,000，或当前可视化日期范围内在途可用库存合计大于 10,000 时入表。表格列出版型、仓库、在库可用库存、在途合计以及范围内逐月在途数量，触发阈值的数值使用红色突出显示，并跟随页面维度筛选。
 
 ## 8. 模板兼容性和回退
 
