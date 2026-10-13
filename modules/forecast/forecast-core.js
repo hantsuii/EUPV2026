@@ -208,6 +208,8 @@
       actual,
       forecast,
       variance: forecast - actual,
+      absoluteError,
+      signedError,
       wape,
       accuracy: wape == null ? null : Math.max(0, 1 - wape),
       bias,
@@ -230,6 +232,123 @@
   function analyzeRegions(rows, options) {
     const regions = [...new Set(rows.filter((row) => row.category === options.category).map((row) => row.region))].sort();
     return regions.map((region) => ({ region, ...analyze(rows, { ...options, region }) })).filter((item) => item.summary.sampleCount > 0);
+  }
+
+  function sampleActualMonth(sample, config) {
+    return config.kind === "window" ? sample.periodEnd : sample.periodStart;
+  }
+
+  function monthsBetween(start, end) {
+    const startIndex = monthIndex(start);
+    const endIndex = monthIndex(end);
+    if (startIndex == null || endIndex == null || endIndex < startIndex) return [];
+    const months = [];
+    for (let index = startIndex; index <= endIndex; index += 1) months.push(addMonths(start, index - startIndex));
+    return months;
+  }
+
+  // Uses one common all-region sample universe, then treats a missing regional
+  // forecast as zero. This keeps every region reconcilable to the headline and
+  // exposes coverage gaps that analyzeRegions intentionally excludes.
+  function analyzeRegionContributions(rows, options) {
+    const allRegion = buildSamples(rows, { ...options, region: "__ALL__" });
+    const baseSamples = allRegion.samples.filter((sample) => {
+      const actualMonth = sampleActualMonth(sample, allRegion.config);
+      return (!options.startMonth || actualMonth >= options.startMonth) && (!options.endMonth || actualMonth <= options.endMonth);
+    });
+    const overallSummary = summarize(baseSamples, options.hitThreshold || 0.2);
+    const scoped = rows.filter((row) => row.category === options.category);
+    const regions = [...new Set(scoped.map((row) => row.region).filter(Boolean))].sort();
+    const actual = new Map();
+    const forecast = new Map();
+
+    scoped.forEach((row) => {
+      if (row.isActual) {
+        const key = `${row.region}|${row.month}`;
+        const item = actual.get(key) || { value: 0, rows: 0 };
+        item.value += row.mw;
+        item.rows += 1;
+        actual.set(key, item);
+        return;
+      }
+      const key = `${row.region}|${row.series}|${row.month}`;
+      const item = forecast.get(key) || { mw: 0, weighted: 0, hasMw: false, hasWeighted: false, rows: 0 };
+      if (row.mw != null) { item.mw += row.mw; item.hasMw = true; }
+      if (row.weighted != null) { item.weighted += row.weighted; item.hasWeighted = true; }
+      item.rows += 1;
+      forecast.set(key, item);
+    });
+
+    const regionResults = regions.map((region) => {
+      let actualMonths = 0;
+      let coveredActualMonths = 0;
+      let missingForecastMonths = 0;
+      const samples = baseSamples.map((base) => {
+        let actualValue = 0;
+        let forecastValue = 0;
+        monthsBetween(base.periodStart, base.periodEnd).forEach((month) => {
+          const actualItem = actual.get(`${region}|${month}`);
+          const forecastItem = forecast.get(`${region}|${base.series}|${month}`);
+          const hasForecast = forecastItem && (allRegion.basis === "mw" ? forecastItem.hasMw : forecastItem.hasWeighted);
+          const actualMonthValue = actualItem?.value || 0;
+          actualValue += actualMonthValue;
+          if (hasForecast) forecastValue += forecastItem[allRegion.basis];
+          if (actualMonthValue > 0) {
+            actualMonths += 1;
+            if (hasForecast) coveredActualMonths += 1;
+            else missingForecastMonths += 1;
+          }
+        });
+        const error = forecastValue - actualValue;
+        return {
+          series: base.series,
+          periodStart: base.periodStart,
+          periodEnd: base.periodEnd,
+          periodLabel: base.periodLabel,
+          actual: actualValue,
+          forecast: forecastValue,
+          error,
+          ape: actualValue === 0 ? null : Math.abs(error) / Math.abs(actualValue),
+          direction: error > 0 ? "over" : error < 0 ? "under" : "exact",
+          basis: allRegion.basis,
+        };
+      });
+      const summary = summarize(samples, options.hitThreshold || 0.2);
+      return {
+        region,
+        samples,
+        summary,
+        absoluteError: summary.absoluteError,
+        actualMonths,
+        coveredActualMonths,
+        missingForecastMonths,
+        coverageRate: actualMonths ? coveredActualMonths / actualMonths : null,
+      };
+    }).filter((item) => item.summary.actual !== 0 || item.summary.forecast !== 0);
+
+    const totalRegionalAbsoluteError = regionResults.reduce((sum, item) => sum + item.absoluteError, 0);
+    const totalActual = regionResults.reduce((sum, item) => sum + item.summary.actual, 0);
+    const totalForecast = regionResults.reduce((sum, item) => sum + item.summary.forecast, 0);
+    regionResults.forEach((item) => {
+      item.actualShare = totalActual ? item.summary.actual / totalActual : null;
+      item.forecastShare = totalForecast ? item.summary.forecast / totalForecast : null;
+      item.errorContribution = totalRegionalAbsoluteError ? item.absoluteError / totalRegionalAbsoluteError : null;
+    });
+
+    const regionalWape = totalActual ? totalRegionalAbsoluteError / Math.abs(totalActual) : null;
+    const cancellationRate = totalRegionalAbsoluteError
+      ? Math.max(0, 1 - overallSummary.absoluteError / totalRegionalAbsoluteError)
+      : null;
+    return {
+      ...allRegion,
+      samples: baseSamples,
+      summary: overallSummary,
+      regions: regionResults,
+      totalRegionalAbsoluteError,
+      regionalWape,
+      regionalAccuracy: regionalWape == null ? null : Math.max(0, 1 - regionalWape),
+      cancellationRate,
+    };
   }
 
   function duplicateGroups(rows) {
@@ -281,6 +400,7 @@
     analyze,
     analyzeCategories,
     analyzeRegions,
+    analyzeRegionContributions,
     duplicateGroups,
     qualitySummary,
   };

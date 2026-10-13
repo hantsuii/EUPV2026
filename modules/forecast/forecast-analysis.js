@@ -28,8 +28,8 @@ window.PAGE_I18N = {
     selectedSummaryTitle: "当前筛选结果",
     weightTitle: "MW 与 MW Weighted 效果",
     weightNote: "在相同样本上比较 WAPE，数值越低越好。",
-    regionTitle: "Sales Region 对比",
-    regionNote: "点击地区行可切换到该地区的详细结果。",
+    regionTitle: "地区表现与误差拆解",
+    regionNote: "识别地区间误差抵消、主要误差来源和持续高估或低估；点击地区行可下钻。",
     detailTitle: "月份与预测版本明细",
     qualityTitle: "数据检查",
     qualityNote: "重复维度记录参与求和，不会自动删除。",
@@ -84,6 +84,31 @@ window.PAGE_I18N = {
     mwWape: "MW WAPE",
     weightedWape: "MW Weighted WAPE",
     regionChartTitle: "地区 WAPE",
+    headlineAccuracy: "总体准确率",
+    regionalAccuracy: "地区拆分准确率",
+    cancellationRate: "误差抵消率",
+    grossRegionalError: "地区绝对误差",
+    cancellationDetail: "总体结果中被抵消的地区误差",
+    contributionChartTitle: "地区误差贡献排名",
+    quadrantChartTitle: "Bias 与误差贡献",
+    quadrantXAxis: "Bias（低估 ← → 高估）",
+    quadrantYAxis: "误差贡献",
+    heatmapTitle: "地区 × 预测版本 Bias 热力图",
+    actualShare: "实际占比",
+    forecastShare: "预测占比",
+    errorContribution: "误差贡献",
+    absoluteErrorMw: "绝对误差 (MW)",
+    coverageRate: "预测覆盖率",
+    diagnosis: "诊断",
+    priorityOver: "优先处理：持续高估",
+    priorityUnder: "优先处理：持续低估",
+    timingMismatch: "高低估抵消 / 时间错配",
+    systematicOver: "系统性高估",
+    systematicUnder: "系统性低估",
+    coverageGap: "预测覆盖缺口",
+    forecastWithoutActual: "有预测但无实际",
+    stableRegion: "表现稳定",
+    volatileRegion: "波动较大",
     totalRows: "有效数据行",
     actualRows: "Actuals 行",
     forecastRows: "预测行",
@@ -130,8 +155,8 @@ window.PAGE_I18N = {
     selectedSummaryTitle: "Selected result",
     weightTitle: "MW vs MW Weighted",
     weightNote: "WAPE is compared on matching samples; lower is better.",
-    regionTitle: "Sales Region comparison",
-    regionNote: "Select a region row to open its detailed results.",
+    regionTitle: "Regional performance and error decomposition",
+    regionNote: "Reveal offsetting regional errors, main contributors, and persistent over- or under-forecasting; select a row to drill down.",
     detailTitle: "Monthly and forecast-series detail",
     qualityTitle: "Data checks",
     qualityNote: "Repeated dimension rows are summed and not removed.",
@@ -186,6 +211,31 @@ window.PAGE_I18N = {
     mwWape: "MW WAPE",
     weightedWape: "MW Weighted WAPE",
     regionChartTitle: "Regional WAPE",
+    headlineAccuracy: "Headline accuracy",
+    regionalAccuracy: "Region-level accuracy",
+    cancellationRate: "Error cancellation",
+    grossRegionalError: "Regional absolute error",
+    cancellationDetail: "Regional error hidden in the headline",
+    contributionChartTitle: "Regional error contribution",
+    quadrantChartTitle: "Bias vs error contribution",
+    quadrantXAxis: "Bias (under ← → over)",
+    quadrantYAxis: "Error contribution",
+    heatmapTitle: "Region × forecast series bias heatmap",
+    actualShare: "Actual share",
+    forecastShare: "Forecast share",
+    errorContribution: "Error contribution",
+    absoluteErrorMw: "Absolute error (MW)",
+    coverageRate: "Forecast coverage",
+    diagnosis: "Diagnosis",
+    priorityOver: "Priority: persistent over-forecast",
+    priorityUnder: "Priority: persistent under-forecast",
+    timingMismatch: "Offsetting errors / timing mismatch",
+    systematicOver: "Systematic over-forecast",
+    systematicUnder: "Systematic under-forecast",
+    coverageGap: "Forecast coverage gap",
+    forecastWithoutActual: "Forecast without actual",
+    stableRegion: "Stable performance",
+    volatileRegion: "High variability",
     totalRows: "Valid rows",
     actualRows: "Actual rows",
     forecastRows: "Forecast rows",
@@ -524,22 +574,106 @@ function renderWeightChart() {
   ], { title: t("weightChartTitle"), barmode: "group", yaxis: { title: "WAPE", ticksuffix: "%", range: [0, Math.max(10, maxWape * 1.16)], gridcolor: "#e5edf2" } });
 }
 
-function renderRegions() {
-  const results = Core.analyzeRegions(normalizedRows, analysisOptions({ category: regionCategorySel.value, region: "__ALL__" }))
-    .map((item) => ({ ...item, ...filterAnalysisByMonths(item, regionStartMonthSel.value, regionEndMonthSel.value) }))
-    .filter((item) => item.summary.sampleCount > 0)
-    .sort((a, b) => (a.summary.wape ?? Infinity) - (b.summary.wape ?? Infinity));
-  const chartRows = [...results].sort((a, b) => (b.summary.wape ?? -Infinity) - (a.summary.wape ?? -Infinity));
-  plot("regionChart", [{
-    x: chartRows.map((item) => item.summary.wape == null ? null : item.summary.wape * 100), y: chartRows.map((item) => item.region),
-    type: "bar", orientation: "h", name: t("wape"),
-    marker: { color: chartRows.map((item) => item.summary.bias > 0 ? "#d58a49" : "#3d9b8e") },
-    customdata: chartRows.map((item) => item.summary.bias == null ? null : item.summary.bias * 100),
-    hovertemplate: "%{y}<br>WAPE %{x:.1f}%<br>Bias %{customdata:.1f}%<extra></extra>",
-  }], { title: t("regionChartTitle"), xaxis: { title: "WAPE", ticksuffix: "%", gridcolor: "#e5edf2" }, margin: { l: 185, r: 24, t: 54, b: 58 } });
+function regionDiagnosis(item) {
+  if (item.summary.actual === 0 && item.summary.forecast > 0) return t("forecastWithoutActual");
+  if (item.coverageRate != null && item.coverageRate < 0.999) return t("coverageGap");
+  const bias = item.summary.bias;
+  const wape = item.summary.wape;
+  const contribution = item.errorContribution || 0;
+  if (contribution >= 0.15 && bias != null && Math.abs(bias) >= 0.2) return t(bias > 0 ? "priorityOver" : "priorityUnder");
+  if (bias != null && Math.abs(bias) <= 0.1 && wape != null && wape >= 0.3) return t("timingMismatch");
+  if (bias != null && bias >= 0.2) return t("systematicOver");
+  if (bias != null && bias <= -0.2) return t("systematicUnder");
+  if (wape != null && wape <= 0.2) return t("stableRegion");
+  return t("volatileRegion");
+}
 
-  const rows = results.map((item) => [item.region, fmtPct(item.summary.wape), fmtPct(item.summary.accuracy), fmtPct(item.summary.bias), fmtPct(item.summary.hitRate), String(item.summary.sampleCount)]);
-  buildTable("regionTable", [t("region"), t("wape"), t("accuracy"), t("bias"), t("hitRate"), t("sampleCount")], rows,
+function renderRegions() {
+  const result = Core.analyzeRegionContributions(normalizedRows, analysisOptions({
+    category: regionCategorySel.value,
+    region: "__ALL__",
+    startMonth: regionStartMonthSel.value,
+    endMonth: regionEndMonthSel.value,
+  }));
+  const results = [...result.regions].sort((a, b) => (b.errorContribution ?? -Infinity) - (a.errorContribution ?? -Infinity));
+
+  byId("regionSummary").innerHTML = [
+    kpiCard(t("headlineAccuracy"), fmtPct(result.summary.accuracy), `WAPE ${fmtPct(result.summary.wape)}`),
+    kpiCard(t("regionalAccuracy"), fmtPct(result.regionalAccuracy), `WAPE ${fmtPct(result.regionalWape)}`),
+    kpiCard(t("cancellationRate"), fmtPct(result.cancellationRate), t("cancellationDetail")),
+    kpiCard(t("grossRegionalError"), `${fmtNumber(result.totalRegionalAbsoluteError)} MW`, t("absoluteErrorMw")),
+  ].join("");
+
+  plot("regionContributionChart", [{
+    x: results.map((item) => item.errorContribution == null ? null : item.errorContribution * 100),
+    y: results.map((item) => item.region),
+    type: "bar", orientation: "h", name: t("errorContribution"),
+    marker: { color: results.map((item) => item.summary.bias > 0 ? "#d58a49" : "#3d9b8e") },
+    text: results.map((item) => fmtPct(item.errorContribution)), textposition: "outside", cliponaxis: false,
+    customdata: results.map((item) => [item.absoluteError, item.summary.bias == null ? null : item.summary.bias * 100, item.summary.wape == null ? null : item.summary.wape * 100]),
+    hovertemplate: `%{y}<br>${t("errorContribution")} %{x:.1f}%<br>${t("absoluteErrorMw")} %{customdata[0]:.1f}<br>Bias %{customdata[1]:.1f}%<br>WAPE %{customdata[2]:.1f}%<extra></extra>`,
+  }], {
+    title: t("contributionChartTitle"),
+    xaxis: { title: t("errorContribution"), ticksuffix: "%", gridcolor: "#e5edf2" },
+    yaxis: { autorange: "reversed" },
+    margin: { l: 190, r: 48, t: 54, b: 58 },
+  });
+
+  const quadrantRows = results.filter((item) => item.summary.bias != null && item.errorContribution != null);
+  plot("regionQuadrantChart", [{
+    x: quadrantRows.map((item) => item.summary.bias * 100),
+    y: quadrantRows.map((item) => item.errorContribution * 100),
+    text: quadrantRows.map((item) => item.region),
+    type: "scatter", mode: "markers+text", textposition: "top center",
+    marker: {
+      size: quadrantRows.map((item) => 12 + Math.sqrt(Math.max(0, item.actualShare || 0)) * 46),
+      color: quadrantRows.map((item) => item.summary.bias > 0 ? "#d58a49" : "#3d9b8e"),
+      opacity: 0.82,
+    },
+    customdata: quadrantRows.map((item) => [item.summary.wape == null ? null : item.summary.wape * 100, item.actualShare == null ? null : item.actualShare * 100, regionDiagnosis(item)]),
+    hovertemplate: `%{text}<br>Bias %{x:.1f}%<br>${t("errorContribution")} %{y:.1f}%<br>WAPE %{customdata[0]:.1f}%<br>${t("actualShare")} %{customdata[1]:.1f}%<br>%{customdata[2]}<extra></extra>`,
+  }], {
+    title: t("quadrantChartTitle"),
+    showlegend: false,
+    xaxis: { title: t("quadrantXAxis"), ticksuffix: "%", zeroline: true, zerolinecolor: "#8095a3", gridcolor: "#e5edf2" },
+    yaxis: { title: t("quadrantYAxis"), ticksuffix: "%", gridcolor: "#e5edf2" },
+    margin: { l: 62, r: 34, t: 54, b: 64 },
+  });
+
+  const series = result.samples.map((sample) => sample.series);
+  const heatmapRows = results.filter((item) => item.samples.some((sample) => sample.actual !== 0 || sample.forecast !== 0));
+  const heatmapBias = heatmapRows.map((item) => item.samples.map((sample) => sample.actual === 0 ? null : (sample.error / Math.abs(sample.actual)) * 100));
+  const heatmapHover = heatmapRows.map((item) => item.samples.map((sample) => [sample.actual, sample.forecast, sample.error]));
+  plot("regionHeatmapChart", [{
+    x: series,
+    y: heatmapRows.map((item) => item.region),
+    z: heatmapBias,
+    customdata: heatmapHover,
+    type: "heatmap",
+    zmid: 0, zmin: -100, zmax: 100,
+    colorscale: [[0, "#278b82"], [0.5, "#f4f6f7"], [1, "#d57b3b"]],
+    colorbar: { title: "Bias", ticksuffix: "%" },
+    hovertemplate: `${t("region")} %{y}<br>${t("forecastSeries")} %{x}<br>Bias %{z:.1f}%<br>Actual %{customdata[0]:.1f} MW<br>Forecast %{customdata[1]:.1f} MW<br>${t("error")} %{customdata[2]:.1f}<extra></extra>`,
+  }], {
+    title: t("heatmapTitle"),
+    xaxis: { title: t("forecastSeries"), type: "category" },
+    yaxis: { autorange: "reversed" },
+    margin: { l: 190, r: 54, t: 54, b: 62 },
+  });
+
+  const rows = results.map((item) => [
+    item.region,
+    fmtPct(item.actualShare),
+    fmtPct(item.forecastShare),
+    fmtNumber(item.absoluteError),
+    fmtPct(item.errorContribution),
+    fmtPct(item.summary.wape),
+    fmtPct(item.summary.bias),
+    fmtPct(item.coverageRate),
+    fmtPct(item.summary.hitRate),
+    regionDiagnosis(item),
+  ]);
+  buildTable("regionTable", [t("region"), t("actualShare"), t("forecastShare"), t("absoluteErrorMw"), t("errorContribution"), t("wape"), t("bias"), t("coverageRate"), t("hitRate"), t("diagnosis")], rows,
     results.map((item) => ` data-region="${esc(item.region)}"${regionCategorySel.value === categorySel.value && item.region === regionSel.value ? ' class="selected"' : ""}`));
   byId("regionTable").querySelectorAll("tbody tr[data-region]").forEach((row) => row.addEventListener("click", () => {
     categorySel.value = regionCategorySel.value;

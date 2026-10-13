@@ -43,6 +43,11 @@
     .chart-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 12px; }
     .chart-box { min-height: 360px; padding: 8px; border: 1px solid #dbe5ee; background: #fff; }
     .chart { width: 100%; height: 350px; }
+    .region-summary { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .region-summary .kpi-card { min-height: 96px; }
+    .region-visuals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-bottom: 12px; }
+    .region-heatmap { margin-bottom: 12px; }
+    .region-heatmap .chart { height: 390px; }
     .table-wrap { overflow: auto; max-height: 480px; border: 1px solid #dbe5ee; background: #fff; }
     table { width: 100%; border-collapse: collapse; min-width: 820px; }
     th, td { padding: 9px 10px; border-bottom: 1px solid #e5edf2; text-align: right; white-space: nowrap; font-size: 12px; }
@@ -58,9 +63,9 @@
     .quality-item strong { display: block; margin-top: 5px; color: #203f52; font-size: 20px; }
     .warning-note { margin-top: 10px; padding: 10px 12px; border-left: 4px solid #d69442; border-radius: 8px; background: #fff7eb; color: #725024; font-size: 12px; }
     .empty-state { padding: 34px; text-align: center; color: #718695; }
-    @media (max-width: 1120px) { .controls, .trend-controls, .section-controls { grid-template-columns: repeat(2, minmax(220px, 1fr)); } .curve-picker { grid-column: 1 / -1; } .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 800px) { .hero .lang-switch { position: static; margin-bottom: 10px; } .chart-grid { grid-template-columns: 1fr; } .quality-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 560px) { .controls, .trend-controls, .section-controls, .kpi-grid, .quality-grid { grid-template-columns: 1fr; } .curve-picker { grid-column: auto; } .tool-wrap { padding: 12px; } }
+    @media (max-width: 1120px) { .controls, .trend-controls, .section-controls { grid-template-columns: repeat(2, minmax(220px, 1fr)); } .curve-picker { grid-column: 1 / -1; } .kpi-grid { grid-template-columns: repeat(3, 1fr); } .region-summary { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 800px) { .hero .lang-switch { position: static; margin-bottom: 10px; } .chart-grid, .region-visuals { grid-template-columns: 1fr; } .quality-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .controls, .trend-controls, .section-controls, .kpi-grid, .quality-grid, .region-summary { grid-template-columns: 1fr; } .curve-picker { grid-column: auto; } .tool-wrap { padding: 12px; } }
   </style>
 </head>
 <body class="light-ui" data-page="forecast">
@@ -125,16 +130,19 @@
       </section>
 
       <section class="panel">
-        <div class="section-head"><h2 data-i18n="regionTitle">Sales Region 对比</h2><p data-i18n="regionNote">点击地区行可切换到该地区的详细结果。</p></div>
+        <div class="section-head"><h2 data-i18n="regionTitle">地区表现与误差拆解</h2><p data-i18n="regionNote">识别地区间误差抵消、主要误差来源和持续高估或低估。</p></div>
         <div class="section-controls">
           <div class="field"><label for="regionCategorySel" data-i18n="categoryLabel">产品类别</label><select id="regionCategorySel" disabled></select></div>
           <div class="field"><label for="regionStartMonthSel" data-i18n="startMonthLabel">开始月份</label><select id="regionStartMonthSel" disabled></select></div>
           <div class="field"><label for="regionEndMonthSel" data-i18n="endMonthLabel">结束月份</label><select id="regionEndMonthSel" disabled></select></div>
         </div>
-        <div class="chart-grid">
-          <div class="chart-box"><div id="regionChart" class="chart"></div></div>
-          <div class="table-wrap"><table id="regionTable"></table></div>
+        <div id="regionSummary" class="region-summary"></div>
+        <div class="region-visuals">
+          <div class="chart-box"><div id="regionContributionChart" class="chart"></div></div>
+          <div class="chart-box"><div id="regionQuadrantChart" class="chart"></div></div>
         </div>
+        <div class="chart-box region-heatmap"><div id="regionHeatmapChart" class="chart"></div></div>
+        <div class="table-wrap"><table id="regionTable"></table></div>
       </section>
 
       <section class="panel">
