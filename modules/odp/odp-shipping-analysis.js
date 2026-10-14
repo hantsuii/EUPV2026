@@ -429,30 +429,37 @@ function renderPortDailyTable(){
   byId("portDailyTable").innerHTML=head+`<tbody>${body}</tbody>`;
 }
 function renderPortDailyFilters(){renderPortFilter();renderPortModelFilter();}
+function uniqueExcelSheetName(port,usedNames){
+  const cleaned=String(port||"").replace(/[\\/?*\[\]:]/g,"_").trim().replace(/^'+|'+$/g,"")||"Port";
+  let suffix="",index=1,name=cleaned.slice(0,31);
+  while(usedNames.has(name.toLocaleLowerCase())){
+    index+=1;suffix=` (${index})`;name=`${cleaned.slice(0,31-suffix.length)}${suffix}`;
+  }
+  usedNames.add(name.toLocaleLowerCase());
+  return name;
+}
 function exportPortDaily(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
-  const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
-  const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
-  if(!ports.length||!allDays.length)return;
-  const headerRow=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
-  const rows=[];
+  if(!ports.length)return;
+  const wb=XLSX.utils.book_new(),usedSheetNames=new Set();
   ports.forEach((port)=>{
     const portDayMap=data.get(port);
+    const portDays=[...portDayMap.keys()].sort();
+    const modelList=[...new Set([...portDayMap.values()].flatMap((m)=>[...m.keys()]))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
+    const headerRow=[t("hDestination"),t("hModel"),...portDays,t("hContainers")],rows=[];
     modelList.forEach((mk)=>{
-      const hasData=[...portDayMap.values()].some((m)=>m.has(mk));
-      if(!hasData)return;
-      const dayVals=allDays.map((day)=>{const m=portDayMap.get(day);return m&&m.has(mk)?m.get(mk):0;});
+      const dayVals=portDays.map((day)=>{const m=portDayMap.get(day);return m&&m.has(mk)?m.get(mk):0;});
       const total=dayVals.reduce((s,v)=>s+v,0);
       rows.push([port,mk,...dayVals,total]);
     });
-    const dayTotals=allDays.map((day)=>{const m=portDayMap.get(day);return m?[...m.values()].reduce((s,v)=>s+v,0):0;});
+    const dayTotals=portDays.map((day)=>{const m=portDayMap.get(day);return m?[...m.values()].reduce((s,v)=>s+v,0):0;});
     const portTotal=dayTotals.reduce((s,v)=>s+v,0);
     rows.push([port,t("hContainers"),...dayTotals,portTotal]);
+    const ws=XLSX.utils.aoa_to_sheet([headerRow,...rows]);
+    ws["!cols"]=[{wch:18},{wch:18},...portDays.map(()=>({wch:14})),{wch:14}];
+    XLSX.utils.book_append_sheet(wb,ws,uniqueExcelSheetName(port,usedSheetNames));
   });
-  const ws=XLSX.utils.aoa_to_sheet([headerRow,...rows]);
-  ws["!cols"]=[{wch:18},{wch:18},...allDays.map(()=>({wch:14})),{wch:14}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Port Daily Containers");
   XLSX.writeFile(wb,`Port_Daily_Containers_${isoDate(new Date()).replaceAll("-","")}.xlsx`);
   statusEl.textContent=t("portDailyExported");
 }

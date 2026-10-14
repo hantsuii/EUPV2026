@@ -40,6 +40,7 @@
 - 三个月度视角均支持独立的开始月份、结束月份和 Excel 式 Model 搜索多选筛选；每次进入页面或读取新文件时，开始月份和结束月份均默认为当前月。
 - 月度业务表使用 ODP 的 `New Ark SKU` 作为产品维度，并均展示 Model。Model 优先按库存分析 `SKU` 工作表的 `Sku No -> Product Model` 映射，未匹配时使用 ODP Model。
 - 月度业务表不展示记录数列；订单页顶部仅保留 Quantity、MW 和 Containers 汇总指标。
+- 港口到货分析导出 Excel 时，每个标准目的港分别写入一个工作表；各表仅保留该港口有数据的日期列，并包含各 Model 明细和港口柜量合计。
 
 ## Assumption ATP P90 输出
 
