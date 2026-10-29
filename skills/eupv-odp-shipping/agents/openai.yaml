@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV ODP Shipping Analysis"
+  short_description: "Analyze routes, lead times, monthly shipping, and POPV merges"
+  default_prompt: "Use $eupv-odp-shipping to analyze an ODP workbook using the documented route, P90, calendar, KPI, and POPV rules."

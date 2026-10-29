@@ -193,3 +193,7 @@ Available Qty = In-stock + In-transit(range) - To be allocated
 8. [ ] Build cascading filter UI: WH → Category → Product TCL Report → Family → Product.
 9. [ ] Render stock overview donuts, cumulative stock curve, and detail table.
 10. [ ] Provide downloadable workbook and optional Python fallback.
+
+## Packaged resources
+
+Treat [references/calculation-logic.md](references/calculation-logic.md) as authoritative; it supersedes earlier summaries above where the current implementation adds total-stock mode, Domestic Stock, split provenance, and high-stock reporting. Read [references/reproduction.md](references/reproduction.md) before running. The exact browser module, Python fallback, and structural stock template are under `assets/original-site/`. Verify sources with `python scripts/verify_package.py`.

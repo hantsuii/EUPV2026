@@ -174,3 +174,7 @@ week_number = floor((d - week_1_monday) / 7) + 1
 8. [ ] Compute operational KPIs per independent voyage.
 9. [ ] Detect POPV merge candidates (empty POPV + duplicate B/L, compare 5 fields).
 10. [ ] Support port mapping export/import and localStorage persistence.
+
+## Packaged resources
+
+Treat [references/calculation-logic.md](references/calculation-logic.md) as the current normative rule set. Read [references/reproduction.md](references/reproduction.md) before running or porting. The exact current browser implementation, port mapping, and optional SKU master template are in `assets/original-site/`. Verify copied sources with `python scripts/verify_package.py`.

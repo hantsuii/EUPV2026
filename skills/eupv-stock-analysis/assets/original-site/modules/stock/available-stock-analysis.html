@@ -1,0 +1,677 @@
+﻿<!doctype html>
+<html lang="zh-CN" data-i18n-title-key="pageTitle">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stock Analysis</title>
+  <link rel="stylesheet" href="../../style.css" />
+  <style>
+    body.light-ui {
+      --line-1: #c8d9f2;
+      --line-2: #aac5ec;
+      --text-1: #16345f;
+      --text-2: #2f4f7d;
+      --text-3: #56739f;
+      --brand: #3f8bff;
+      --brand-strong: #2f74db;
+      background:
+        radial-gradient(1200px 520px at 50% -12%, rgba(107, 180, 255, 0.28), rgba(232, 242, 255, 0) 72%),
+        linear-gradient(180deg, #f7fbff 0%, #edf5ff 52%, #eaf3ff 100%);
+    }
+    .tool-wrap {
+      max-width: 1360px;
+    }
+    .hero {
+      margin-bottom: 14px;
+      border: 1px solid #c9ddf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      box-shadow: 0 10px 24px rgba(52, 97, 161, 0.1);
+    }
+    .panel {
+      border: 1px solid #c9ddf7;
+      box-shadow: 0 8px 20px rgba(52, 97, 161, 0.08);
+      background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+    }
+    .panel h2::before {
+      content: "*";
+      color: #4e8fd8;
+      margin-right: 8px;
+      font-size: 0.85em;
+      vertical-align: middle;
+    }
+    .hero p,
+    .tip,
+    .small-tip { color: #4f6f9d; }
+    input[type="file"],
+    input[type="date"],
+    .status {
+      background: #ffffff;
+      color: #2a4d7a;
+      border-color: #c5d9f4;
+    }
+    input[type="file"]::file-selector-button {
+      background: #dcecff;
+      color: #255488;
+    }
+    .btn-secondary {
+      background: #e2eefc;
+      color: #275384;
+    }
+    .btn-secondary:hover {
+      background: #d4e5fa;
+    }
+    .btn-link {
+      background: #edf4ff;
+      color: #28517f;
+    }
+    .btn-link:hover {
+      background: #dceafa;
+    }
+    code {
+      background: #edf5ff;
+      border-color: #c2d8f3;
+      color: #2a4f7d;
+    }
+
+    .viz-panel { margin-top: 18px; }
+    .filters-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(220px, 1fr));
+      margin-bottom: 12px;
+    }
+    .product-col { grid-column: span 2; }
+    .controls-col { grid-column: span 2; }
+    .filters-grid select,
+    .filters-grid input,
+    .filters-grid button {
+      width: 100%;
+    }
+    .filters-grid select {
+      min-height: 130px;
+      border: 1px solid var(--line-1);
+      border-radius: 10px;
+      padding: 8px;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      color: var(--text-1);
+      font-size: 13px;
+      line-height: 1.2;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+    }
+    #productFilter {
+      min-height: 210px;
+      font-size: 12px;
+      letter-spacing: 0.1px;
+    }
+    .filters-grid option {
+      padding: 4px 6px;
+      white-space: nowrap;
+      color: #1d3e68;
+      background: #ffffff;
+    }
+    .filters-grid option:checked,
+    .filters-grid option[selected] {
+      color: #0f3d72;
+      background: linear-gradient(180deg, #cfe4ff 0%, #bad7ff 100%);
+      font-weight: 700;
+    }
+    .filters-grid .compact { min-height: auto; height: 42px; }
+    .filters-grid select.compact {
+      min-height: auto;
+      height: 42px;
+      font-weight: 600;
+      border-color: #b6cfee;
+      background: linear-gradient(180deg, #ffffff 0%, #f2f8ff 100%);
+      color: #1f4674;
+    }
+    .filters-grid select.compact option {
+      color: #1f4674;
+      background: #ffffff;
+    }
+    .filters-grid select.compact option:checked {
+      color: #0f3d72;
+      background: #cee2ff;
+    }
+    .filters-grid select.has-selection {
+      border-color: #4b90ee;
+      background: linear-gradient(180deg, #fbfdff 0%, #ebf4ff 100%);
+      box-shadow: inset 0 0 0 1px rgba(75, 144, 238, 0.16);
+    }
+    .filters-grid select:focus,
+    .filters-grid input:focus {
+      outline: none;
+      border-color: #5e9ef2;
+      box-shadow: 0 0 0 3px rgba(94, 158, 242, 0.22);
+    }
+    .selection-summary {
+      margin-top: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid #c8dcf6;
+      background: #f4f9ff;
+      color: #355783;
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .selection-summary.is-active {
+      border-color: #7eafe9;
+      background: #e8f2ff;
+      color: #1f4e84;
+      font-weight: 600;
+    }
+    .selection-summary::before {
+      content: "+ ";
+      color: #2f79d7;
+      font-weight: 700;
+    }
+    .selection-summary.is-empty::before {
+      content: "i ";
+      color: #7a9bc7;
+    }
+    .small-tip { color: var(--text-3); font-size: 12px; margin-top: 4px; }
+
+    .inventory-overview {
+      margin: 16px 0 18px;
+      padding: 16px;
+      border: 1px solid #c8dcf6;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+    }
+    .overview-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .overview-heading h3 { margin: 0; color: #173d6c; }
+    .overview-heading .small-tip { margin: 0; text-align: right; }
+    .overview-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .overview-filters {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid #d2e2f7;
+      border-radius: 12px;
+      background: #ffffff;
+    }
+    .overview-filters select {
+      width: 100%;
+      min-height: 92px;
+      border: 1px solid #c8dcf6;
+      border-radius: 9px;
+      padding: 6px;
+      background: #f8fbff;
+      color: #254b78;
+    }
+    .overview-filters option { padding: 4px 6px; }
+    .overview-filters option:checked { background: #cfe4ff; color: #173f74; font-weight: 700; }
+    .overview-filters .selection-summary { max-width: 100%; }
+    .overview-kpi {
+      min-height: 92px;
+      padding: 14px 16px;
+      border: 1px solid #d2e2f7;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 6px 16px rgba(52, 97, 161, 0.07);
+    }
+    .overview-kpi-label { color: #5a769e; font-size: 13px; }
+    .overview-kpi-value {
+      margin-top: 8px;
+      color: #173f74;
+      font-size: 28px;
+      font-weight: 750;
+      letter-spacing: -0.4px;
+    }
+    .overview-kpi-value .unit { margin-left: 4px; color: #5477a5; font-size: 14px; font-weight: 650; }
+    .overview-charts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .overview-chart-card {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid #d2e2f7;
+      border-radius: 12px;
+      background: #ffffff;
+    }
+    .overview-chart-title {
+      margin: 0 0 4px;
+      padding-left: 9px;
+      border-left: 3px solid #3f8bff;
+      color: #274c78;
+      font-size: 15px;
+    }
+    #pvStatusChart,
+    #essStatusChart,
+    #hpStatusChart { width: 100%; height: 330px; }
+    .status-summary-table {
+      margin-top: 12px;
+      overflow: auto;
+      border: 1px solid #d2e2f7;
+      border-radius: 12px;
+      background: #ffffff;
+    }
+    .status-summary-table table { width: 100%; border-collapse: collapse; }
+    .status-summary-table th,
+    .status-summary-table td { padding: 9px 12px; border-bottom: 1px solid #e1ebf8; color: #31547f; font-size: 13px; }
+    .status-summary-table th { background: #edf4ff; color: #274e7a; text-align: left; }
+    .status-summary-table td:nth-child(n+3),
+    .status-summary-table th:nth-child(n+3) { text-align: right; }
+    .status-summary-table tr:last-child td { border-bottom: 0; }
+
+    .source-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line-1);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #2e4d79;
+      background: #f3f8ff;
+    }
+    .source-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+    .dot-inv-dsp { background: rgba(82, 162, 255, 0.9); }
+    .dot-odp { background: rgba(255, 170, 92, 0.95); }
+    .dot-mixed { background: rgba(191, 149, 255, 0.95); }
+
+    .repo-opt { margin-top: 6px; font-size: 12px; color: var(--text-2); }
+
+    .engine-row {
+      display: grid;
+      grid-template-columns: 180px 280px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border: 1px solid #c8dcf6;
+      border-radius: 10px;
+      background: #f4f9ff;
+      color: #2e527f;
+    }
+    .engine-select {
+      min-height: 36px;
+      border: 1px solid #b6cfee;
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: #ffffff;
+      color: #1f4674;
+      font-weight: 600;
+    }
+
+    .th-src-inv-dsp, .td-src-inv-dsp { background: rgba(82, 162, 255, 0.2); }
+    .th-src-odp, .td-src-odp { background: rgba(255, 170, 92, 0.24); }
+    .th-src-mixed, .td-src-mixed { background: rgba(191, 149, 255, 0.22); }
+
+    .chart-wrap {
+      border: 1px solid var(--line-1);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+      padding: 8px;
+      margin-top: 8px;
+    }
+    #stockChart { width: 100%; height: 460px; }
+
+    .table-wrap {
+      margin-top: 12px;
+      overflow: auto;
+      border: 1px solid var(--line-1);
+      border-radius: 12px;
+      background: #ffffff;
+      max-height: 460px;
+    }
+    .table-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+    .table-wrap th,
+    .table-wrap td {
+      border-bottom: 1px solid #dce8f9;
+      padding: 8px 10px;
+      font-size: 13px;
+      white-space: nowrap;
+      text-align: right;
+      color: #264b78;
+    }
+    .table-wrap th {
+      position: sticky;
+      top: 0;
+      background: #edf4ff;
+      color: #274e7a;
+      z-index: 2;
+    }
+    .table-wrap td:first-child,
+    .table-wrap th:first-child,
+    .table-wrap td:nth-child(2),
+    .table-wrap th:nth-child(2) {
+      text-align: left;
+    }
+    .high-stock-panel {
+      margin: 18px 0;
+      padding: 16px;
+      border: 1px solid #f1c98f;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fffdf8 0%, #fff7e9 100%);
+    }
+    .high-stock-panel h3 { margin: 0 0 5px; color: #744514; }
+    .high-stock-panel .table-wrap { max-height: 520px; border-color: #efd3aa; }
+    .high-stock-panel .table-wrap th { background: #fff0d8; color: #704516; }
+    .high-stock-panel .table-wrap td { color: #624725; border-bottom-color: #f2dfc2; }
+    .high-stock-trigger {
+      background: #ffe1dc !important;
+      color: #a52d20 !important;
+      font-weight: 750;
+    }
+
+    .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    .label-with-icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #264b78;
+    }
+    .label-with-icon .icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 6px;
+      background: #e7f1ff;
+      color: #3d7fd3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .usage-list { margin: 0; padding-left: 18px; line-height: 1.6; color: var(--text-2); }
+    .usage-list li { margin: 5px 0; }
+
+    @media (max-width: 1100px) {
+      .filters-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+      .product-col, .controls-col { grid-column: span 2; }
+      .overview-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .overview-filters { grid-template-columns: 1fr 1fr; }
+      .overview-filter-action { grid-column: span 2; }
+    }
+    @media (max-width: 700px) {
+      .filters-grid { grid-template-columns: 1fr; }
+      .product-col, .controls-col { grid-column: span 1; }
+      .engine-row { grid-template-columns: 1fr; }
+      .overview-heading { display: block; }
+      .overview-heading .small-tip { margin-top: 5px; text-align: left; }
+      .overview-kpis { grid-template-columns: 1fr; }
+      .overview-charts { grid-template-columns: 1fr; }
+      .overview-filters { grid-template-columns: 1fr; }
+      .overview-filter-action { grid-column: span 1; }
+      #stockChart { height: 380px; }
+    }
+  </style>
+  <link rel="stylesheet" href="../../theme.css" />
+</head>
+<body class="light-ui" data-page="stock">
+  <main class="tool-wrap">
+    <header class="hero">
+      <div class="lang-switch">
+        <button class="lang-btn" type="button" data-lang="zh">中文</button>
+        <button class="lang-btn" type="button" data-lang="en">EN</button>
+      </div>
+      <h1 data-i18n="heading">库存分析</h1>
+      <p data-i18n="subtitle">生成库存结果，并在总库存与可用库存两种口径间切换。</p>
+    </header>
+
+    <section class="panel">
+      <h2 data-i18n="step1">步骤 1：生成库存结果</h2>
+      <div class="engine-row">
+        <label for="engineMode" data-i18n="engine">处理引擎</label>
+        <select id="engineMode" class="engine-select">
+          <option value="javascript" selected data-i18n="engineJs">JavaScript（推荐）</option>
+          <option value="python" data-i18n="enginePy">Python 旧版（备用）</option>
+        </select>
+        <div class="small-tip" data-i18n="engineTip">JavaScript 直接在浏览器中运行；如遇 Excel 兼容问题，可使用 Python 旧版。</div>
+      </div>
+            <div class="form-grid">
+        <div>
+          <label for="inventoryFile" data-i18n="inventoryFile">Inventory 文件（必选）</label>
+          <input id="inventoryFile" type="file" accept=".xlsx,.xlsm" />
+          <div class="repo-opt">
+            <label><input id="useRepoInventory" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
+          </div>
+        </div>
+        <div>
+          <label for="dailySupplyFile" data-i18n="dailyFile">Daily Supply Plan 文件（必选）</label>
+          <input id="dailySupplyFile" type="file" accept=".xlsx,.xlsm" />
+          <div class="repo-opt">
+            <label><input id="useRepoDailySupply" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
+          </div>
+        </div>
+        <div>
+          <label for="odpMasterFile" data-i18n="odpFile">EUPV ODP MASTER（可选）</label>
+          <input id="odpMasterFile" type="file" accept=".xlsx,.xlsm" />
+          <div class="repo-opt">
+            <label><input id="useRepoOdpMaster" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
+          </div>
+        </div>
+        <div>
+          <label for="orderFile" data-i18n="orderFile">Orderfile Base Realtime（可选）</label>
+          <input id="orderFile" type="file" accept=".xlsx,.xlsm" />
+          <div class="repo-opt">
+            <label><input id="useRepoOrderfile" type="checkbox" /> <span data-i18n="useDefault">使用仓库默认文件</span></label>
+          </div>
+        </div>
+        <div>
+          <label for="transitStart" data-i18n="transitStart">在途开始日期</label>
+          <input id="transitStart" type="date" />
+        </div>
+        <div>
+          <label for="transitEnd" data-i18n="transitEnd">在途结束日期</label>
+          <input id="transitEnd" type="date" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="runBtn" class="btn-primary" data-i18n="generate">生成库存文件</button>
+        <button id="resetBtn" class="btn-secondary" type="button" data-i18n="reset">重置</button>
+        <a class="btn-link" href="../../index.html" data-i18n="backHome">← 返回主页</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="runStatus">运行状态</h2>
+      <div id="status" class="status" data-i18n="waiting">等待运行……</div>
+      <a id="downloadLink" class="download-link" style="display:none;" download data-i18n="downloadGenerated">下载生成的文件</a>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="githubTitle">GitHub 历史库存</h2>
+      <p class="small-tip" data-i18n="githubTip">生成结果会自动保存为 Stcok History/Stock_YYYYMMDD.xlsx。同一天再次分析会覆盖当天文件。</p>
+      <div class="form-grid">
+        <div><label for="githubRepo" data-i18n="githubRepo">仓库（owner/repository）</label><input id="githubRepo" type="text" value="hantsuii/EUPV2026" placeholder="owner/repository" /></div>
+        <div><label for="githubBranch" data-i18n="githubBranch">分支</label><input id="githubBranch" type="text" value="main" /></div>
+        <div><label for="githubToken" data-i18n="githubToken">GitHub Token</label><input id="githubToken" type="password" autocomplete="off" placeholder="ghp_..." /></div>
+      </div>
+      <div class="actions"><button id="saveGithubBtn" class="btn-secondary" type="button" data-i18n="saveGithub">保存配置</button><button id="loadHistoryBtn" class="btn-primary" type="button" data-i18n="loadHistory">加载历史库存</button></div>
+      <div id="githubStatus" class="small-tip"></div>
+      <div id="historyPanel" style="display:none; margin-top:14px;"><div id="historyChart" style="height:360px;"></div><div id="historyTable" class="table-wrap"></div></div>
+    </section>
+
+    <section id="vizPanel" class="panel viz-panel" style="display:none;">
+      <h2 data-i18n="step2">步骤 2：库存可视化</h2>
+      <div class="engine-row">
+        <label for="stockMode" data-i18n="stockMode">库存口径</label>
+        <select id="stockMode" class="engine-select">
+          <option value="available" selected data-i18n="stockModeAvailable">可用库存</option>
+          <option value="total" data-i18n="stockModeTotal">总库存</option>
+        </select>
+        <div class="small-tip" data-i18n="stockModeTip">分析完成后可直接切换，两种口径已同时计算。</div>
+      </div>
+      <p id="formulaTip" class="tip" data-i18n="formulaTip">可用库存公式：库存 + 累计在途到货。按 CRD 计算的待分配数量会按月标记在图表上。</p>
+      <p class="small-tip" data-i18n="multiTip">多选提示：直接点击选项即可切换选中/取消，无需按 Ctrl。</p>
+      <div class="source-legend">
+        <span class="source-chip"><span class="source-dot dot-inv-dsp"></span> <span data-i18n="sourceInv">Inventory / Daily Supply Plan</span></span>
+        <span class="source-chip"><span class="source-dot dot-odp"></span> <span data-i18n="sourceOdp">ODP 文件</span></span>
+        <span class="source-chip"><span class="source-dot dot-mixed"></span> <span data-i18n="sourceMixed">混合（两个来源）</span></span>
+      </div>
+
+      <section class="inventory-overview" aria-labelledby="inventoryOverviewTitle">
+        <div class="overview-heading">
+          <h3 id="inventoryOverviewTitle" data-i18n="inventoryOverview">总库存概览</h3>
+          <p class="small-tip" data-i18n="inventoryOverviewTip">顶部为三种状态合计；PV 按 Power Bin 换算 MW，ESS、HP 展示 Quantity。DSP/ODP 状态统计范围为本次生成选择的日期。</p>
+        </div>
+        <div class="overview-filters">
+          <div>
+            <label for="inventoryBrandFilter" class="label-with-icon"><span class="icon">B</span><span data-i18n="inventoryBrand">品牌</span></label>
+            <select id="inventoryBrandFilter" multiple></select>
+            <div id="inventoryBrandSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+          </div>
+          <div>
+            <label for="inventorySeriesFilter" class="label-with-icon"><span class="icon">S</span><span data-i18n="inventorySeries">系列</span></label>
+            <select id="inventorySeriesFilter" multiple></select>
+            <div id="inventorySeriesSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+          </div>
+          <div class="overview-filter-action">
+            <button id="clearInventoryOverviewFilters" class="btn-secondary" type="button" data-i18n="clearOverviewFilters">清除品牌/系列筛选</button>
+          </div>
+        </div>
+        <div class="overview-kpis">
+          <div class="overview-kpi" data-inventory-group="PV">
+            <div class="overview-kpi-label" data-i18n="pvInventoryTotal">PV 总库存</div>
+            <div id="pvInventoryTotal" class="overview-kpi-value">0.000 <span class="unit">MW</span></div>
+          </div>
+          <div class="overview-kpi" data-inventory-group="ESS">
+            <div class="overview-kpi-label" data-i18n="essInventoryTotal">ESS 总库存</div>
+            <div id="essInventoryTotal" class="overview-kpi-value">0 <span class="unit" data-i18n="quantityUnit">Quantity</span></div>
+          </div>
+          <div class="overview-kpi" data-inventory-group="HP">
+            <div class="overview-kpi-label" data-i18n="hpInventoryTotal">HP 总库存</div>
+            <div id="hpInventoryTotal" class="overview-kpi-value">0 <span class="unit" data-i18n="quantityUnit">Quantity</span></div>
+          </div>
+        </div>
+        <div class="overview-charts">
+          <div class="overview-chart-card" data-inventory-group="PV">
+            <h4 class="overview-chart-title" data-i18n="pvStatusShare">PV 库存状态</h4>
+            <div id="pvStatusChart"></div>
+          </div>
+          <div class="overview-chart-card" data-inventory-group="ESS">
+            <h4 class="overview-chart-title" data-i18n="essStatusShare">ESS 库存状态</h4>
+            <div id="essStatusChart"></div>
+          </div>
+          <div class="overview-chart-card" data-inventory-group="HP">
+            <h4 class="overview-chart-title" data-i18n="hpStatusShare">HP 库存状态</h4>
+            <div id="hpStatusChart"></div>
+          </div>
+        </div>
+        <div id="inventoryStatusTable" class="status-summary-table"></div>
+      </section>
+
+      <div class="filters-grid">
+        <div>
+          <label for="whFilter" class="label-with-icon"><span class="icon">W</span><span data-i18n="warehouse">仓库（WH）</span></label>
+          <select id="whFilter" multiple></select>
+          <div id="whSelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+        </div>
+        <div>
+          <label for="categoryFilter" class="label-with-icon"><span class="icon">C</span><span data-i18n="category">类别</span></label>
+          <select id="categoryFilter" multiple></select>
+          <div id="categorySelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+        </div>
+        <div>
+          <label for="productReportFilter" class="label-with-icon"><span class="icon">R</span><span data-i18n="productReport">Product TCL Report</span></label>
+          <select id="productReportFilter" multiple></select>
+          <div id="productReportSelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+        </div>
+        <div>
+          <label for="familyFilter" class="label-with-icon"><span class="icon">F</span><span data-i18n="family">系列</span></label>
+          <select id="familyFilter" multiple></select>
+          <div id="familySelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+        </div>
+        <div class="product-col">
+          <label for="productFilter" class="label-with-icon"><span class="icon">P</span><span data-i18n="product">产品（型号 | SKU | 接头）</span></label>
+          <select id="productFilter" multiple></select>
+          <div id="productSelectionSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+          <div class="small-tip" data-i18n="productTip">提示：请先选择维度；产品选项会显示型号、SKU 和接头，便于查找。</div>
+        </div>
+        <div>
+          <label for="vizStart" data-i18n="startDate">开始日期</label>
+          <input id="vizStart" class="compact" type="date" />
+          <label for="vizEnd" style="margin-top:10px;" data-i18n="endDate">结束日期</label>
+          <input id="vizEnd" class="compact" type="date" />
+        </div>
+        <div class="controls-col">
+          <label for="granularity" data-i18n="granularity">时间粒度</label>
+          <select id="granularity" class="compact">
+            <option value="day" data-i18n="daily">每日</option>
+            <option value="week" data-i18n="weekly">每周</option>
+            <option value="month" data-i18n="monthly">每月</option>
+          </select>
+          <label for="lineMode" style="margin-top:10px;" data-i18n="lineMode">曲线模式</label>
+          <select id="lineMode" class="compact">
+            <option value="total" data-i18n="lineTotal">所选产品合计</option>
+            <option value="split" data-i18n="lineProduct">按产品拆分</option>
+            <option value="warehouse" data-i18n="lineWarehouse">按仓库拆分</option>
+          </select>
+          <div class="inline-actions" style="margin-top:10px;">
+            <button id="applyVizBtn" class="btn-primary" type="button" data-i18n="applyFilters">应用筛选</button>
+            <button id="clearFiltersBtn" class="btn-secondary" type="button" data-i18n="clearFilters">清除筛选</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div id="stockChart"></div>
+      </div>
+
+      <section class="high-stock-panel" aria-labelledby="highStockTitle">
+        <h3 id="highStockTitle" data-i18n="highStockTitle">高库存产品</h3>
+        <div id="highStockSummary" class="small-tip" data-i18n="highStockRule">固定按可用口径：在库可用库存 &gt; 5,000，或所选日期范围内在途可用库存合计 &gt; 10,000。</div>
+        <div class="table-wrap">
+          <div id="highStockTable"></div>
+        </div>
+      </section>
+
+      <h3 style="margin-top:14px;" data-i18n="detailTitle">库存与在途明细（仅显示到货日期列）</h3>
+      <div id="tableSummary" class="small-tip" data-i18n="noData">暂无数据。</div>
+      <div class="table-wrap">
+        <div id="detailTable"></div>
+      </div>
+
+      <h3 style="margin-top:18px;" data-i18n="domesticStockTitle">国内库存</h3>
+      <div id="domesticStockSummary" class="small-tip" data-i18n="noData">暂无数据。</div>
+      <div class="table-wrap">
+        <div id="domesticStockTable"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="instructions">使用说明</h2>
+      <ul class="usage-list">
+        <li data-i18n="instruction1">Inventory 文件来自 NewArk-Inventory 模块的 Inventory List 导出。</li>
+        <li data-i18n="instruction2">Daily Supply Plan 文件来自 NewArk-Planning 模块的 Supply Plan，选择起止月份后导出。</li>
+        <li data-i18n="instruction3">ODP 文件来自 SharePoint，请联系 Planning 或 PSR 团队获取。</li>
+        <li data-i18n="instruction4">Orderfile Base 文件来自 NewArk-Report Center PV 模块，选择月份后导出。</li>
+        <li data-i18n="instruction5">Inventory 和 Daily Supply Plan 为必选文件；ODP 和 Orderfile Base 为可选文件。</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="./stock-i18n.js"></script>
+  <script src="../../module-i18n.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script type="module" src="./available-stock-analysis.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV Forecast Accuracy"
+  short_description: "Evaluate forecast accuracy across horizons and regions"
+  default_prompt: "Use $eupv-forecast-analysis to evaluate an FCST KPI workbook using the official horizon, WAPE, bias, hit-rate, and regional contribution rules."

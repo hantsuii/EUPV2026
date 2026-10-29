@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV Shipment Generator"
+  short_description: "Reproduce Shipment and PICKUP matching requirements"
+  default_prompt: "Use $eupv-shipment-generator to understand or implement the documented Shipment Details and PICKUP matching workflow, noting the source-script limitation."

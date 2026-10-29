@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV Stock Analysis"
+  short_description: "Build total and available stock views from supply sources"
+  default_prompt: "Use $eupv-stock-analysis to combine Inventory, Daily Supply Plan, ODP, Orderfile, and SKU master data with the documented stock logic."

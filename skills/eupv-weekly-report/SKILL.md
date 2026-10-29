@@ -67,3 +67,7 @@ window.PAGE_I18N = {
 4. [ ] List download items as `<li>` elements.
 5. [ ] Add back-to-portal link.
 6. [ ] Host on any static file server (Cloudflare Pages, GitHub Pages, Nginx).
+
+## Packaged resources
+
+Read [references/calculation-logic.md](references/calculation-logic.md) to preserve the important boundary that this module has no report-generation logic. See [references/reproduction.md](references/reproduction.md) for hosting details. The exact page is in `assets/original-site/`; verify it with `python scripts/verify_package.py`.

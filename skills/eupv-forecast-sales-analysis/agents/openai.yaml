@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV Forecast vs Actual Sales"
+  short_description: "Compare PV forecasts with invoiced and confirmed sales"
+  default_prompt: "Use $eupv-forecast-sales-analysis to compare Country FCST with PV sales and explain accuracy, velocity, and demand reference."

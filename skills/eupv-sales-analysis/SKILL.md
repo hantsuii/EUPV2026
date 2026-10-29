@@ -151,3 +151,7 @@ Region → Brand → Level1 → Level2
 - Product-Sub/category targets are kept in source data but only aggregated to region level.
 - Target region mapping uses the workbook's `Region` field; no secondary Country-to-Region derivation.
 - Revenue amounts display in 万€ (10k EUR); ASP displays in €/W or €/Set.
+
+## Packaged resources
+
+Treat [references/calculation-logic.md](references/calculation-logic.md) as the current normative rule set; it includes later customer-activity and independent order-analysis additions that supersede older summaries above. Read [references/reproduction.md](references/reproduction.md) before running or porting the module. The exact current browser implementation is in `assets/original-site/`. Verify copied sources with `python scripts/verify_package.py`.

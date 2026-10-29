@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV Sales Analysis"
+  short_description: "Analyze EUPV sales, targets, ASP, customers, and order status"
+  default_prompt: "Use $eupv-sales-analysis to analyze an EUPV sales workbook and explain the results with the documented business rules."

@@ -76,6 +76,7 @@ body.light-ui .hero {
 body[data-page="home"] .hero h1::before { content: "◇"; }
 body[data-page="sales"] .hero h1::before { content: "↗"; }
 body[data-page="forecast"] .hero h1::before { content: "◎"; }
+body[data-page="forecast-sales"] .hero h1::before { content: "≈"; }
 body[data-page="stock"] .hero h1::before { content: "▦"; }
 body[data-page="shipment"] .hero h1::before { content: "⇄"; }
 body[data-page="weekly"] .hero h1::before { content: "▤"; }

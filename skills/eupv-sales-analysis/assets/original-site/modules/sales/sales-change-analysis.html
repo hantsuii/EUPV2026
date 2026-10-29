@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>销售分析看板（PV/ESS）</title>
+  <link rel="stylesheet" href="../../style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body.light-ui {
+      --line-1: #c8d9f2;
+      --line-2: #aac5ec;
+      --text-1: #16345f;
+      --text-2: #2f4f7d;
+      --text-3: #56739f;
+      --brand: #3f8bff;
+      --brand-strong: #2f74db;
+      background:
+        radial-gradient(1200px 520px at 50% -12%, rgba(107, 180, 255, 0.28), rgba(232, 242, 255, 0) 72%),
+        linear-gradient(180deg, #f7fbff 0%, #edf5ff 52%, #eaf3ff 100%);
+    }
+    .tool-wrap { max-width: 1360px; }
+    .hero {
+      margin-bottom: 14px;
+      border: 1px solid #c9ddf7;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%);
+      box-shadow: 0 10px 24px rgba(52, 97, 161, 0.1);
+      border-radius: 14px;
+      padding: 16px 18px;
+      position: relative;
+    }
+    .panel {
+      border: 1px solid #c9ddf7;
+      box-shadow: 0 8px 20px rgba(52, 97, 161, 0.08);
+      background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+      border-radius: 14px;
+      padding: 16px 18px;
+    }
+
+    .lang-switch {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      display: inline-flex;
+      gap: 8px;
+    }
+    .lang-btn {
+      border: 1px solid #bdd4f3;
+      background: #e7f1ff;
+      color: #2d5685;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .lang-btn.active {
+      background: #3f8bff;
+      color: #fff;
+      border-color: #3f8bff;
+    }
+
+    .hero p,
+    .tip,
+    .mini-tip { color: #4f6f9d; }
+
+    input[type="file"],
+    input[type="text"],
+    select,
+    .status {
+      background: #ffffff;
+      color: #2a4d7a;
+      border-color: #c5d9f4;
+    }
+    input[type="file"]::file-selector-button {
+      background: #dcecff;
+      color: #255488;
+    }
+
+    .source-choice {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .source-choice label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .repo-row {
+      margin-top: 8px;
+      display: none;
+      gap: 10px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .repo-row.active { display: flex; }
+    .repo-row input[type="text"] {
+      min-width: 360px;
+      flex: 1;
+      border: 1px solid var(--line-1);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .jump-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .jump-btn {
+      background: #e3efff;
+      color: #28507d;
+      border: 1px solid #bdd4f3;
+      border-radius: 10px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .jump-btn:hover,
+    .jump-btn.active {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    .content-block { display: none; }
+    .content-block.active { display: block; }
+
+    .kpi-grid { display: grid; gap: 12px; margin-bottom: 10px; }
+    .kpi-grid-4 { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+    .kpi-grid-3 { grid-template-columns: repeat(3, minmax(200px, 1fr)); }
+    .kpi-card {
+      background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+      border: 1px solid #cddff6;
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 6px 16px rgba(76, 124, 185, 0.1);
+      min-height: 90px;
+    }
+    .kpi-name { color: #5e7ea9; font-size: 13px; margin-bottom: 8px; }
+    .kpi-value { font-size: 26px; font-weight: 700; color: #1e4672; line-height: 1.3; white-space: pre-line; }
+
+    .sub-title { margin: 6px 0 8px; color: #2a4f7c; font-size: 18px; font-weight: 700; }
+
+    .chart-box {
+      margin-top: 10px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      padding: 8px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      overflow: hidden;
+    }
+    .chart-box .chart { min-width: 0; }
+    .chart { width: 100%; height: 340px; }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      margin-top: 10px;
+      max-height: 420px;
+      background: #fff;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 920px; background: #fff; color: #2a4d7a; }
+    th, td { border-bottom: 1px solid #e4eefb; padding: 8px 10px; font-size: 13px; text-align: left; white-space: nowrap; }
+    th { background: #f3f8ff; position: sticky; top: 0; z-index: 1; color: #2a4d7a; }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .filter-grid label { display: block; margin-bottom: 4px; font-size: 13px; color: #406491; font-weight: 700; }
+    .filter-grid select {
+      width: 100%;
+      border: 1px solid #c5d9f4;
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 14px;
+      background: #fff;
+      color: #2a4d7a;
+    }
+    .filter-grid select[multiple] {
+      min-height: 120px;
+      padding: 6px 8px;
+    }
+    .filter-grid.compact select[multiple] { min-height: 82px; }
+    .filter-grid-6 { grid-template-columns: repeat(6, minmax(150px, 1fr)); }
+    .filter-note { color: #5f7da6; font-size: 12px; margin: -2px 0 8px; }
+    .quarter-total td { background: #eef5ff; font-weight: 800; color: #1f4a7a; }
+    .quarter-toggle { display: inline-block; width: 16px; text-align: center; font-size: 11px; color: #3f8bff; transition: transform 0.2s; }
+    .quarter-month td:first-child { padding-left: 42px; color: #5f7da6; }
+    .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .product-filter-panel {
+      margin: 10px 0 12px;
+      padding: 14px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%);
+    }
+    .filter-section-title { margin: 0 0 9px; color: #2a4f7c; font-size: 14px; font-weight: 800; }
+    .product-hierarchy-grid { grid-template-columns: repeat(4, minmax(175px, 1fr)); margin-bottom: 12px; }
+    .product-control-grid { grid-template-columns: repeat(5, minmax(155px, 1fr)); margin-bottom: 0; }
+    .product-filter-panel .filter-grid { gap: 12px; }
+    .product-chart-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr); gap: 12px; }
+    .product-chart-grid .chart-box { margin-top: 0; }
+    .asp-panel + .asp-panel { margin-top: 14px; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      padding: 22px;
+      overflow: auto;
+      background: rgba(18, 42, 76, 0.5);
+    }
+    .modal-backdrop.open { display: block; }
+    .modal-dialog {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 16px 18px 24px;
+      border-radius: 16px;
+      background: #f5f9ff;
+      box-shadow: 0 20px 60px rgba(10, 41, 80, 0.35);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .modal-close { min-width: 38px; min-height: 38px; border: 1px solid #bdd4f3; border-radius: 9px; background: #e7f1ff; color: #28507d; cursor: pointer; font-size: 22px; }
+    .detail-btn { align-self: flex-start; margin-top: 10px; border: 1px solid #3f8bff; border-radius: 8px; background: #e7f1ff; color: #255488; padding: 7px 11px; cursor: pointer; font-weight: 700; }
+
+    .region-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .region-card {
+      background: #fff;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 6px 14px rgba(76, 124, 185, 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+    .region-card .metric-row:last-child {
+      border-bottom: 0;
+    }
+    .region-title { font-size: 20px; font-weight: 800; color: #1f4a7a; margin: 0 0 8px; }
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      border-bottom: 1px dashed #e1ecfa;
+      font-size: 13px;
+      color: #3f608c;
+    }
+    
+    .metric-label { color: #5f7da6; }
+    .metric-value { font-weight: 700; color: #1f4a7a; }
+
+    .customer-toolbar {
+      display: grid;
+      grid-template-columns: minmax(200px, 1fr) repeat(4, minmax(140px, .65fr));
+      gap: 12px;
+      margin: 10px 0 14px;
+      padding: 14px;
+      border: 1px solid #cfe0f6;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%);
+    }
+    .customer-toolbar label { display:block;margin-bottom:4px;color:#406491;font-size:13px;font-weight:700; }
+    .customer-toolbar select, .customer-toolbar input { width:100%;border:1px solid #c5d9f4;border-radius:10px;padding:9px 10px;background:#fff;color:#2a4d7a; }
+    .dashboard-brand-bar { display:flex;align-items:center;gap:10px;margin-bottom:12px; }
+    .dashboard-brand-bar label { font-size:13px;font-weight:700;color:#406491;white-space:nowrap; }
+    .dashboard-brand-bar select { min-width:200px;border:1px solid #c5d9f4;border-radius:10px;padding:8px 10px;background:#fff;color:#2a4d7a; }
+    .customer-scope { display:flex;align-items:center;gap:8px;margin:4px 0 12px;color:#56739f;font-size:13px; }
+    .customer-scope strong { color:#1f4a7a;font-size:15px; }
+    .customer-subnav { display:flex;flex-wrap:wrap;gap:8px;margin:12px 0; }
+    .customer-subnav button { border:1px solid #c5d9f4;border-radius:999px;padding:7px 12px;background:#fff;color:#315b8d;font-weight:700;cursor:pointer; }
+    .customer-subnav button.active { background:#245fbd;border-color:#245fbd;color:#fff; }
+    .customer-view { display:none; }
+    .customer-view.active { display:block; }
+    .customer-chart-grid { display:grid;grid-template-columns:1.15fr .85fr;gap:12px; }
+    .status-pill { display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:800; }
+    .status-active { background:#dcf7ee;color:#16725e; }
+    .status-sleep { background:#fff1ce;color:#8b5b00; }
+    .status-risk { background:#ffe2df;color:#a33d35; }
+    .customer-note { margin:8px 0 0;color:#6883a8;font-size:12px; }
+    .customer-analysis-toolbar {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(180px,260px));
+      gap:12px;
+      align-items:end;
+      margin:8px 0 12px;
+      padding:12px;
+      border:1px solid #d7e5f7;
+      border-radius:10px;
+      background:#f8fbff;
+    }
+    .customer-analysis-toolbar label { display:block;margin-bottom:4px;color:#406491;font-size:13px;font-weight:700; }
+    .customer-analysis-toolbar select { width:100%;border:1px solid #c5d9f4;border-radius:10px;padding:9px 10px;background:#fff;color:#2a4d7a; }
+
+    @media (max-width: 1180px) {
+      .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+      .kpi-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .filter-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .chart-grid-2 { grid-template-columns: 1fr; }
+      .product-hierarchy-grid, .product-control-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .product-chart-grid { grid-template-columns: 1fr; }
+      .customer-toolbar { grid-template-columns:repeat(2,minmax(180px,1fr)); }
+      .customer-chart-grid { grid-template-columns:1fr; }
+      .chart { height: 300px; }
+    }
+    @media (max-width: 920px) {
+      .repo-row input[type="text"] { min-width: 100%; }
+      .filter-grid { grid-template-columns: 1fr; }
+      .customer-toolbar { grid-template-columns:1fr; }
+      .chart { height: 280px; }
+    }
+  </style>
+  <link rel="stylesheet" href="../../theme.css" />
+</head>
+<body class="light-ui" data-page="sales">
+  <main class="tool-wrap">
+    <header class="hero">
+      <div class="lang-switch">
+        <button id="langZh" class="lang-btn" type="button" data-lang="zh">中文</button>
+        <button id="langEn" class="lang-btn" type="button" data-lang="en">EN</button>
+      </div>
+      <h1 data-i18n="pageTitle">销售分析看板（PV / ESS）</h1>
+      <p data-i18n="pageSubtitle">展示销售、目标达成、ASP 与产品结构趋势。</p>
+    </header>
+
+    <section class="panel">
+      <div class="actions">
+        <a class="btn-link" href="../../index.html" data-i18n="backHome">← 返回主页</a>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label data-i18n="sourceLabel">Sales 工作簿来源</label>
+        <div class="source-choice">
+          <label><input type="radio" name="salesSource" value="upload" checked /> <span data-i18n="sourceUpload">上传本地文件</span></label>
+          <label><input type="radio" name="salesSource" value="repo" /> <span data-i18n="sourceRepo">使用 GitHub 仓库文件</span></label>
+        </div>
+
+        <div id="uploadRow" class="form-grid" style="margin-top:6px;">
+          <div>
+            <label for="salesFile" data-i18n="uploadLabel">上传 Sales 工作簿 (.xlsx)</label>
+            <input id="salesFile" type="file" accept=".xlsx,.xls" />
+          </div>
+        </div>
+
+        <div id="repoRow" class="repo-row">
+          <div style="flex:1; min-width:360px;">
+            <label for="repoSalesPath" data-i18n="repoPathLabel">仓库文件路径</label>
+            <input id="repoSalesPath" type="text" value="../../templates/sales_workbook.xlsx" placeholder="../../templates/sales_workbook.xlsx" />
+            <div class="mini-tip" data-i18n="repoPathTip">例如：../../templates/sales_workbook.xlsx</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="runBtn" class="btn btn-primary" data-i18n="runBtn">运行分析</button>
+      </div>
+      <div id="status" class="status" data-i18n="statusInit">请选择文件来源并点击运行。</div>
+    </section>
+
+    <section class="panel">
+      <div class="jump-wrap" id="jumpWrap">
+        <button class="jump-btn active" data-target="block-total" data-i18n="tabTotal">总计 Dashboard</button>
+        <button class="jump-btn" data-target="block-region" data-i18n="tabRegion">各地区看板</button>
+        <button class="jump-btn" data-target="block-product" data-i18n="tabProduct">产品销售分析</button>
+        <button class="jump-btn" data-target="block-customer" data-i18n="tabCustomer">客户分析</button>
+        <button class="jump-btn" data-target="block-orders" data-i18n="tabOrderAnalysis">订单分析</button>
+      </div>
+
+      <div id="block-total" class="content-block active">
+        <div class="dashboard-brand-bar">
+          <label for="dashboardBrandSel" data-i18n="brand">品牌</label>
+          <select id="dashboardBrandSel"></select>
+        </div>
+        <h3 data-i18n="overviewTitle">2026年总览</h3>
+
+        <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
+        <div id="yearKpiRow" class="kpi-grid kpi-grid-4"></div>
+
+        <div class="sub-title" data-i18n="futureTitle">未来销售指标（2027+）</div>
+        <div id="futureKpiRow" class="kpi-grid kpi-grid-3"></div>
+
+        <div class="sub-title" data-i18n="row2Title">H1 销售数据</div>
+        <div id="h1KpiRow" class="kpi-grid kpi-grid-4"></div>
+
+        <div class="sub-title" data-i18n="row3Title">未结束季度进度</div>
+        <div class="table-wrap"><table id="quarterProgressTable"></table></div>
+
+        <div class="chart-box"><div id="monthlyTrendChart" class="chart"></div></div>
+        <div class="asp-panel">
+          <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
+          <div class="filter-grid compact">
+            <div><label for="pvAspRegionSel" data-i18n="filterRegion">地区</label><select id="pvAspRegionSel" multiple size="4"></select></div>
+            <div><label for="pvAspBrandSel" data-i18n="brand">品牌</label><select id="pvAspBrandSel" multiple size="4"></select></div>
+            <div><label for="pvAspLevel1Sel" data-i18n="level1">一级分类</label><select id="pvAspLevel1Sel" multiple size="4"></select></div>
+            <div><label for="pvAspLevel2Sel" data-i18n="level2">二级分类</label><select id="pvAspLevel2Sel" multiple size="4"></select></div>
+          </div>
+          <div class="chart-box"><div id="monthlyPvAspChart" class="chart"></div></div>
+        </div>
+        <div class="asp-panel">
+          <div class="sub-title" data-i18n="essAspFilterTitle">ESS ASP 筛选</div>
+          <div class="filter-grid compact">
+            <div><label for="essAspRegionSel" data-i18n="filterRegion">地区</label><select id="essAspRegionSel" multiple size="4"></select></div>
+            <div><label for="essAspBrandSel" data-i18n="brand">品牌</label><select id="essAspBrandSel" multiple size="4"></select></div>
+            <div><label for="essAspLevel1Sel" data-i18n="level1">一级分类</label><select id="essAspLevel1Sel" multiple size="4"></select></div>
+            <div><label for="essAspLevel2Sel" data-i18n="level2">二级分类</label><select id="essAspLevel2Sel" multiple size="4"></select></div>
+          </div>
+          <div class="chart-box"><div id="monthlyEssAspChart" class="chart"></div></div>
+        </div>
+      </div>
+
+      <div id="block-region" class="content-block">
+        <div class="filter-grid">
+          <div>
+            <label for="incomeTypeSel" data-i18n="filterIncome">收入类型</label>
+            <select id="incomeTypeSel" multiple size="3">
+              <option value="total" data-i18n="incomeTotal">总计</option>
+              <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
+              <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
+            </select>
+          </div>
+          <div>
+            <label for="yearSel" data-i18n="filterYear">年份</label>
+            <select id="yearSel" multiple size="5"></select>
+          </div>
+          <div>
+            <label for="quarterSel" data-i18n="filterQuarter">季度</label>
+            <select id="quarterSel" multiple size="5"></select>
+          </div>
+          <div>
+            <label for="monthSel" data-i18n="filterMonth">月份</label>
+            <select id="monthSel" multiple size="5"></select>
+          </div>
+        </div>
+
+        <div id="regionGrid" class="region-grid"></div>
+      </div>
+
+      <div id="block-product" class="content-block">
+        <h3 data-i18n="productTitle">产品销售分析</h3>
+        <div class="product-filter-panel">
+          <div class="filter-section-title" data-i18n="productHierarchyTitle">产品层级筛选</div>
+          <div class="filter-grid compact product-hierarchy-grid">
+            <div><label for="productCategorySel" data-i18n="category">类别</label><select id="productCategorySel" multiple size="4"></select></div>
+            <div><label for="productBrandSel" data-i18n="brand">品牌</label><select id="productBrandSel" multiple size="4"></select></div>
+            <div>
+              <label for="productLevelSel" data-i18n="analysisLevel">分析层级</label>
+              <select id="productLevelSel">
+                <option value="level1" data-i18n="level1">一级分类</option>
+                <option value="level2" data-i18n="level2" selected>二级分类</option>
+              </select>
+            </div>
+            <div><label for="productLevelValuesSel" data-i18n="analysisProducts">分析分类</label><select id="productLevelValuesSel" multiple size="4"></select></div>
+          </div>
+          <div class="filter-section-title" data-i18n="productControlTitle">分析条件</div>
+          <div class="filter-grid product-control-grid">
+            <div>
+              <label for="productMetricSel" data-i18n="productMetric">分析指标</label>
+              <select id="productMetricSel">
+                <option value="revenue" data-i18n="metricRevenue">销售收入</option>
+                <option value="pvQty" data-i18n="metricPvQty">PV 销量 (MW)</option>
+                <option value="essQty" data-i18n="metricEssQty">ESS 销量 (Sets)</option>
+              </select>
+            </div>
+            <div>
+              <label for="productIncomeSel" data-i18n="filterIncome">收入类型</label>
+              <select id="productIncomeSel">
+                <option value="total" data-i18n="incomeTotal">总计</option>
+                <option value="invoiced" data-i18n="incomeInvoiced">开票收入</option>
+                <option value="confirm" data-i18n="incomeConfirm">待确认收入</option>
+              </select>
+            </div>
+            <div>
+              <label for="productRegionSel" data-i18n="filterRegion">地区</label>
+              <select id="productRegionSel"></select>
+            </div>
+            <div>
+              <label for="productStartMonthSel" data-i18n="startMonth">开始月份</label>
+              <select id="productStartMonthSel"></select>
+            </div>
+            <div>
+              <label for="productEndMonthSel" data-i18n="endMonth">结束月份</label>
+              <select id="productEndMonthSel"></select>
+            </div>
+          </div>
+        </div>
+        <div class="filter-note" data-i18n="productNote">数量视图分别显示 PV MW 或 ESS Sets，避免不同单位相加。</div>
+        <div id="productKpiRow" class="kpi-grid kpi-grid-4"></div>
+        <div class="product-chart-grid">
+          <div class="chart-box"><div id="productTrendChart" class="chart"></div></div>
+          <div class="chart-box"><div id="productShareChart" class="chart"></div></div>
+        </div>
+        <div class="table-wrap"><table id="productRankingTable"></table></div>
+
+        <div id="velocitySection" style="margin-top:18px;">
+          <div class="sub-title" data-i18n="velocityTitle">PV 动销率（月度销量矩阵）</div>
+          <div class="filter-note" data-i18n="velocityNote">展示每个地区 × 版型（Level2）在 2026 年各月的 PV 销量（MW），右列为月均。复用上方产品层级筛选与分析条件。</div>
+          <div class="chart-box"><div id="velocityHeatmap" class="chart" style="height:380px;"></div></div>
+          <div class="table-wrap" style="max-height:480px;"><table id="velocityTable"></table></div>
+        </div>
+      </div>
+
+      <div id="block-customer" class="content-block">
+        <h3 data-i18n="customerTitle">客户分析</h3>
+        <p class="mini-tip" data-i18n="customerSubtitle">先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。</p>
+        <div class="customer-toolbar">
+          <div><label for="customerRegionSel" data-i18n="customerRegion">分析地区</label><select id="customerRegionSel"></select></div>
+          <div><label for="customerYearSel" data-i18n="customerYear">分析年份</label><select id="customerYearSel"></select></div>
+          <div><label for="customerProductSel" data-i18n="customerProduct">产品线</label><select id="customerProductSel"><option value="__ALL__">全部</option><option value="PV">PV</option><option value="ESS">ESS</option><option value="HP">HP</option></select></div>
+          <div><label for="customerBrandSel" data-i18n="customerBrand">品牌</label><select id="customerBrandSel"></select></div>
+          <div><label for="customerSearch" data-i18n="customerSearch">搜索客户</label><input id="customerSearch" type="search" placeholder="客户名称 / 国家" data-i18n-placeholder="customerSearchPlaceholder" /></div>
+        </div>
+        <div class="customer-scope"><span data-i18n="customerCurrentScope">当前分析范围</span><strong id="customerScopeLabel">全球总览</strong></div>
+
+        <div id="customerOverviewKpis" class="kpi-grid kpi-grid-4"></div>
+        <div class="customer-chart-grid">
+          <div class="chart-box"><div id="customerTrendChart" class="chart"></div></div>
+          <div class="chart-box"><div id="customerRegionChart" class="chart"></div></div>
+        </div>
+
+        <div class="customer-subnav" id="customerSubnav">
+          <button class="active" type="button" data-customer-view="region" data-i18n="customerTabRegion">地区概览</button>
+          <button type="button" data-customer-view="product" data-i18n="customerTabProduct">产品结构</button>
+          <button type="button" data-customer-view="activity" data-i18n="customerTabActivity">活跃度</button>
+          <button type="button" data-customer-view="value" data-i18n="customerTabValue">客户价值</button>
+          <button type="button" data-customer-view="detail" data-i18n="customerTabDetail">客户明细</button>
+        </div>
+
+        <div id="customer-view-region" class="customer-view active"><div class="table-wrap"><table id="customerRegionTable"></table></div></div>
+        <div id="customer-view-product" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerProductChart" class="chart"></div></div><div class="chart-box"><div id="customerMixChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerProductTable"></table></div></div>
+        <div id="customer-view-activity" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerActivityChart" class="chart"></div></div><div class="chart-box"><div id="customerStatusChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerActivityTable"></table></div></div>
+        <div id="customer-view-value" class="customer-view"><div class="customer-chart-grid"><div class="chart-box"><div id="customerValueChart" class="chart"></div></div><div class="chart-box"><div id="customerConcentrationChart" class="chart"></div></div></div><div class="table-wrap"><table id="customerValueTable"></table></div></div>
+        <div id="customer-view-detail" class="customer-view"><div class="table-wrap"><table id="customerDetailTable"></table></div></div>
+        <p class="customer-note" data-i18n="customerDefinition">活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。</p>
+      </div>
+
+      <div id="block-orders" class="content-block">
+        <h3 data-i18n="orderAnalysisTitle">订单分析</h3>
+        <p class="mini-tip" data-i18n="orderAnalysisSubtitle">查看各地区当月订单状态及季度客户 × Model MW矩阵。</p>
+        <div class="customer-toolbar">
+          <div><label for="orderRegionSel" data-i18n="customerRegion">分析地区</label><select id="orderRegionSel"></select></div>
+          <div><label for="orderYearSel" data-i18n="customerYear">分析年份</label><select id="orderYearSel"></select></div>
+          <div><label for="orderProductSel" data-i18n="customerProduct">产品线</label><select id="orderProductSel"></select></div>
+          <div><label for="orderBrandSel" data-i18n="customerBrand">品牌</label><select id="orderBrandSel"></select></div>
+          <div><label for="orderSearch" data-i18n="customerSearch">搜索客户</label><input id="orderSearch" type="search" placeholder="客户名称 / Model" data-i18n-placeholder="orderSearchPlaceholder" /></div>
+        </div>
+
+        <div class="sub-title" data-i18n="orderStatusSectionTitle">当月订单状态</div>
+        <div class="customer-analysis-toolbar">
+          <div><label for="customerStatusMonthSel" data-i18n="customerStatusMonth">分析月份</label><select id="customerStatusMonthSel"></select></div>
+        </div>
+        <p class="filter-note" data-i18n="customerStatusNote">按地区、客户和 Model 汇总 Total MW；状态列来自 Order Status，MW全为0的状态列自动隐藏，CRD/SAD/SSD 展示不重复日期。</p>
+        <div class="table-wrap" style="max-height:560px;"><table id="customerOrderStatusTable"></table></div>
+
+        <div class="sub-title" style="margin-top:20px;" data-i18n="orderQuarterSectionTitle">季度订单矩阵</div>
+        <div class="customer-analysis-toolbar">
+          <div><label for="customerQuarterSel" data-i18n="customerQuarter">分析季度</label><select id="customerQuarterSel"></select></div>
+        </div>
+        <p class="filter-note" data-i18n="customerQuarterNote">按客户和 Model 展示所选季度各月的 Total MW，并提供订单数和 MW 汇总；地区使用上方筛选。</p>
+        <div class="table-wrap" style="max-height:560px;"><table id="customerQuarterOrderTable"></table></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="regionDetailModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="regionDetailTitle">
+    <section class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="regionDetailTitle">地区总计 Dashboard</h2>
+        <button id="regionDetailClose" class="modal-close" type="button" aria-label="关闭" data-i18n-aria-label="close">×</button>
+      </div>
+      <div class="dashboard-brand-bar">
+        <label data-i18n="brand">品牌</label>
+        <select id="detailBrandSel"></select>
+      </div>
+      <div class="sub-title" data-i18n="row1Title">全年核心指标</div>
+      <div id="detailYearKpiRow" class="kpi-grid kpi-grid-4"></div>
+      <div class="sub-title" data-i18n="futureTitle">未来销售指标（2027+）</div>
+      <div id="detailFutureKpiRow" class="kpi-grid kpi-grid-3"></div>
+      <div class="sub-title" data-i18n="row2Title">H1 销售数据</div>
+      <div id="detailH1KpiRow" class="kpi-grid kpi-grid-4"></div>
+      <div class="sub-title" data-i18n="row3Title">未结束季度进度</div>
+      <div class="table-wrap"><table id="detailQuarterProgressTable"></table></div>
+      <div class="chart-box"><div id="detailMonthlyTrendChart" class="chart"></div></div>
+      <div class="asp-panel">
+        <div class="sub-title" data-i18n="pvAspFilterTitle">PV ASP 筛选</div>
+        <div class="filter-grid compact">
+          <div><label for="detailPvAspRegionSel" data-i18n="filterRegion">地区</label><select id="detailPvAspRegionSel" multiple size="4"></select></div>
+          <div><label for="detailPvAspBrandSel" data-i18n="brand">品牌</label><select id="detailPvAspBrandSel" multiple size="4"></select></div>
+          <div><label for="detailPvAspLevel1Sel" data-i18n="level1">一级分类</label><select id="detailPvAspLevel1Sel" multiple size="4"></select></div>
+          <div><label for="detailPvAspLevel2Sel" data-i18n="level2">二级分类</label><select id="detailPvAspLevel2Sel" multiple size="4"></select></div>
+        </div>
+        <div class="chart-box"><div id="detailMonthlyPvAspChart" class="chart"></div></div>
+      </div>
+      <div class="asp-panel">
+        <div class="sub-title" data-i18n="essAspFilterTitle">ESS ASP 筛选</div>
+        <div class="filter-grid compact">
+          <div><label for="detailEssAspRegionSel" data-i18n="filterRegion">地区</label><select id="detailEssAspRegionSel" multiple size="4"></select></div>
+          <div><label for="detailEssAspBrandSel" data-i18n="brand">品牌</label><select id="detailEssAspBrandSel" multiple size="4"></select></div>
+          <div><label for="detailEssAspLevel1Sel" data-i18n="level1">一级分类</label><select id="detailEssAspLevel1Sel" multiple size="4"></select></div>
+          <div><label for="detailEssAspLevel2Sel" data-i18n="level2">二级分类</label><select id="detailEssAspLevel2Sel" multiple size="4"></select></div>
+        </div>
+        <div class="chart-box"><div id="detailMonthlyEssAspChart" class="chart"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="./sales-change-analysis.js"></script>
+  <script src="./customer-analysis.js"></script>
+</body>
+</html>
+
+
+

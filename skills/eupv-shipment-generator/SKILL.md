@@ -114,3 +114,7 @@ PICKUP files may have headers on row 6, 5, 7, or other. The system tries each ca
 8. [ ] Write output sheet with 14-column layout.
 9. [ ] Apply Excel formatting (borders, centering, auto-width).
 10. [ ] Save back to original file (in-place).
+
+## Packaged resources and limitation
+
+Read [references/calculation-logic.md](references/calculation-logic.md) and [references/reproduction.md](references/reproduction.md). The source repository includes only a documentation page, preserved under `assets/original-site/`; it does not include the referenced local Python implementation. Do not claim executable parity until representative Shipment/PICKUP files confirm the remaining alias and file-order details. Verify copied sources with `python scripts/verify_package.py`.

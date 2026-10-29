@@ -141,3 +141,7 @@ Counts: total POs, passed, differences, review-required, excluded; type mapping 
 9. [ ] Output 4-sheet workbook with fixed column orders.
 10. [ ] Keep all PO rows (hide In Stock on page, keep in download).
 11. [ ] Never overwrite original ETA in PO Details.
+
+## Packaged resources
+
+Use `scripts/po_check.py` for the portable deterministic implementation. Read [references/calculation-logic.md](references/calculation-logic.md), [references/input-output-spec.md](references/input-output-spec.md), and [references/reproduction.md](references/reproduction.md). The original browser module and warehouse mapping are preserved under `assets/original-site/`. Verify copied sources with `python scripts/verify_package.py`, then run the unit tests.

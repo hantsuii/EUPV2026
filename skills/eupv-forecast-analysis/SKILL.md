@@ -168,3 +168,7 @@ Run the same samples with `basis = "mw"` and `basis = "weighted"`, then compare 
 8. [ ] Generate data quality report (invalid, negative, incomplete, duplicates).
 9. [ ] Export detail samples as CSV.
 10. [ ] Only evaluate completed months — never include current or future months as actuals.
+
+## Packaged resources
+
+Read [references/calculation-logic.md](references/calculation-logic.md) for the current normative formulas, including the shared-universe regional contribution and cancellation analysis. Read [references/reproduction.md](references/reproduction.md) before running or porting the module. The exact current browser implementation and CommonJS-compatible core are in `assets/original-site/`. Verify copied sources with `python scripts/verify_package.py`.

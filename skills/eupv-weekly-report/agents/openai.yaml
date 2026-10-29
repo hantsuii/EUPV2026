@@ -1,0 +1,4 @@
+interface:
+  display_name: "EUPV Static Weekly Report"
+  short_description: "Maintain the bilingual static weekly download page"
+  default_prompt: "Use $eupv-weekly-report to reproduce or update the static bilingual report-download page without inventing report calculations."
