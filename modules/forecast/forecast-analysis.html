@@ -14,7 +14,7 @@
     .tool-wrap { max-width: 1460px; }
     .hero .lang-switch { position: absolute; top: 18px; right: 22px; }
     .panel { margin-bottom: 16px; }
-    .controls { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+    .controls { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; align-items: end; }
     .source-file { max-width: 560px; }
     .result-controls { margin-bottom: 14px; }
     .section-controls { display: grid; grid-template-columns: repeat(3, minmax(170px, 1fr)); gap: 12px; align-items: end; max-width: 760px; margin: 0 0 12px; }
@@ -98,6 +98,7 @@
           <div class="field"><label for="regionSel" data-i18n="regionLabel">销售地区</label><select id="regionSel" disabled></select></div>
           <div class="field"><label for="horizonSel" data-i18n="horizonLabel">预测周期</label><select id="horizonSel" disabled></select></div>
           <div class="field"><label for="basisSel" data-i18n="basisLabel">预测口径</label><select id="basisSel" disabled></select></div>
+          <div class="field"><label for="resultStartMonthSel" data-i18n="dataStartMonthLabel">数据起始月份</label><select id="resultStartMonthSel" disabled></select></div>
         </div>
         <div id="kpiGrid" class="kpi-grid"></div>
       </section>
@@ -110,10 +111,10 @@
       </section>
 
       <section class="panel">
-        <div class="section-head"><h2 data-i18n="accuracyTrendSectionTitle">月度预测准确率趋势</h2><p data-i18n="accuracyTrendNote">所有周期均按实际销售月份统计；累计周期以完整区间的结束月定位。</p></div>
+        <div class="section-head"><h2 data-i18n="accuracyTrendSectionTitle">月度预测准确率趋势</h2><p data-i18n="accuracyTrendNote">数据起始月份按预测 Series 起算；所有周期的准确率月份均显示截止月份。</p></div>
         <div class="trend-controls">
           <div class="field"><label for="trendRegionSel" data-i18n="trendRegionLabel">趋势图 Sales Region</label><select id="trendRegionSel" disabled></select></div>
-          <div class="field"><label for="trendStartMonthSel" data-i18n="trendStartMonthLabel">WAPE 数据起始月份</label><select id="trendStartMonthSel" disabled></select></div>
+          <div class="field"><label for="trendStartMonthSel" data-i18n="trendStartMonthLabel">数据起始月份</label><select id="trendStartMonthSel" disabled></select></div>
           <div class="field curve-picker"><label data-i18n="trendCurvesLabel">显示曲线</label><div id="trendCurveOptions" class="curve-options"></div></div>
         </div>
         <div id="accuracyTrendChart" class="chart"></div>

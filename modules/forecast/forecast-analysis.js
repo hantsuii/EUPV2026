@@ -14,6 +14,7 @@ window.PAGE_I18N = {
     basisLabel: "预测口径",
     startMonthLabel: "开始月份",
     endMonthLabel: "结束月份",
+    dataStartMonthLabel: "数据起始月份",
     runButton: "读取并分析",
     exportButton: "下载分析明细",
     statusInitial: "请选择包含 Data 工作表的 FCST KPI 文件。",
@@ -71,13 +72,13 @@ window.PAGE_I18N = {
     horizonAccuracy: "准确率",
     horizonBias: "Bias",
     accuracyTrendSectionTitle: "月度预测准确率趋势",
-    accuracyTrendNote: "所有周期均按实际销售月份统计；累计周期以完整区间的结束月定位。",
+    accuracyTrendNote: "数据起始月份按预测 Series 起算；所有周期的准确率月份均显示截止月份。",
     accuracyTrendTitle: "月度 WAPE 准确率",
     trendRegionLabel: "趋势图 Sales Region",
-    trendStartMonthLabel: "WAPE 数据起始月份",
+    trendStartMonthLabel: "数据起始月份",
     trendCurvesLabel: "显示曲线",
     allMonths: "所有月份",
-    trendPeriodAxis: "实际销售月份",
+    trendPeriodAxis: "截止月份",
     actualMonth: "实际销售月份",
     seriesLabel: "预测 Series",
     weightChartTitle: "权重调整前后 WAPE",
@@ -118,8 +119,8 @@ window.PAGE_I18N = {
     negativeRows: "目标月早于 Series",
     incompleteActuals: "未结束月份 Actuals 行",
     qualityWarningText: "发现 {duplicates} 组相同 Series、国家、地区、类别和目标月份的记录，分析时已求和。另有 {negative} 行目标月份早于 Series，不纳入已确认的预测周期指标。",
-    categoryOverviewNote: "{horizon} · {basis} · 所有地区",
-    scopeNote: "{category} · {region} · {horizon} · {basis}",
+    categoryOverviewNote: "{horizon} · {basis} · 所有地区 · 数据起始月份 {startMonth}",
+    scopeNote: "{category} · {region} · {horizon} · {basis} · 数据起始月份 {startMonth}",
     detailNote: "采用 {basis}，缺少 Actual 或 Forecast 的组合不计入准确率。",
     csvFile: "销售预测准确性明细.csv",
     M1: "M+1",
@@ -141,6 +142,7 @@ window.PAGE_I18N = {
     basisLabel: "Forecast basis",
     startMonthLabel: "Start month",
     endMonthLabel: "End month",
+    dataStartMonthLabel: "Data start month",
     runButton: "Load and analyze",
     exportButton: "Download detail",
     statusInitial: "Choose an FCST KPI workbook containing a Data sheet.",
@@ -198,13 +200,13 @@ window.PAGE_I18N = {
     horizonAccuracy: "Accuracy",
     horizonBias: "Bias",
     accuracyTrendSectionTitle: "Monthly forecast accuracy trend",
-    accuracyTrendNote: "All horizons are reported by actual sales month; cumulative horizons use the end month of the completed window.",
+    accuracyTrendNote: "The data start month is based on forecast Series; accuracy for every horizon is shown by its ending month.",
     accuracyTrendTitle: "Monthly WAPE accuracy",
     trendRegionLabel: "Trend Sales Region",
-    trendStartMonthLabel: "WAPE data start month",
+    trendStartMonthLabel: "Data start month",
     trendCurvesLabel: "Visible curves",
     allMonths: "All months",
-    trendPeriodAxis: "Actual sales month",
+    trendPeriodAxis: "Ending month",
     actualMonth: "Actual sales month",
     seriesLabel: "Forecast Series",
     weightChartTitle: "WAPE before and after weighting",
@@ -245,8 +247,8 @@ window.PAGE_I18N = {
     negativeRows: "Target before Series",
     incompleteActuals: "Current/future actual rows",
     qualityWarningText: "{duplicates} groups share the same Series, country, region, category and target month; they are summed. {negative} rows target a month before Series and are excluded from the agreed forecast-horizon metrics.",
-    categoryOverviewNote: "{horizon} · {basis} · all regions",
-    scopeNote: "{category} · {region} · {horizon} · {basis}",
+    categoryOverviewNote: "{horizon} · {basis} · all regions · data from {startMonth}",
+    scopeNote: "{category} · {region} · {horizon} · {basis} · data from {startMonth}",
     detailNote: "Using {basis}; combinations missing Actual or Forecast are excluded from accuracy metrics.",
     csvFile: "sales_forecast_accuracy_detail.csv",
     M1: "M+1",
@@ -266,6 +268,7 @@ const categorySel = byId("categorySel");
 const regionSel = byId("regionSel");
 const horizonSel = byId("horizonSel");
 const basisSel = byId("basisSel");
+const resultStartMonthSel = byId("resultStartMonthSel");
 const trendRegionSel = byId("trendRegionSel");
 const trendStartMonthSel = byId("trendStartMonthSel");
 const trendCurveOptions = byId("trendCurveOptions");
@@ -333,12 +336,13 @@ function initControls() {
     { value: "weighted", label: t("weightedBasis") },
   ], basisSel.value || "official");
   refreshRegions(regionSel.value || "__ALL__");
+  refreshResultStartMonths(resultStartMonthSel.value || "__ALL__");
   refreshTrendRegions(trendRegionSel.value || regionSel.value || "__ALL__");
   renderTrendCurveOptions();
   refreshTrendStartMonths(trendStartMonthSel.value || "__ALL__");
   refreshWeightMonthOptions(weightStartMonthSel.value, weightEndMonthSel.value);
   refreshRegionMonthOptions(regionStartMonthSel.value, regionEndMonthSel.value);
-  [categorySel, regionSel, horizonSel, basisSel].forEach((select) => { select.disabled = false; });
+  [categorySel, regionSel, horizonSel, basisSel, resultStartMonthSel].forEach((select) => { select.disabled = false; });
   [trendRegionSel, trendStartMonthSel].forEach((select) => { select.disabled = false; });
   [weightCategorySel, regionCategorySel].forEach((select) => { select.disabled = false; });
 }
@@ -367,22 +371,30 @@ function trendAnalysis(horizonId) {
   return Core.analyze(normalizedRows, analysisOptions({ horizonId, region: trendRegionSel.value || "__ALL__" }));
 }
 
-function sampleActualMonth(row, config) {
-  return config.kind === "window" ? row.periodEnd : row.periodStart;
+function sampleAccuracyMonth(row) {
+  return row.periodEnd;
+}
+
+function availableSeriesMonths(category = categorySel.value, region = "__ALL__") {
+  return [...new Set(normalizedRows
+    .filter((row) => !row.isActual && row.category === category && (region === "__ALL__" || row.region === region))
+    .map((row) => row.series))].sort();
+}
+
+function refreshResultStartMonths(selectedValue = "__ALL__") {
+  const months = availableSeriesMonths(categorySel.value, regionSel.value || "__ALL__");
+  setOptions(resultStartMonthSel, [{ value: "__ALL__", label: t("allMonths") }, ...months.map((value) => ({ value, label: value }))], selectedValue);
 }
 
 function refreshTrendStartMonths(selectedValue = "__ALL__") {
-  const months = [...new Set(Object.keys(Core.HORIZONS).flatMap((id) => {
-    const result = trendAnalysis(id);
-    return result.samples.map((row) => sampleActualMonth(row, result.config));
-  }))].sort();
+  const months = availableSeriesMonths(categorySel.value, trendRegionSel.value || "__ALL__");
   setOptions(trendStartMonthSel, [{ value: "__ALL__", label: t("allMonths") }, ...months.map((value) => ({ value, label: value }))], selectedValue);
 }
 
 function availableComparisonMonths(category, horizonIds = Object.keys(Core.HORIZONS)) {
   return [...new Set(horizonIds.flatMap((id) => {
     const result = Core.analyze(normalizedRows, analysisOptions({ category, region: "__ALL__", horizonId: id }));
-    return result.samples.map((row) => sampleActualMonth(row, result.config));
+    return result.samples.map((row) => sampleAccuracyMonth(row));
   }))].sort();
 }
 
@@ -415,9 +427,15 @@ function refreshRegionMonthOptions(selectedStart, selectedEnd) {
 
 function filterAnalysisByMonths(result, startMonth, endMonth) {
   const samples = result.samples.filter((row) => {
-    const month = sampleActualMonth(row, result.config);
+    const month = sampleAccuracyMonth(row);
     return (!startMonth || month >= startMonth) && (!endMonth || month <= endMonth);
   });
+  return { ...result, samples, summary: Core.summarize(samples, result.summary.hitThreshold) };
+}
+
+function filterAnalysisBySeriesStart(result, startMonth) {
+  if (!startMonth || startMonth === "__ALL__") return result;
+  const samples = result.samples.filter((row) => row.series >= startMonth);
   return { ...result, samples, summary: Core.summarize(samples, result.summary.hitThreshold) };
 }
 
@@ -442,7 +460,8 @@ function analysisOptions(overrides = {}) {
 }
 
 function renderCategoryOverview() {
-  const results = Core.analyzeCategories(normalizedRows, analysisOptions());
+  const results = Core.analyzeCategories(normalizedRows, analysisOptions())
+    .map((result) => ({ ...filterAnalysisBySeriesStart(result, resultStartMonthSel.value), category: result.category }));
   const rows = results.map((item) => [
     item.category,
     basisName(item.basis, item.config.id),
@@ -456,10 +475,15 @@ function renderCategoryOverview() {
   ]);
   buildTable("categoryTable", [t("category"), t("basis"), t("actual"), t("forecast"), t("wape"), t("accuracy"), t("bias"), t("hitRate"), t("sampleCount")], rows,
     results.map((item) => ` data-category="${esc(item.category)}"${item.category === categorySel.value ? ' class="selected"' : ""}`));
-  byId("categoryOverviewNote").textContent = t("categoryOverviewNote", { horizon: horizonName(horizonSel.value), basis: basisName(basisSel.value) });
+  byId("categoryOverviewNote").textContent = t("categoryOverviewNote", {
+    horizon: horizonName(horizonSel.value),
+    basis: basisName(basisSel.value),
+    startMonth: resultStartMonthSel.value === "__ALL__" ? t("allMonths") : resultStartMonthSel.value,
+  });
   byId("categoryTable").querySelectorAll("tbody tr[data-category]").forEach((row) => row.addEventListener("click", () => {
     categorySel.value = row.dataset.category;
     refreshRegions("__ALL__");
+    refreshResultStartMonths("__ALL__");
     refreshTrendRegions("__ALL__");
     refreshTrendStartMonths("__ALL__");
     renderAll();
@@ -487,6 +511,7 @@ function renderKpis(result) {
     region: regionSel.value === "__ALL__" ? t("allRegions") : regionSel.value,
     horizon: horizonName(horizonSel.value),
     basis: basisName(basisSel.value),
+    startMonth: resultStartMonthSel.value === "__ALL__" ? t("allMonths") : resultStartMonthSel.value,
   });
 }
 
@@ -502,14 +527,14 @@ function plot(divId, traces, layout) {
 function renderTrend(result) {
   const samples = result.samples;
   plot("trendChart", [
-    { x: samples.map((row) => row.series), y: samples.map((row) => row.actual), type: "scatter", mode: "lines+markers", name: t("trendActual"), line: { color: "#158879", width: 3 }, customdata: samples.map((row) => row.periodLabel), hovertemplate: "%{x}<br>%{customdata}<br>%{y:.1f} MW<extra></extra>" },
-    { x: samples.map((row) => row.series), y: samples.map((row) => row.forecast), type: "scatter", mode: "lines+markers", name: t("trendForecast"), line: { color: "#2f72ad", width: 3 }, customdata: samples.map((row) => row.periodLabel), hovertemplate: "%{x}<br>%{customdata}<br>%{y:.1f} MW<extra></extra>" },
-  ], { title: t("trendTitle"), xaxis: { title: t("forecastSeries"), gridcolor: "#e5edf2" }, yaxis: { title: "MW", gridcolor: "#e5edf2" } });
+    { x: samples.map((row) => sampleAccuracyMonth(row)), y: samples.map((row) => row.actual), type: "scatter", mode: "lines+markers", name: t("trendActual"), line: { color: "#158879", width: 3 }, customdata: samples.map((row) => [row.series, row.periodLabel]), hovertemplate: `${t("trendPeriodAxis")} %{x}<br>${t("seriesLabel")} %{customdata[0]}<br>%{customdata[1]}<br>%{y:.1f} MW<extra></extra>` },
+    { x: samples.map((row) => sampleAccuracyMonth(row)), y: samples.map((row) => row.forecast), type: "scatter", mode: "lines+markers", name: t("trendForecast"), line: { color: "#2f72ad", width: 3 }, customdata: samples.map((row) => [row.series, row.periodLabel]), hovertemplate: `${t("trendPeriodAxis")} %{x}<br>${t("seriesLabel")} %{customdata[0]}<br>%{customdata[1]}<br>%{y:.1f} MW<extra></extra>` },
+  ], { title: t("trendTitle"), xaxis: { title: t("trendPeriodAxis"), gridcolor: "#e5edf2" }, yaxis: { title: "MW", gridcolor: "#e5edf2" } });
 }
 
 function renderHorizonChart() {
   const ids = Object.keys(Core.HORIZONS);
-  const results = ids.map((id) => Core.analyze(normalizedRows, analysisOptions({ horizonId: id })));
+  const results = ids.map((id) => filterAnalysisBySeriesStart(Core.analyze(normalizedRows, analysisOptions({ horizonId: id })), resultStartMonthSel.value));
   plot("horizonChart", [
     { x: ids.map(horizonName), y: results.map((item) => item.summary.accuracy == null ? null : item.summary.accuracy * 100), type: "bar", name: t("horizonAccuracy"), marker: { color: "#2a8c82" }, text: results.map((item) => fmtPct(item.summary.accuracy)), textposition: "outside", hovertemplate: "%{x}<br>%{y:.1f}%<extra></extra>" },
     { x: ids.map(horizonName), y: results.map((item) => item.summary.bias == null ? null : item.summary.bias * 100), type: "scatter", mode: "lines+markers", name: t("horizonBias"), yaxis: "y2", line: { color: "#d07836", width: 3 }, hovertemplate: "%{x}<br>%{y:.1f}%<extra></extra>" },
@@ -522,11 +547,11 @@ function renderAccuracyTrend() {
   const colors = { M1: "#198d80", M3: "#3278b8", M6: "#8a67b4", M1_3: "#d07836", M1_6: "#c14f70" };
   const results = horizonIds.map((id) => ({ id, result: trendAnalysis(id) }));
   const actualMonths = [...new Set(results.flatMap(({ result }) => result.samples
-    .filter((row) => row.ape != null && (startMonth === "__ALL__" || sampleActualMonth(row, result.config) >= startMonth))
-    .map((row) => sampleActualMonth(row, result.config))))].sort();
+    .filter((row) => row.ape != null && (startMonth === "__ALL__" || row.series >= startMonth))
+    .map((row) => sampleAccuracyMonth(row))))].sort();
   const traces = results.map(({ id, result }) => {
-    const usable = result.samples.filter((row) => row.ape != null && (startMonth === "__ALL__" || sampleActualMonth(row, result.config) >= startMonth));
-    const byMonth = new Map(usable.map((row) => [sampleActualMonth(row, result.config), row]));
+    const usable = result.samples.filter((row) => row.ape != null && (startMonth === "__ALL__" || row.series >= startMonth));
+    const byMonth = new Map(usable.map((row) => [sampleAccuracyMonth(row), row]));
     return {
       x: actualMonths,
       y: actualMonths.map((month) => {
@@ -679,6 +704,7 @@ function renderRegions() {
     categorySel.value = regionCategorySel.value;
     refreshRegions(row.dataset.region);
     regionSel.value = row.dataset.region;
+    refreshResultStartMonths("__ALL__");
     refreshTrendRegions("__ALL__");
     refreshTrendStartMonths("__ALL__");
     renderAll();
@@ -711,7 +737,7 @@ function renderQuality() {
 function renderAll() {
   if (!normalizedRows.length) return;
   dashboard.classList.add("ready");
-  activeAnalysis = Core.analyze(normalizedRows, analysisOptions());
+  activeAnalysis = filterAnalysisBySeriesStart(Core.analyze(normalizedRows, analysisOptions()), resultStartMonthSel.value);
   renderCategoryOverview();
   renderKpis(activeAnalysis);
   renderTrend(activeAnalysis);
@@ -777,11 +803,13 @@ runBtn.addEventListener("click", loadWorkbook);
 exportBtn.addEventListener("click", exportDetail);
 categorySel.addEventListener("change", () => {
   refreshRegions("__ALL__");
+  refreshResultStartMonths("__ALL__");
   refreshTrendRegions("__ALL__");
   refreshTrendStartMonths("__ALL__");
   renderAll();
 });
-regionSel.addEventListener("change", renderAll);
+regionSel.addEventListener("change", () => { refreshResultStartMonths(resultStartMonthSel.value); renderAll(); });
+[resultStartMonthSel].forEach((select) => select.addEventListener("change", renderAll));
 [horizonSel, basisSel].forEach((select) => select.addEventListener("change", () => {
   refreshRegionMonthOptions(regionStartMonthSel.value, regionEndMonthSel.value);
   renderAll();
@@ -813,6 +841,7 @@ window.addEventListener("app-language-change", () => {
   const region = regionSel.value;
   const horizon = horizonSel.value;
   const basis = basisSel.value;
+  const resultStartMonth = resultStartMonthSel.value;
   const trendRegion = trendRegionSel.value;
   const trendStartMonth = trendStartMonthSel.value;
   const trendHorizons = selectedTrendHorizons();
@@ -827,6 +856,7 @@ window.addEventListener("app-language-change", () => {
   refreshRegions(region);
   horizonSel.value = horizon;
   basisSel.value = basis;
+  refreshResultStartMonths(resultStartMonth);
   refreshTrendRegions(trendRegion);
   renderTrendCurveOptions(trendHorizons);
   refreshTrendStartMonths(trendStartMonth);
