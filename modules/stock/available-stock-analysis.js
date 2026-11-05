@@ -1568,7 +1568,14 @@ def _merge_tag(curr, incoming):
     return "MIXED"
 
 wb = load_workbook('${outputPath}', data_only=True)
-ws = wb['stock']
+stock_sheet_names = [name for name in ('PV Stock NL', 'PV Stock FR', 'PV Stock UK', 'PV Stock ES', 'PV Stock IT', 'ESS+HP Stock') if name in wb.sheetnames]
+if not stock_sheet_names:
+    stock_sheet_names = [name for name in ('PV Stock', 'ESS+HP Stock') if name in wb.sheetnames]
+if not stock_sheet_names and 'stock' in wb.sheetnames:
+    stock_sheet_names = ['stock']
+if not stock_sheet_names:
+    raise ValueError('Missing expected stock sheets: PV Stock NL/FR/UK/ES/IT / ESS+HP Stock')
+ws = wb[stock_sheet_names[0]]
 headers = [cell.value for cell in ws[1]]
 header_to_idx = {str(h).strip(): i for i, h in enumerate(headers) if h is not None}
 
@@ -1619,10 +1626,19 @@ for h in headers:
 rows = []
 key_meta = {}
 date_source_tags = {}
-stock_rows = list(ws.iter_rows(min_row=2, values_only=True))
+stock_rows = []
+for stock_sheet_name in stock_sheet_names:
+    stock_ws = wb[stock_sheet_name]
+    stock_headers = [cell.value for cell in stock_ws[1]]
+    if stock_headers != headers:
+        raise ValueError(f'Stock sheet columns do not match: {stock_sheet_name}')
+    stock_rows.extend(stock_ws.iter_rows(min_row=2, values_only=True))
 domestic_details = []
-if 'Domestic Stock' in wb.sheetnames:
-    ws_domestic = wb['Domestic Stock']
+domestic_sheet_names = [name for name in ('Domestic Stock PV', 'Domestic Stock ESS') if name in wb.sheetnames]
+if not domestic_sheet_names and 'Domestic Stock' in wb.sheetnames:
+    domestic_sheet_names = ['Domestic Stock']
+for domestic_sheet_name in domestic_sheet_names:
+    ws_domestic = wb[domestic_sheet_name]
     domestic_headers = [cell.value for cell in ws_domestic[1]]
     domestic_idx = {str(h).strip(): i for i, h in enumerate(domestic_headers) if h is not None}
     if all(name in domestic_idx for name in ("SKU", "Model", "Factory", "Quantity", "MW")):

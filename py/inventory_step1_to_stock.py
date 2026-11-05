@@ -23,13 +23,14 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
 
-OUTPUT_SHEET_NAME = "stock"
-SKU_SHEET_CANDIDATES = ["SKU", "SKU Mapping", "Legacy Mapping Product"]
+PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
+OUTPUT_SHEET_NAMES = [*[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"]
+SKU_SHEET_CANDIDATES = ["Legacy Mapping Product", "SKU", "SKU Mapping"]
 TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
 ALLOC_SHEET_NAME = "To be allocated"
 TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map"
-DOMESTIC_DETAIL_SHEET_NAME = "Domestic Stock"
+DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"]
 
 SOURCE_INV_DSP = "INV_DSP"
 SOURCE_ODP = "ODP"
@@ -147,13 +148,29 @@ def map_transit_wh_code(in_transit_code: Any) -> str | None:
 
 
 def map_transit_virtual_warehouse(in_transit_code: Any) -> str | None:
-    text = normalize_text(in_transit_code).upper()
+    raw_text = normalize_text(in_transit_code)
+    text = raw_text.upper()
     if not text:
         return None
     for code in WH_CODE_MAP:
-        if code in text:
-            return code
+        if code not in text:
+            continue
+        if "ARRIVAL PLAN" in text:
+            return f"Arrival Plan-{code}"
+        return code
     return None
+
+
+def normalize_output_virtual_warehouse(value: Any) -> str:
+    raw_text = normalize_text(value)
+    if not raw_text:
+        return ""
+    transit_name = map_transit_virtual_warehouse(raw_text)
+    if transit_name and "arrival plan" in normalize_lower(raw_text):
+        return transit_name
+    if raw_text.endswith(")") and "(" in raw_text:
+        return raw_text[:raw_text.rfind("(")].strip()
+    return raw_text
 
 
 def excluded_row(sales_org_name: Any, physical_warehouse_name: Any, virtual_warehouse_name: Any) -> bool:
@@ -300,7 +317,7 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
         category = normalize_text(row[idx["category"]])
         product_model = normalize_text(row[idx["product model"]])
         sales_org = normalize_text(sales_org_name)
-        virtual_warehouse = normalize_text(virtual_warehouse_name)
+        virtual_warehouse = normalize_output_virtual_warehouse(virtual_warehouse_name)
         if not sku:
             continue
 
@@ -324,43 +341,91 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
     return out
 
 
-def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str) -> dict[str, dict[str, Any]]:
+def infer_legacy_category(family: Any, brand: Any, fallback_category: Any = "") -> str:
+    normalized_family = normalize_lower(family)
+    if normalized_family == "hp":
+        prefix = "HP"
+    elif "ess" in normalized_family or any(
+        normalized_family.startswith(value) for value in ("ac charger", "other", "tcl blueark")
+    ):
+        prefix = "ESS"
+    else:
+        prefix = "PV"
+    fallback = normalize_text(fallback_category)
+    if fallback.upper().startswith(prefix):
+        return fallback
+    normalized_brand = normalize_text(brand)
+    return f"{prefix} - {normalized_brand}" if normalized_brand else prefix
+
+
+def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str | None = None) -> dict[str, dict[str, Any]]:
     wb = load_workbook(stock_wb_path, data_only=True)
-    ws = wb[sku_sheet_name]
-    headers = [cell.value for cell in ws[1]]
-    idx = build_header_index(headers)
-
-    required = [
-        "sku no",
-        "product model",
-        "category",
-        "brand",
-        "level2",
-        "level3",
-        "billable watts(w)",
-        "connector",
-        "total pcs per 40hq container",
-    ]
-    missing = [h for h in required if h not in idx]
-    if missing:
-        wb.close()
-        raise ValueError(f"SKU sheet missing columns: {missing}")
-
     lookup: dict[str, dict[str, Any]] = {}
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        sku_key = normalize_sku_key(row[idx["sku no"]])
-        if not sku_key or sku_key in lookup:
-            continue
-        lookup[sku_key] = {
-            "Category": normalize_text(row[idx["category"]]),
-            "Brand": normalize_text(row[idx["brand"]]),
-            "Product TCL Report": normalize_text(row[idx["level2"]]),
-            "Family": normalize_text(row[idx["level3"]]),
-            "Model": normalize_text(row[idx["product model"]]),
-            "Connector": normalize_text(row[idx["connector"]]),
-            "Bin": safe_float(row[idx["billable watts(w)"]]),
-            "MOQ": safe_float(row[idx["total pcs per 40hq container"]]),
-        }
+    lowered_names = {name.lower(): name for name in wb.sheetnames}
+    sku_name = lowered_names.get("sku") or lowered_names.get("sku mapping")
+    legacy_name = lowered_names.get("legacy mapping product")
+    if sku_sheet_name and sku_sheet_name in wb.sheetnames:
+        if sku_sheet_name.lower() == "legacy mapping product":
+            legacy_name = sku_sheet_name
+        else:
+            sku_name = sku_sheet_name
+    if not sku_name and not legacy_name:
+        wb.close()
+        raise ValueError("Stock template is missing Legacy Mapping Product / SKU sheets")
+
+    if sku_name:
+        ws = wb[sku_name]
+        idx = build_header_index([cell.value for cell in ws[1]])
+        required = [
+            "sku no", "product model", "category", "brand", "level2", "level3",
+            "billable watts(w)", "connector", "total pcs per 40hq container",
+        ]
+        missing = [h for h in required if h not in idx]
+        if missing:
+            wb.close()
+            raise ValueError(f"SKU sheet missing columns: {missing}")
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            sku_key = normalize_sku_key(row[idx["sku no"]])
+            if not sku_key or sku_key in lookup:
+                continue
+            lookup[sku_key] = {
+                "Category": normalize_text(row[idx["category"]]),
+                "Brand": normalize_text(row[idx["brand"]]),
+                "Product TCL Report": normalize_text(row[idx["level2"]]),
+                "Family": normalize_text(row[idx["level3"]]),
+                "Model": normalize_text(row[idx["product model"]]),
+                "Connector": normalize_text(row[idx["connector"]]),
+                "Bin": safe_float(row[idx["billable watts(w)"]]),
+                "MOQ": safe_float(row[idx["total pcs per 40hq container"]]),
+            }
+
+    if legacy_name:
+        ws = wb[legacy_name]
+        idx = build_header_index([cell.value for cell in ws[1]])
+        required = ["sku no.", "anaplan pl6", "brand", "family", "product tcl report", "bins", "container loading"]
+        missing = [h for h in required if h not in idx]
+        if missing:
+            wb.close()
+            raise ValueError(f"Legacy Mapping Product sheet missing columns: {missing}")
+        legacy_rows: dict[str, tuple[Any, ...]] = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            sku_key = normalize_sku_key(row[idx["sku no."]])
+            if sku_key and sku_key not in legacy_rows:
+                legacy_rows[sku_key] = row
+        for sku_key, row in legacy_rows.items():
+            fallback = lookup.get(sku_key, {})
+            family = normalize_text(row[idx["family"]])
+            brand = normalize_text(row[idx["brand"]])
+            lookup[sku_key] = {
+                "Category": infer_legacy_category(family, brand, fallback.get("Category")),
+                "Brand": brand or fallback.get("Brand", ""),
+                "Product TCL Report": normalize_text(row[idx["product tcl report"]]) or fallback.get("Product TCL Report", ""),
+                "Family": family or fallback.get("Family", ""),
+                "Model": normalize_text(row[idx["anaplan pl6"]]) or fallback.get("Model", ""),
+                "Connector": fallback.get("Connector", ""),
+                "Bin": safe_float(row[idx["bins"]]) or safe_float(fallback.get("Bin")),
+                "MOQ": safe_float(row[idx["container loading"]]) or safe_float(fallback.get("MOQ")),
+            }
 
     wb.close()
     return lookup
@@ -421,7 +486,7 @@ def extract_odp_transit_data(
     transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
     domestic_qty: dict[str, float] = defaultdict(float)
-    domestic_detail_map: dict[tuple[str, str, str], dict[str, Any]] = {}
+    domestic_detail_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     blocked_destinations = {
         "piraeus", "gdansk", "cork", "yangon", "limassol", "douala", "manila north",
         "karachi", "dar es salaam", "laem chabang", "pointe des galets", "davao", "thessaloniki",
@@ -467,10 +532,10 @@ def extract_odp_transit_data(
                 domestic_qty[sku] += qty
                 factory = normalize_text(row[idx["factory location"]]) if "factory location" in idx else ""
                 mw = safe_float(row[idx["mw"]]) if "mw" in idx else 0.0
-                detail_key = (sku, model, factory)
+                detail_key = (source_category, sku, model, factory)
                 detail = domestic_detail_map.setdefault(
                     detail_key,
-                    {"SKU": sku, "Model": model, "Factory": factory, "Quantity": 0.0, "MW": 0.0},
+                    {"SKU": sku, "Model": model, "Factory": factory, "Category": source_category, "Quantity": 0.0, "MW": 0.0},
                 )
                 detail["Quantity"] += qty
                 detail["MW"] += mw
@@ -498,6 +563,7 @@ def extract_odp_transit_data(
             "MW": round(safe_float(item["MW"]), 6),
         }
         for _, item in sorted(domestic_detail_map.items())
+        if safe_float(item["Quantity"]) != 0
     ]
     return transit_qty, transit_category, domestic_qty, domestic_details
 
@@ -590,19 +656,19 @@ def write_output_sheet(
         end_date = _default_end()
     wb = load_workbook(stock_wb_path)
 
-    if OUTPUT_SHEET_NAME in wb.sheetnames:
-        ws_old = wb[OUTPUT_SHEET_NAME]
-        wb.remove(ws_old)
+    for old_name in ["stock", "PV Stock", "_stock_build", *OUTPUT_SHEET_NAMES]:
+        if old_name in wb.sheetnames:
+            wb.remove(wb[old_name])
     if ALLOC_SHEET_NAME in wb.sheetnames:
         alloc_old = wb[ALLOC_SHEET_NAME]
         wb.remove(alloc_old)
     if TRANSIT_SOURCE_SHEET_NAME in wb.sheetnames:
         source_old = wb[TRANSIT_SOURCE_SHEET_NAME]
         wb.remove(source_old)
-    if DOMESTIC_DETAIL_SHEET_NAME in wb.sheetnames:
-        domestic_old = wb[DOMESTIC_DETAIL_SHEET_NAME]
-        wb.remove(domestic_old)
-    ws = wb.create_sheet(OUTPUT_SHEET_NAME)
+    for old_name in ["Domestic Stock", *DOMESTIC_DETAIL_SHEET_NAMES]:
+        if old_name in wb.sheetnames:
+            wb.remove(wb[old_name])
+    ws = wb.create_sheet("_stock_build")
 
     base_headers = [
         "WH",
@@ -884,16 +950,89 @@ def write_output_sheet(
             round(safe_float(odp_transit_qty.get(source_key, 0)), 3),
         ])
 
-    ws_domestic = wb.create_sheet(DOMESTIC_DETAIL_SHEET_NAME)
-    ws_domestic.append(["SKU", "Model", "Factory", "Quantity", "MW"])
-    for item in domestic_details:
-        ws_domestic.append([
-            item.get("SKU"),
-            item.get("Model"),
-            item.get("Factory"),
-            round(safe_float(item.get("Quantity")), 3),
-            round(safe_float(item.get("MW")), 6),
-        ])
+    for sheet_name, category_name in zip(DOMESTIC_DETAIL_SHEET_NAMES, ("PV", "ESS")):
+        ws_domestic = wb.create_sheet(sheet_name)
+        ws_domestic.append(["SKU", "Model", "Factory", "Quantity", "MW"])
+        for item in domestic_details:
+            quantity = safe_float(item.get("Quantity"))
+            if quantity == 0 or normalize_text(item.get("Category")).upper() != category_name:
+                continue
+            ws_domestic.append([
+                item.get("SKU"),
+                item.get("Model"),
+                item.get("Factory"),
+                round(quantity, 3),
+                round(safe_float(item.get("MW")), 6),
+            ])
+        ws_domestic.freeze_panes = "A2"
+        ws_domestic.auto_filter.ref = ws_domestic.dimensions
+
+    category_col = header_col["Category"]
+    wh_col = header_col["WH"]
+    sku_col = header_col["SKU"]
+    virtual_warehouse_col = header_col["Virtual Warehouse"]
+    sum_headers = ["To be allocated", "Stock", "Domestic Stock", *transit_headers]
+
+    for country in PV_STOCK_COUNTRIES:
+        output_ws = wb.copy_worksheet(ws)
+        output_ws.title = f"PV Stock {country}"
+        if output_ws.max_row > 1:
+            output_ws.delete_rows(2, output_ws.max_row - 1)
+
+        grouped_rows: dict[str, dict[str, Any]] = {}
+        for row_num in range(2, ws.max_row + 1):
+            if not normalize_text(ws.cell(row_num, category_col).value).upper().startswith("PV"):
+                continue
+            if normalize_text(ws.cell(row_num, wh_col).value).upper() != country:
+                continue
+            sku_key = normalize_sku_key(ws.cell(row_num, sku_col).value)
+            if not sku_key:
+                continue
+            values = [ws.cell(row_num, col_num).value for col_num in range(1, len(headers) + 1)]
+            grouped = grouped_rows.setdefault(sku_key, {"values": values, "virtual_warehouses": set()})
+            if grouped["values"] is not values:
+                for header in sum_headers:
+                    col_index = header_col[header] - 1
+                    grouped["values"][col_index] = safe_float(grouped["values"][col_index]) + safe_float(values[col_index])
+            virtual_warehouse = normalize_output_virtual_warehouse(ws.cell(row_num, virtual_warehouse_col).value)
+            if virtual_warehouse:
+                grouped["virtual_warehouses"].add(virtual_warehouse)
+
+        for sku_key in sorted(grouped_rows):
+            grouped = grouped_rows[sku_key]
+            values = grouped["values"]
+            values[virtual_warehouse_col - 1] = " / ".join(sorted(grouped["virtual_warehouses"]))
+            stock_qty = safe_float(values[header_col["Stock"] - 1])
+            domestic_stock_qty = safe_float(values[header_col["Domestic Stock"] - 1])
+            transit_total = sum(safe_float(values[header_col[header] - 1]) for header in transit_headers)
+            total_qty = stock_qty + domestic_stock_qty + transit_total
+            bin_qty = safe_float(values[header_col["Bin"] - 1])
+            values[header_col["Total QTY"] - 1] = round(total_qty, 3)
+            values[header_col["MW"] - 1] = round((stock_qty * bin_qty) / 1_000_000, 3)
+            values[header_col["Total MW"] - 1] = round((total_qty * bin_qty) / 1_000_000, 3)
+            output_ws.append(values)
+            output_row = output_ws.max_row
+            output_ws.cell(output_row, header_col["Stock"]).fill = CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]
+            if domestic_stock_qty:
+                output_ws.cell(output_row, header_col["Domestic Stock"]).fill = CELL_FILL_BY_SOURCE[SOURCE_ODP]
+            for header in transit_headers:
+                if safe_float(values[header_col[header] - 1]) == 0:
+                    continue
+                source = normalize_source_tag(date_source_summary.get(header, SOURCE_INV_DSP))
+                output_ws.cell(output_row, header_col[header]).fill = CELL_FILL_BY_SOURCE.get(source, CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
+            for col_num in range(10, len(headers) + 1):
+                output_ws.cell(output_row, col_num).number_format = "#,##0.###"
+        output_ws.freeze_panes = "A2"
+        output_ws.auto_filter.ref = output_ws.dimensions
+
+    output_ws = wb.copy_worksheet(ws)
+    output_ws.title = "ESS+HP Stock"
+    for row_num in range(output_ws.max_row, 1, -1):
+        if normalize_text(output_ws.cell(row_num, category_col).value).upper().startswith("PV"):
+            output_ws.delete_rows(row_num)
+    output_ws.freeze_panes = "A2"
+    output_ws.auto_filter.ref = output_ws.dimensions
+    wb.remove(ws)
 
     wb.save(stock_wb_path)
     wb.close()
@@ -983,7 +1122,7 @@ def run(
         end_date=transit_end_date,
     )
 
-    print(f"Done: wrote {stock_path} -> sheet {OUTPUT_SHEET_NAME}")
+    print(f"Done: wrote {stock_path} -> sheets {', '.join(OUTPUT_SHEET_NAMES)}")
     print(f"Inventory grouped rows: {len(inventory_rows)}")
     print(f"SKU mapping sheet: {resolved_sku_sheet}")
     if daily_supply_plan_path:
@@ -1003,7 +1142,7 @@ def run(
     log_lines: list[str] = [
         f"Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"Output workbook: {stock_path}",
-        f"Output sheet: {OUTPUT_SHEET_NAME}",
+        f"Output sheets: {', '.join(OUTPUT_SHEET_NAMES)}",
         f"Inventory grouped rows: {len(inventory_rows)}",
         f"SKU mapping sheet: {resolved_sku_sheet}",
         f"Rows in stock sheet: {run_summary['total_rows']}",

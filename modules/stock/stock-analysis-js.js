@@ -5,7 +5,9 @@ const UNMATCHED_SKU_MARK = "SKU not matched";
 const DOMESTIC_WH = "CN";
 const ALLOC_SHEET_NAME = "To be allocated";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
-const DOMESTIC_DETAIL_SHEET_NAME = "Domestic Stock";
+const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
+const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), "ESS+HP Stock"];
+const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
 
 const CELL_FILL_BY_SOURCE = {
   [SOURCE_INV_DSP]: "FFDDEBFF",
@@ -105,18 +107,11 @@ function getFirstWorksheet(workbook) {
   return workbook.getWorksheet ? workbook.getWorksheet(name) : workbook.Sheets[name];
 }
 
-function pickSkuSheetName(workbook, explicitName) {
+function getWorksheetByNameInsensitive(workbook, name) {
   const sheetNames = workbook.worksheets ? workbook.worksheets.map((ws) => ws.name) : workbook.SheetNames;
-  if (explicitName) {
-    if (sheetNames.includes(explicitName)) return explicitName;
-    throw localizedError("skuSheetMissing", { name: explicitName });
-  }
-  const candidates = ["SKU", "SKU Mapping", "Legacy Mapping Product"];
-  const lowered = new Map(sheetNames.map((name) => [name.toLowerCase(), name]));
-  for (const candidate of candidates) {
-    if (lowered.has(candidate.toLowerCase())) return lowered.get(candidate.toLowerCase());
-  }
-  return sheetNames[0];
+  const actualName = sheetNames.find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  if (!actualName) return null;
+  return workbook.getWorksheet ? workbook.getWorksheet(actualName) : workbook.Sheets[actualName];
 }
 
 function mapCountryCode(salesOrgName) {
@@ -139,12 +134,23 @@ function mapTransitWhCode(value) {
 }
 
 function mapTransitVirtualWarehouse(value) {
-  const text = normalizeText(value).toUpperCase();
+  const rawText = normalizeText(value);
+  const text = rawText.toUpperCase();
   if (!text) return null;
   for (const code of Object.keys(WH_CODE_MAP)) {
-    if (text.includes(code)) return code;
+    if (!text.includes(code)) continue;
+    if (text.includes("ARRIVAL PLAN")) return `Arrival Plan-${code}`;
+    return code;
   }
   return null;
+}
+
+function normalizeOutputVirtualWarehouse(value) {
+  const rawText = normalizeText(value);
+  if (!rawText) return "";
+  const transitName = mapTransitVirtualWarehouse(rawText);
+  if (transitName && normalizeLower(rawText).includes("arrival plan")) return transitName;
+  return rawText.replace(/\s*\([^()]*\)\s*$/, "").trim();
 }
 
 function excludedInventoryRow(salesOrgName, physicalWarehouseName, virtualWarehouseName) {
@@ -235,37 +241,76 @@ function mergeMapValues(base, incoming) {
   for (const [key, value] of incoming) addMapNumber(base, key, value);
 }
 
-function buildSkuLookup(workbook, sheetName) {
-  const ws = workbook.getWorksheet ? workbook.getWorksheet(sheetName) : workbook.Sheets[sheetName];
-  const { headers, rows, index } = readSheetRows(ws);
-  const required = [
-    "sku no",
-    "product model",
-    "category",
-    "brand",
-    "level2",
-    "level3",
-    "billable watts(w)",
-    "connector",
-    "total pcs per 40hq container",
-  ];
-  const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw localizedError("missingColumns", { sheet: "SKU", columns: missing.join(", ") });
+function inferLegacyCategory(family, brand, fallbackCategory = "") {
+  const normalizedFamily = normalizeLower(family);
+  const prefix = normalizedFamily === "hp"
+    ? "HP"
+    : (normalizedFamily.includes("ess") || ["ac charger", "other", "tcl blueark"].some((value) => normalizedFamily.startsWith(value)))
+      ? "ESS"
+      : "PV";
+  const fallback = normalizeText(fallbackCategory);
+  if (fallback.toUpperCase().startsWith(prefix)) return fallback;
+  const normalizedBrand = normalizeText(brand);
+  return normalizedBrand ? `${prefix} - ${normalizedBrand}` : prefix;
+}
+
+function buildSkuLookup(workbook) {
+  const skuWorksheet = getWorksheetByNameInsensitive(workbook, "SKU")
+    || getWorksheetByNameInsensitive(workbook, "SKU Mapping");
+  const legacyWorksheet = getWorksheetByNameInsensitive(workbook, "Legacy Mapping Product");
+  if (!skuWorksheet && !legacyWorksheet) throw localizedError("skuSheetMissing", { name: "Legacy Mapping Product / SKU" });
 
   const lookup = new Map();
-  for (const row of rows) {
-    const key = normalizeSkuKey(row[index["sku no"]]);
-    if (!key || lookup.has(key)) continue;
-    lookup.set(key, {
-      Category: normalizeText(row[index.category]),
-      Brand: normalizeText(row[index.brand]),
-      "Product TCL Report": normalizeText(row[index.level2]),
-      Family: normalizeText(row[index.level3]),
-      Model: normalizeText(row[index["product model"]]),
-      Connector: normalizeText(row[index.connector]),
-      Bin: safeFloat(row[index["billable watts(w)"]]),
-      MOQ: safeFloat(row[index["total pcs per 40hq container"]]),
-    });
+  if (skuWorksheet) {
+    const { rows, index } = readSheetRows(skuWorksheet);
+    const required = [
+      "sku no", "product model", "category", "brand", "level2", "level3",
+      "billable watts(w)", "connector", "total pcs per 40hq container",
+    ];
+    const missing = required.filter((key) => index[key] == null);
+    if (missing.length) throw localizedError("missingColumns", { sheet: "SKU", columns: missing.join(", ") });
+    for (const row of rows) {
+      const key = normalizeSkuKey(row[index["sku no"]]);
+      if (!key || lookup.has(key)) continue;
+      lookup.set(key, {
+        Category: normalizeText(row[index.category]),
+        Brand: normalizeText(row[index.brand]),
+        "Product TCL Report": normalizeText(row[index.level2]),
+        Family: normalizeText(row[index.level3]),
+        Model: normalizeText(row[index["product model"]]),
+        Connector: normalizeText(row[index.connector]),
+        Bin: safeFloat(row[index["billable watts(w)"]]),
+        MOQ: safeFloat(row[index["total pcs per 40hq container"]]),
+      });
+    }
+  }
+
+  if (legacyWorksheet) {
+    const { rows, index } = readSheetRows(legacyWorksheet);
+    const required = ["sku no.", "anaplan pl6", "brand", "family", "product tcl report", "bins", "container loading"];
+    const missing = required.filter((key) => index[key] == null);
+    if (missing.length) throw localizedError("missingColumns", { sheet: "Legacy Mapping Product", columns: missing.join(", ") });
+    const legacyRows = new Map();
+    for (const row of rows) {
+      const key = normalizeSkuKey(row[index["sku no."]]);
+      if (!key || legacyRows.has(key)) continue;
+      legacyRows.set(key, row);
+    }
+    for (const [key, row] of legacyRows) {
+      const fallback = lookup.get(key) || {};
+      const family = normalizeText(row[index.family]);
+      const brand = normalizeText(row[index.brand]);
+      lookup.set(key, {
+        Category: inferLegacyCategory(family, brand, fallback.Category),
+        Brand: brand || fallback.Brand || "",
+        "Product TCL Report": normalizeText(row[index["product tcl report"]]) || fallback["Product TCL Report"] || "",
+        Family: family || fallback.Family || "",
+        Model: normalizeText(row[index["anaplan pl6"]]) || fallback.Model || "",
+        Connector: fallback.Connector || "",
+        Bin: safeFloat(row[index.bins]) || safeFloat(fallback.Bin),
+        MOQ: safeFloat(row[index["container loading"]]) || safeFloat(fallback.MOQ),
+      });
+    }
   }
   return lookup;
 }
@@ -296,7 +341,7 @@ function extractInventoryRows(workbook, stockMode = "available") {
     const category = normalizeText(row[index.category]);
     const productModel = normalizeText(row[index["product model"]]);
     const salesOrg = normalizeText(salesOrgName);
-    const virtualWarehouse = normalizeText(virtualWarehouseName);
+    const virtualWarehouse = normalizeOutputVirtualWarehouse(virtualWarehouseName);
     const key = `${salesOrg}\u0000${virtualWarehouse}\u0000${category}\u0000${sku}\u0000${productModel}`;
     grouped.set(key, (grouped.get(key) || 0) + safeFloat(row[index[stockColumn]]));
   }
@@ -381,8 +426,8 @@ function extractOdpTransitData(workbook, startValue, endValue) {
         addMapNumber(domesticQty, sku, quantity);
         const factory = index["factory location"] == null ? "" : normalizeText(row[index["factory location"]]);
         const mw = index.mw == null ? 0 : safeFloat(row[index.mw]);
-        const detailKey = `${sku}\u0000${model}\u0000${factory}`;
-        const detail = domesticDetailMap.get(detailKey) || { SKU: sku, Model: model, Factory: factory, Quantity: 0, MW: 0 };
+        const detailKey = `${sheetSpec.category}\u0000${sku}\u0000${model}\u0000${factory}`;
+        const detail = domesticDetailMap.get(detailKey) || { SKU: sku, Model: model, Factory: factory, Category: sheetSpec.category, Quantity: 0, MW: 0 };
         detail.Quantity += quantity;
         detail.MW += mw;
         domesticDetailMap.set(detailKey, detail);
@@ -402,6 +447,7 @@ function extractOdpTransitData(workbook, startValue, endValue) {
   }
   const domesticDetails = [...domesticDetailMap.values()]
     .map((item) => ({ ...item, Quantity: Number(item.Quantity.toFixed(3)), MW: Number(item.MW.toFixed(6)) }))
+    .filter((item) => safeFloat(item.Quantity) !== 0)
     .sort((a, b) => `${a.SKU}\u0000${a.Model}\u0000${a.Factory}`.localeCompare(`${b.SKU}\u0000${b.Model}\u0000${b.Factory}`));
   return { qty, category, domesticQty, domesticDetails };
 }
@@ -592,10 +638,53 @@ function buildVisualizationPayload(records, dateKeys, orders, stockMode, domesti
   };
 }
 
-function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
-  const old = workbook.getWorksheet("stock");
+function aggregateRecordsBySku(records) {
+  const grouped = new Map();
+  const virtualWarehouses = new Map();
+  for (const source of records) {
+    const key = normalizeSkuKey(source.SKU);
+    if (!key) continue;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        ...source,
+        Stock: safeFloat(source.Stock),
+        DomesticStock: safeFloat(source.DomesticStock),
+        ToBeAllocated: safeFloat(source.ToBeAllocated),
+        Transit: { ...source.Transit },
+        TransitSource: { ...source.TransitSource },
+        StatusQuantity: {
+          Inventory: safeFloat(source.StatusQuantity?.Inventory),
+          DailySupplyPlan: safeFloat(source.StatusQuantity?.DailySupplyPlan),
+          ODP: safeFloat(source.StatusQuantity?.ODP),
+        },
+      });
+      virtualWarehouses.set(key, new Set());
+    } else {
+      const target = grouped.get(key);
+      target.Stock += safeFloat(source.Stock);
+      target.DomesticStock += safeFloat(source.DomesticStock);
+      target.ToBeAllocated += safeFloat(source.ToBeAllocated);
+      target.StatusQuantity.Inventory += safeFloat(source.StatusQuantity?.Inventory);
+      target.StatusQuantity.DailySupplyPlan += safeFloat(source.StatusQuantity?.DailySupplyPlan);
+      target.StatusQuantity.ODP += safeFloat(source.StatusQuantity?.ODP);
+      for (const [dateKey, qty] of Object.entries(source.Transit || {})) {
+        target.Transit[dateKey] = safeFloat(target.Transit[dateKey]) + safeFloat(qty);
+        target.TransitSource[dateKey] = mergeSourceTag(target.TransitSource[dateKey], source.TransitSource?.[dateKey]);
+      }
+    }
+    const sourceNames = normalizeText(source.VirtualWarehouse).split(" / ").map((value) => value.trim()).filter(Boolean);
+    for (const sourceName of sourceNames) virtualWarehouses.get(key).add(sourceName);
+  }
+  for (const [key, record] of grouped) {
+    record.VirtualWarehouse = [...virtualWarehouses.get(key)].sort((a, b) => a.localeCompare(b)).join(" / ");
+  }
+  return [...grouped.values()];
+}
+
+function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags) {
+  const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
-  const ws = workbook.addWorksheet("stock");
+  const ws = workbook.addWorksheet(sheetName);
   const baseHeaders = [
     "WH", "Virtual Warehouse", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
     "To be allocated", "Total QTY", "Total MW", "MW", "Stock", "Domestic Stock",
@@ -708,12 +797,12 @@ function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty
   return ws;
 }
 
-function writeDomesticStockWorksheet(workbook, domesticDetails) {
-  const old = workbook.getWorksheet(DOMESTIC_DETAIL_SHEET_NAME);
+function writeDomesticStockWorksheet(workbook, sheetName, domesticDetails) {
+  const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
-  const ws = workbook.addWorksheet(DOMESTIC_DETAIL_SHEET_NAME);
+  const ws = workbook.addWorksheet(sheetName);
   ws.addRow(["SKU", "Model", "Factory", "Quantity", "MW"]);
-  for (const item of domesticDetails) {
+  for (const item of domesticDetails.filter((row) => safeFloat(row.Quantity) !== 0)) {
     ws.addRow([item.SKU, item.Model, item.Factory, item.Quantity, item.MW]);
   }
   ws.views = [{ state: "frozen", ySplit: 1 }];
@@ -760,8 +849,7 @@ export async function buildStockOutputJs({
   const orderWorkbook = await loadSource(orderBytes, "Orderfile Base");
 
   const dateKeys = iterDateKeys(startDate, endDate);
-  const skuSheetName = pickSkuSheetName(templateWorkbook);
-  const skuLookup = buildSkuLookup(templateWorkbook, skuSheetName);
+  const skuLookup = buildSkuLookup(templateWorkbook);
   const normalizedStockMode = stockMode === "total" ? "total" : "available";
   const inventoryRows = extractInventoryRows(inventoryWorkbook, normalizedStockMode);
   const transitQty = new Map();
@@ -871,10 +959,21 @@ export async function buildStockOutputJs({
     }
   }
 
-  writeStockWorksheet(templateWorkbook, records, dateKeys, dateSourceTags);
+  for (const obsoleteName of ["stock", "PV Stock", ...STOCK_SHEET_NAMES]) {
+    const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
+    if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
+  }
+  for (const country of PV_STOCK_COUNTRIES) {
+    const countryRecords = records.filter((record) => isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() === country);
+    writeStockWorksheet(templateWorkbook, `PV Stock ${country}`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
+  }
+  writeStockWorksheet(templateWorkbook, "ESS+HP Stock", records.filter((record) => !isPvCategory(record.Category)), dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
-  writeDomesticStockWorksheet(templateWorkbook, domesticDetails);
+  const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");
+  if (obsoleteDomestic) templateWorkbook.removeWorksheet(obsoleteDomestic.id);
+  writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[0], domesticDetails.filter((item) => normalizeText(item.Category).toUpperCase() === "PV"));
+  writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[1], domesticDetails.filter((item) => normalizeText(item.Category).toUpperCase() === "ESS"));
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
   const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode, domesticDetails);
 
