@@ -689,44 +689,17 @@ function isUnmatchedRecord(record) {
     .some((value) => normalizeLower(value) === marker);
 }
 
-function stockTableName(sheetName) {
-  return `Tbl_${sheetName.replace(/[^A-Za-z0-9_]/g, "_")}`;
-}
-
 function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags) {
   const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(sheetName);
   const baseHeaders = [
-    "WH", "Virtual Warehouse", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
+    "WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
     "To be allocated", "Total QTY", "Total MW", "MW", "Stock", "Domestic Stock",
   ];
   const dateHeaders = dateKeys.map(dateKeyToHeader);
   const headers = [...baseHeaders, ...dateHeaders];
   ws.addRow(headers);
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-  ws.autoFilter = { from: "A1", to: `${columnName(headers.length)}1` };
-
-  const headerRow = ws.getRow(1);
-  headerRow.font = { bold: true, color: { argb: "FF17345F" } };
-  headerRow.alignment = { vertical: "middle", horizontal: "center" };
-  headerRow.height = 22;
-  for (let columnNumber = 1; columnNumber <= headers.length; columnNumber += 1) {
-    headerRow.getCell(columnNumber).border = {
-      bottom: { style: "thin", color: { argb: "FFB8C9E2" } },
-    };
-  }
-
-  const stockCol = baseHeaders.indexOf("Stock") + 1;
-  const domesticStockCol = baseHeaders.indexOf("Domestic Stock") + 1;
-  const dateStartCol = baseHeaders.length + 1;
-  applyFill(headerRow.getCell(stockCol), CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
-  applyFill(headerRow.getCell(domesticStockCol), CELL_FILL_BY_SOURCE[SOURCE_ODP]);
-  for (let i = 0; i < dateHeaders.length; i += 1) {
-    const header = dateHeaders[i];
-    const source = sourceTags[header] || SOURCE_INV_DSP;
-    applyFill(headerRow.getCell(dateStartCol + i), CELL_FILL_BY_SOURCE[source] || CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
-  }
 
   for (const record of records) {
     const transitTotal = dateKeys.reduce((sum, dateKey) => sum + safeFloat(record.Transit[dateKey]), 0);
@@ -737,42 +710,14 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags)
     record.TotalQTY = Number(totalQty.toFixed(3));
     record.TotalMW = totalMw == null ? null : Number(totalMw.toFixed(3));
     record.MW = mw == null ? null : Number(mw.toFixed(3));
+    if (record.TotalQTY === 0) continue;
 
-    const row = ws.addRow([
-      record.WH, record.VirtualWarehouse, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
+    ws.addRow([
+      record.WH, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
       record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock, record.DomesticStock,
       ...dateKeys.map((dateKey) => (record.Transit[dateKey] ? record.Transit[dateKey] : null)),
     ]);
-    row.eachCell((cell) => { cell.numFmt = "#,##0.###"; });
-    applyFill(row.getCell(stockCol), CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
-    if (safeFloat(record.DomesticStock)) applyFill(row.getCell(domesticStockCol), CELL_FILL_BY_SOURCE[SOURCE_ODP]);
-    for (let i = 0; i < dateKeys.length; i += 1) {
-      const dateKey = dateKeys[i];
-      const qty = safeFloat(record.Transit[dateKey]);
-      if (!qty) continue;
-      const source = record.TransitSource[dateKey] || SOURCE_INV_DSP;
-      applyFill(row.getCell(dateStartCol + i), CELL_FILL_BY_SOURCE[source] || CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
-    }
   }
-
-  ws.addTable({
-    name: stockTableName(sheetName),
-    ref: "A1",
-    headerRow: true,
-    totalsRow: false,
-    style: { theme: "TableStyleLight2", showRowStripes: true, showColumnStripes: false },
-    columns: headers.map((name) => ({ name })),
-    rows: records.map((record) => [
-      record.WH, record.VirtualWarehouse, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
-      record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock, record.DomesticStock,
-      ...dateKeys.map((dateKey) => (record.Transit[dateKey] ? record.Transit[dateKey] : null)),
-    ]),
-  });
-
-  ws.columns.forEach((column, index) => {
-    const defaultWidth = index < 7 ? 18 : 13;
-    column.width = Math.max(defaultWidth, String(headers[index] || "").length + 2);
-  });
   return ws;
 }
 
@@ -789,9 +734,6 @@ function writeAllocationWorksheet(workbook, orders, skuLookup) {
       order["SO Line"], order.Model, order.Factory, order.WH,
     ]);
   }
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-  ws.getRow(1).font = { bold: true };
-  ws.columns.forEach((column) => { column.width = 16; });
   return ws;
 }
 
@@ -799,7 +741,7 @@ function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty
   const old = workbook.getWorksheet(TRANSIT_SOURCE_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(TRANSIT_SOURCE_SHEET_NAME);
-  ws.addRow(["SKU", "WH", "Virtual Warehouse", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"]);
+  ws.addRow(["SKU", "WH", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"]);
   const sourceKeys = new Set([...transitSourceTag.keys(), ...dailyTransitQty.keys(), ...odpTransitQty.keys()]);
   for (const key of [...sourceKeys].sort((a, b) => a.localeCompare(b))) {
     const [sku, wh, virtualWarehouse, category, productModel, dateKey] = splitTransitRecordKey(key);
@@ -809,7 +751,6 @@ function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty
     ws.addRow([
       sku,
       wh,
-      virtualWarehouse,
       resolvedCategory,
       resolvedProductModel,
       dateKeyToHeader(dateKey),
@@ -818,8 +759,6 @@ function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty
       safeFloat(odpTransitQty.get(key)),
     ]);
   }
-  ws.getRow(1).font = { bold: true };
-  ws.columns.forEach((column) => { column.width = 16; });
   return ws;
 }
 
@@ -831,9 +770,6 @@ function writeDomesticStockWorksheet(workbook, sheetName, domesticDetails) {
   for (const item of domesticDetails.filter((row) => safeFloat(row.Quantity) !== 0)) {
     ws.addRow([item.SKU, item.Model, item.Factory, item.Quantity, item.MW]);
   }
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-  ws.getRow(1).font = { bold: true };
-  ws.columns = [18, 28, 18, 14, 14].map((width) => ({ width }));
   return ws;
 }
 
@@ -998,7 +934,13 @@ export async function buildStockOutputJs({
     const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() === country);
     writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
   }
-  writeStockWorksheet(templateWorkbook, "ESS+HP Stock", matchedRecords.filter((record) => !isPvCategory(record.Category)), dateKeys, dateSourceTags);
+  writeStockWorksheet(
+    templateWorkbook,
+    "ESS+HP Stock",
+    matchedRecords.filter((record) => !isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH),
+    dateKeys,
+    dateSourceTags,
+  );
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);

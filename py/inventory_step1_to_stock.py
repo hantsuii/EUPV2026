@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from copy import copy
 from datetime import date, datetime, timedelta
 
 # Default: start = today, end = today + 6 months (used only if no explicit dates passed)
@@ -21,7 +22,6 @@ from typing import Any
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
-from openpyxl.worksheet.table import Table, TableStyleInfo
 
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
@@ -82,20 +82,6 @@ def safe_float(value: Any) -> float:
         return float(text)
     except ValueError:
         return 0.0
-
-
-def add_light_blue_table(ws: Any, table_name: str) -> None:
-    if ws.max_row < 2:
-        return
-    table = Table(displayName=table_name, ref=ws.dimensions)
-    table.tableStyleInfo = TableStyleInfo(
-        name="TableStyleLight2",
-        showFirstColumn=False,
-        showLastColumn=False,
-        showRowStripes=True,
-        showColumnStripes=False,
-    )
-    ws.add_table(table)
 
 
 def build_header_index(headers: list[Any]) -> dict[str, int]:
@@ -952,7 +938,7 @@ def write_output_sheet(
         )
 
     ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
-    ws_source.append(["SKU", "WH", "Virtual Warehouse", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
+    ws_source.append(["SKU", "WH", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
     source_keys = set(transit_source_tag) | set(daily_transit_qty) | set(odp_transit_qty)
     for sku, wh, virtual_warehouse, category_value, product_model_value, d_header in sorted(source_keys):
         if d_header not in header_col:
@@ -965,7 +951,6 @@ def write_output_sheet(
         ws_source.append([
             sku,
             wh,
-            virtual_warehouse,
             resolved_category,
             resolved_product_model,
             d_header,
@@ -988,8 +973,6 @@ def write_output_sheet(
                 round(quantity, 3),
                 round(safe_float(item.get("MW")), 6),
             ])
-        ws_domestic.freeze_panes = "A2"
-        ws_domestic.auto_filter.ref = ws_domestic.dimensions
 
     category_col = header_col["Category"]
     wh_col = header_col["WH"]
@@ -1032,6 +1015,8 @@ def write_output_sheet(
             domestic_stock_qty = safe_float(values[header_col["Domestic Stock"] - 1])
             transit_total = sum(safe_float(values[header_col[header] - 1]) for header in transit_headers)
             total_qty = stock_qty + domestic_stock_qty + transit_total
+            if total_qty == 0:
+                continue
             bin_qty = safe_float(values[header_col["Bin"] - 1])
             values[header_col["Total QTY"] - 1] = round(total_qty, 3)
             values[header_col["MW"] - 1] = round((stock_qty * bin_qty) / 1_000_000, 3)
@@ -1048,9 +1033,6 @@ def write_output_sheet(
                 output_ws.cell(output_row, header_col[header]).fill = CELL_FILL_BY_SOURCE.get(source, CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
             for col_num in range(10, len(headers) + 1):
                 output_ws.cell(output_row, col_num).number_format = "#,##0.###"
-        output_ws.freeze_panes = "A2"
-        output_ws.auto_filter.ref = output_ws.dimensions
-        add_light_blue_table(output_ws, f"Tbl_PV_Stock_{country}")
 
     output_ws = wb.copy_worksheet(ws)
     output_ws.title = "ESS+HP Stock"
@@ -1060,12 +1042,10 @@ def write_output_sheet(
             normalize_lower(output_ws.cell(row_num, header_col[header]).value) == marker
             for header in ("Category", "Brand", "Product TCL Report", "Family", "Model")
         )
-        if row_is_unmatched or normalize_text(output_ws.cell(row_num, category_col).value).upper().startswith("PV"):
+        row_is_cn = normalize_text(output_ws.cell(row_num, wh_col).value).upper() == DOMESTIC_WH
+        total_qty_is_zero = safe_float(output_ws.cell(row_num, header_col["Total QTY"]).value) == 0
+        if row_is_unmatched or row_is_cn or total_qty_is_zero or normalize_text(output_ws.cell(row_num, category_col).value).upper().startswith("PV"):
             output_ws.delete_rows(row_num)
-    output_ws.freeze_panes = "A2"
-    output_ws.auto_filter.ref = output_ws.dimensions
-
-    add_light_blue_table(output_ws, "Tbl_ESS_HP_Stock")
 
     unmatched_ws = wb.copy_worksheet(ws)
     unmatched_ws.title = UNMATCHED_SHEET_NAME
@@ -1075,17 +1055,31 @@ def write_output_sheet(
             normalize_lower(unmatched_ws.cell(row_num, header_col[header]).value) == marker
             for header in ("Category", "Brand", "Product TCL Report", "Family", "Model")
         )
-        if not row_is_unmatched:
+        total_qty_is_zero = safe_float(unmatched_ws.cell(row_num, header_col["Total QTY"]).value) == 0
+        if not row_is_unmatched or total_qty_is_zero:
             unmatched_ws.delete_rows(row_num)
-    unmatched_ws.freeze_panes = "A2"
-    unmatched_ws.auto_filter.ref = unmatched_ws.dimensions
-    add_light_blue_table(unmatched_ws, "Tbl_Unmatched_SKU")
     wb.remove(ws)
 
     mapping_sheet_names = {"legacy mapping product", "sku", "sku mapping"}
     for sheet_name in list(wb.sheetnames):
         if sheet_name.lower() in mapping_sheet_names:
             wb.remove(wb[sheet_name])
+
+    for sheet_name in [*OUTPUT_SHEET_NAMES, UNMATCHED_SHEET_NAME]:
+        output_sheet = wb[sheet_name]
+        output_headers = [cell.value for cell in output_sheet[1]]
+        if "Virtual Warehouse" in output_headers:
+            output_sheet.delete_cols(output_headers.index("Virtual Warehouse") + 1)
+
+    normal_style = wb._named_styles["Normal"]._style
+    for output_sheet in wb.worksheets:
+        output_sheet.freeze_panes = None
+        output_sheet.auto_filter.ref = None
+        for table_name in list(output_sheet.tables):
+            del output_sheet.tables[table_name]
+        for row in output_sheet.iter_rows():
+            for cell in row:
+                cell._style = copy(normal_style)
 
     wb.save(stock_wb_path)
     wb.close()

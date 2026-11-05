@@ -1587,12 +1587,12 @@ if '_Transit Source Map' in wb.sheetnames:
     ws_src = wb['_Transit Source Map']
     src_headers = [cell.value for cell in ws_src[1]]
     src_idx = {str(h).strip(): i for i, h in enumerate(src_headers) if h is not None}
-    required_src = ["SKU", "WH", "Virtual Warehouse", "Category", "Model", "Date", "Source"]
+    required_src = ["SKU", "WH", "Category", "Model", "Date", "Source"]
     if all(c in src_idx for c in required_src):
         for src_row in ws_src.iter_rows(min_row=2, values_only=True):
             sku = _text(src_row[src_idx["SKU"]])
             wh = _text(src_row[src_idx["WH"]])
-            virtual_warehouse = _text(src_row[src_idx["Virtual Warehouse"]])
+            virtual_warehouse = _text(src_row[src_idx["Virtual Warehouse"]]) if "Virtual Warehouse" in src_idx else ""
             source_category = _text(src_row[src_idx["Category"]])
             source_model = _text(src_row[src_idx["Model"]])
             d_header = _text(src_row[src_idx["Date"]])
