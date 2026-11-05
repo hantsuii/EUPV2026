@@ -53,32 +53,38 @@ Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行�
 ### 3.1 Inventory
 
 - 读取第一个 sheet，表头为第 1 行。
-- 必需字段：`Customer Model`、`Category`、`Available Stock`、`Sales Organization Name`、`Virtual Warehouse Name`、`Brand`。
-- 排除 Brand=`Other`、销售组织=`China`、包含 Business Planning Department 的销售组织，以及虚拟仓库名包含 `Arrival Plan` 的行。
-- 按 `(Customer Model, Category, Sales Organization Name)` 汇总 `Available Stock`。
+- 必需字段：`Customer Model`、`Product Model`、`Category`、当前库存口径字段（`Available Stock` 或 `Actual Stock`）、`Sales Organization Name`、`Virtual Warehouse Name`、`Physical Warehouse Name`。
+- 先排除销售组织=`China` 或销售组织名称中包含 `Business Planning Department` 的行。
+- 再排除 Physical Warehouse Name=`SPTN China FTZ(W73)` 的行。
+- 再排除 Virtual Warehouse Name 以 `FRU`、`HOLD`、`Market Material`、`SCRAP`、`SPEC` 开头的行，以及名称等于 `Natec Sunenergy B.V. Consignment WH` 的行。文本比较忽略大小写和首尾空格。
+- Brand=`Other` 不排除。
+- 按 `(Sales Organization Name, Virtual Warehouse Name, Category, Customer Model, Product Model)` 汇总当前库存口径数量。Inventory 行的 Category 和 Model 直接使用来源文件中的 Category 和 Product Model。
 - 销售组织映射：Netherlands→NL、France→FR、United Kingdom/UK→UK、Italy→IT、Spain→ES；未识别时取前两位大写。
 
 ### 3.2 Daily Supply Plan
 
 - 读取第一个 sheet。
-- 必需字段：`In-transit Warehouse(Code)`、`Customer Model`、`Supply Date`、`Available Quantity`。
-- 通过仓库编码识别 NL、FR、UK、IT、ES；无法识别的仓库跳过。
+- 必需字段：`In-transit Warehouse(Code)`、`Customer Model`、`Product Model`、`Category`、`Supply Date`，以及当前口径对应的 `Available Quantity` 或 `Scheduled Quantity`。
+- 通过仓库编码识别 NL、FR、UK、IT、ES；无法识别的仓库跳过。`Virtual Warehouse` 只保留标准代码 SPNL、SPTN、SPFR、SPUK、SPIT、SPES，不保留括号中的代码或其他前后缀。
 - 只保留起止日期内的 Supply Date。
-- 按 `(Customer Model, WH, 日期)` 汇总 `Available Quantity`，来源标记为 `INV_DSP`。
+- 按 `(WH, Virtual Warehouse, Category, Customer Model, Product Model, Supply Date)` 汇总当前口径数量，来源标记为 `INV_DSP`。
+- Category 和 Product Model 优先使用 Daily Supply Plan 自带字段；字段值为空时，分别按 SKU 从 SKU 主数据补充 Category 和 Model。
 
 ### 3.3 ODP
 
-- 读取 `Total Stcok`；不存在时读取 `Total Stock`。
-- 必需字段：`New Ark WH`、`New Ark SKU`、`Quantity`、`ETA for New Ark Update`。
-- `New Ark WH` 能匹配 Arrival Plan 标准仓库的行按 ETA 进入到货日期列。
-- 不能匹配 Arrival Plan 标准仓库的行不进入到货日期列，汇总为 `Domestic Stock`，计入 `Total QTY` 和总库存概览，并在页面底部“国内库存”表展示 SKU、Model、Factory、片数和 MW。
-- Factory 不在 `Total Stock` 中，通过 `TCL REFERENCE` 回连供应数据表的 `Factory Location`；片数和 MW 分别取 `QUANTITY` 和 `MW`。
+- 直接读取 `PV SUPPLY DATA` 和 `ESS SUPPLY DATA`，不再读取 `Total Stcok` 或 `Total Stock`。
+- 必需字段：`SPTN-PVHK New Ark PO#`、`New Ark PO Type`、`ALLOCATION Planning`、`PORT DESTINATION`、`New Ark WH`、`New Ark SKU`、`Model`、`QUANTITY`、`ETA for New Ark update`。
+- 先排除 `SPTN-PVHK New Ark PO#` 不为空的行，再排除 `New Ark PO Type=Offshore` 和 `ALLOCATION Planning=Non-EU` 的行。
+- 再排除 PORT DESTINATION 为 PIRAEUS、GDANSK、CORK、Yangon、LIMASSOL、Douala、MANILA NORTH、KARACHI、DAR ES SALAAM、LAEM CHABANG、Pointe des Galets、DAVAO、Thessaloniki 的行。文本比较忽略大小写及首尾空格。
+- `New Ark SKU` 为空的行跳过；PV/ESS Category 由来源 sheet 确定，Model 直接取来源字段。
+- `New Ark WH` 能匹配 Arrival Plan 标准仓库的行按 ETA 进入到货日期列，Virtual Warehouse 保留 SPNL、SPTN、SPFR、SPUK、SPIT、SPES 标准代码。
+- 不能匹配 Arrival Plan 标准仓库的行不进入到货日期列，按 SKU 汇总为 `Domestic Stock`，计入 `Total QTY` 和总库存概览；国内库存明细直接使用来源 sheet 的 `Factory Location` 和 `MW`（存在时）。
 - ETA 为空、无效、1900 年及以前或不在日期范围内时跳过。
-- 按 `(New Ark SKU, WH, ETA 日期)` 汇总 `Quantity`，来源标记为 `ODP`。
+- 按 `(New Ark SKU, WH, Virtual Warehouse, Category, Model, ETA 日期)` 汇总 `QUANTITY`，来源标记为 `ODP`。
 
 ### 3.4 来源合并
 
-Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一天同时存在两种来源时，来源标记为 `MIXED`；输出单元格使用对应来源颜色，并写入 `_Transit Source Map`。
+Daily Supply Plan 和 ODP 按各自完整仓库、产品和日期维度写入。完整维度相同且同一天同时存在两种来源时，来源标记为 `MIXED`；输出单元格使用对应来源颜色，并写入 `_Transit Source Map`。
 
 可视化中，`WH=CN` 的 `Domestic Stock` 作为期初库存加入可用库存和总库存曲线，并纳入有效行判断、产品明细及库存汇总。图表期初库存口径为 `Stock + Domestic Stock`。
 
@@ -107,13 +113,14 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 每次运行删除并重建 `stock`、`To be allocated`、`_Transit Source Map`。stock 基础列顺序为：
 
-`WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock | Domestic Stock`
+`WH | Virtual Warehouse | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock | Domestic Stock`
 
 后面追加起止日期内每日列，表头为 `YYYY.M.D`。
 
 每一行：
 
-- `To be allocated` = 同 SKU/WH 的 Ordered Qty 汇总。
+- `Virtual Warehouse`：Inventory 行保留来源仓库名；Daily Supply Plan 和 ODP Arrival Plan 行保留标准代码 SPNL、SPTN、SPFR、SPUK、SPIT、SPES。Domestic Stock 和 To be allocated 不使用此维度，写入 Virtual Warehouse 为空的 SKU/WH 汇总行。
+- `To be allocated` = 同 SKU/WH 的 Ordered Qty 汇总，仅写入 Virtual Warehouse 为空的汇总行。
 - `Transit Total` = 所有日期列在途数量之和。
 - `Total QTY = Stock + Domestic Stock + Transit Total`。
 - 仅 PV 产品计算 `MW = Stock × Bin / 1,000,000` 和 `Total MW = Total QTY × Bin / 1,000,000`。
@@ -134,7 +141,7 @@ Daily Supply Plan 和 ODP 数量累加到相同的 `(SKU, WH, 日期)`。同一�
 
 - 总库存概览按当前维度筛选结果统计 Inventory 在库、Daily Supply Plan 在途、ODP 国内未发货三种状态。PV 将三种状态的 Quantity 分别乘以 Bin 后换算为 MW；ESS、HP 保持 Quantity。顶部总数为三种状态之和，三个环形图分别展示各状态的数值和占比。DSP 与 ODP 使用生成库存文件时选择的日期范围；待分配不进入总库存概览。
 - 总库存概览提供 Brand 和 Family（系列）多选筛选，仅列出 PV/ESS 且三种状态合计不为零的数据。筛选结果为零的品类会同时隐藏顶部指标和状态图，剩余卡片自动重排。
-- `_Transit Source Map` 除来源标签外，分别保存 `Daily Supply Plan Qty` 和 `ODP Qty`，确保同一 SKU/WH/日期同时存在两个来源时仍可准确拆分状态。
+- `_Transit Source Map` 除来源标签外，同时保存 Virtual Warehouse、Category、Model、Daily Supply Plan Qty 和 ODP Qty，确保完整维度相同的两个来源仍可准确拆分状态。
 - 现货曲线从 Stock 开始，每个日期累加当日及之前的在途数量。
 - Daily 直接按日；Weekly 按 ISO 周；Monthly 按月份。
 - `total` 展示全部选中产品；`split` 按 Product 分线，最多显示结束值最高的 12 条；`warehouse` 按 WH 分线。

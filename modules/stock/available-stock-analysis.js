@@ -1578,16 +1578,19 @@ if '_Transit Source Map' in wb.sheetnames:
     ws_src = wb['_Transit Source Map']
     src_headers = [cell.value for cell in ws_src[1]]
     src_idx = {str(h).strip(): i for i, h in enumerate(src_headers) if h is not None}
-    required_src = ["SKU", "WH", "Date", "Source"]
+    required_src = ["SKU", "WH", "Virtual Warehouse", "Category", "Model", "Date", "Source"]
     if all(c in src_idx for c in required_src):
         for src_row in ws_src.iter_rows(min_row=2, values_only=True):
             sku = _text(src_row[src_idx["SKU"]])
             wh = _text(src_row[src_idx["WH"]])
+            virtual_warehouse = _text(src_row[src_idx["Virtual Warehouse"]])
+            source_category = _text(src_row[src_idx["Category"]])
+            source_model = _text(src_row[src_idx["Model"]])
             d_header = _text(src_row[src_idx["Date"]])
             source = _text(src_row[src_idx["Source"]])
             if sku and wh and d_header and source:
-                source_map[f"{sku}||{wh}||{d_header}"] = source
-                status_key = f"{sku}||{wh}"
+                source_map[f"{sku}||{wh}||{virtual_warehouse}||{source_category}||{source_model}||{d_header}"] = source
+                status_key = f"{sku}||{wh}||{virtual_warehouse}||{source_category}||{source_model}"
                 if status_key not in status_qty_map:
                     status_qty_map[status_key] = {"DailySupplyPlan": 0.0, "ODP": 0.0}
                 if "Daily Supply Plan Qty" in src_idx:
@@ -1600,7 +1603,7 @@ for col in required:
     if col not in header_to_idx:
         raise ValueError(f"Missing expected column in stock sheet: {col}")
 
-base_set = set(required + ["Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW", "Domestic Stock"])
+base_set = set(required + ["Virtual Warehouse", "Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW", "Domestic Stock"])
 
 date_headers = []
 for h in headers:
@@ -1650,6 +1653,7 @@ for row in stock_rows:
 for row in stock_rows:
     sku = _text(row[header_to_idx['SKU']])
     wh = _text(row[header_to_idx['WH']])
+    virtual_warehouse = _text(row[header_to_idx['Virtual Warehouse']]) if 'Virtual Warehouse' in header_to_idx else ""
     if not sku or not wh:
         continue
     if sku.upper() not in active_sku_keys:
@@ -1672,14 +1676,14 @@ for row in stock_rows:
         qty = _num(row[header_to_idx[d]])
         if qty != 0:
             transit[d] = qty
-            src = source_map.get(f"{sku}||{wh}||{d}", "INV_DSP")
+            src = source_map.get(f"{sku}||{wh}||{virtual_warehouse}||{category}||{model}||{d}", "INV_DSP")
             transit_source[d] = src
             date_source_tags[d] = _merge_tag(date_source_tags.get(d), src)
 
     product_key = f"{sku}||{model}" if model else f"{sku}||"
     product_parts = [part for part in (model, sku, connector) if part]
     product_label = " | ".join(product_parts) if product_parts else sku
-    status_key = f"{sku}||{wh}"
+    status_key = f"{sku}||{wh}||{virtual_warehouse}||{category}||{model}"
     transit_status = status_qty_map.get(status_key, {}) if status_key not in status_assigned_keys else {}
     status_assigned_keys.add(status_key)
     bin_value = _num(row[header_to_idx['Bin']]) if 'Bin' in header_to_idx else 0
@@ -1688,6 +1692,7 @@ for row in stock_rows:
 
     item = {
         "WH": wh,
+        "VirtualWarehouse": virtual_warehouse,
         "Category": category,
         "Brand": brand,
         "ProductTCLReport": product_report,

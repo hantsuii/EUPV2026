@@ -138,15 +138,25 @@ function mapTransitWhCode(value) {
   return null;
 }
 
-function excludedInventoryRow(brand, salesOrgName, virtualWarehouseName) {
-  if (normalizeLower(brand) === "other") return true;
+function mapTransitVirtualWarehouse(value) {
+  const text = normalizeText(value).toUpperCase();
+  if (!text) return null;
+  for (const code of Object.keys(WH_CODE_MAP)) {
+    if (text.includes(code)) return code;
+  }
+  return null;
+}
+
+function excludedInventoryRow(salesOrgName, physicalWarehouseName, virtualWarehouseName) {
   const salesOrg = normalizeLower(salesOrgName).replace(/\s+/g, " ").trim();
   if (
     salesOrg === "china" ||
-    salesOrg.includes("business planning departmen") ||
     salesOrg.includes("business planning department")
   ) return true;
-  return normalizeLower(virtualWarehouseName).includes("arrival plan");
+  if (normalizeLower(physicalWarehouseName).replace(/\s+/g, " ").trim() === "sptn china ftz(w73)") return true;
+  const virtualWarehouse = normalizeLower(virtualWarehouseName).trim();
+  return ["fru", "hold", "market material", "scrap", "spec"].some((prefix) => virtualWarehouse.startsWith(prefix))
+    || virtualWarehouse === "natec sunenergy b.v. consignment wh";
 }
 
 function parseDateParts(value) {
@@ -264,11 +274,12 @@ function extractInventoryRows(workbook, stockMode = "available") {
   const { rows, index } = readSheetRows(getFirstWorksheet(workbook));
   const required = [
     "customer model",
+    "product model",
     "category",
     stockMode === "total" ? "actual stock" : "available stock",
     "sales organization name",
     "virtual warehouse name",
-    "brand",
+    "physical warehouse name",
   ];
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "Inventory Detail", columns: missing.join(", ") });
@@ -276,115 +287,117 @@ function extractInventoryRows(workbook, stockMode = "available") {
   const stockColumn = stockMode === "total" ? "actual stock" : "available stock";
   const grouped = new Map();
   for (const row of rows) {
-    const brand = row[index.brand];
     const salesOrgName = row[index["sales organization name"]];
     const virtualWarehouseName = row[index["virtual warehouse name"]];
-    if (excludedInventoryRow(brand, salesOrgName, virtualWarehouseName)) continue;
+    const physicalWarehouseName = row[index["physical warehouse name"]];
+    if (excludedInventoryRow(salesOrgName, physicalWarehouseName, virtualWarehouseName)) continue;
     const sku = normalizeText(row[index["customer model"]]);
     if (!sku) continue;
     const category = normalizeText(row[index.category]);
+    const productModel = normalizeText(row[index["product model"]]);
     const salesOrg = normalizeText(salesOrgName);
-    const key = `${sku}\u0000${category}\u0000${salesOrg}`;
+    const virtualWarehouse = normalizeText(virtualWarehouseName);
+    const key = `${salesOrg}\u0000${virtualWarehouse}\u0000${category}\u0000${sku}\u0000${productModel}`;
     grouped.set(key, (grouped.get(key) || 0) + safeFloat(row[index[stockColumn]]));
   }
 
   return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, stock]) => {
-    const [sku, category, salesOrg] = key.split("\u0000");
-    return { SKU: sku, Category: category, Stock: Number(stock.toFixed(3)), WH: mapCountryCode(salesOrg) };
+    const [salesOrg, virtualWarehouse, category, sku, productModel] = key.split("\u0000");
+    return {
+      SKU: sku,
+      Category: category,
+      ProductModel: productModel,
+      VirtualWarehouse: virtualWarehouse,
+      Stock: Number(stock.toFixed(3)),
+      WH: mapCountryCode(salesOrg),
+    };
   });
 }
 
 function extractTransitData(workbook, startValue, endValue, stockMode = "available") {
   const { rows, index } = readSheetRows(getFirstWorksheet(workbook));
   const quantityColumn = stockMode === "total" ? "scheduled quantity" : "available quantity";
-  const required = ["in-transit warehouse(code)", "customer model", "supply date", quantityColumn];
+  const required = ["in-transit warehouse(code)", "customer model", "product model", "category", "supply date", quantityColumn];
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "DailySupplyPlan", columns: missing.join(", ") });
 
   const qty = new Map();
-  const category = new Map();
-  const hasCategory = index.category != null;
   for (const row of rows) {
     const sku = normalizeText(row[index["customer model"]]);
-    const wh = mapTransitWhCode(row[index["in-transit warehouse(code)"]]);
+    const rawWarehouse = row[index["in-transit warehouse(code)"]];
+    const wh = mapTransitWhCode(rawWarehouse);
+    const virtualWarehouse = mapTransitVirtualWarehouse(rawWarehouse);
     const parts = parseDateParts(row[index["supply date"]]);
-    if (!sku || !wh || !parts) continue;
+    if (!sku || !wh || !virtualWarehouse || !parts) continue;
     const dateKey = partsToDateKey(parts);
     if (!isWithinRange(dateKey, startValue, endValue)) continue;
-    addMapNumber(qty, `${sku}||${wh}||${dateKey}`, safeFloat(row[index[quantityColumn]]));
-    if (hasCategory) {
-      const categoryValue = normalizeText(row[index.category]);
-      const key = `${sku}||${wh}`;
-      if (categoryValue && !category.has(key)) category.set(key, categoryValue);
-    }
+    const category = normalizeText(row[index.category]);
+    const productModel = normalizeText(row[index["product model"]]);
+    addMapNumber(qty, transitRecordKey(sku, wh, virtualWarehouse, category, productModel, dateKey), safeFloat(row[index[quantityColumn]]));
   }
-  return { qty, category };
-}
-
-function buildOdpFactoryLookup(workbook) {
-  const lookup = new Map();
-  for (const sheetName of workbook.SheetNames || []) {
-    const ws = workbook.Sheets[sheetName];
-    const { rows, index } = readSheetRows(ws);
-    const referenceColumn = index["tcl reference"] != null
-      ? "tcl reference"
-      : (index["tcl reference no."] != null ? "tcl reference no." : null);
-    if (!referenceColumn || index["factory location"] == null) continue;
-    for (const row of rows) {
-      const reference = normalizeText(row[index[referenceColumn]]);
-      const factory = normalizeText(row[index["factory location"]]);
-      if (reference && factory && !lookup.has(reference)) lookup.set(reference, factory);
-    }
-  }
-  return lookup;
+  return { qty };
 }
 
 function extractOdpTransitData(workbook, startValue, endValue) {
-  let ws = workbook.getWorksheet
-    ? (workbook.getWorksheet("Total Stcok") || workbook.getWorksheet("Total Stock"))
-    : (workbook.Sheets["Total Stcok"] || workbook.Sheets["Total Stock"]);
-  if (!ws) throw localizedError("odpSheetMissing");
-  const { rows, index } = readSheetRows(ws);
-  const required = ["tcl reference", "new ark wh", "new ark sku", "model", "quantity", "mw", "eta for new ark update"];
-  const missing = required.filter((key) => index[key] == null);
-  if (missing.length) throw localizedError("missingColumns", { sheet: "ODP Total Stock", columns: missing.join(", ") });
-
   const qty = new Map();
   const domesticQty = new Map();
   const domesticDetailMap = new Map();
   const category = new Map();
-  const factoryLookup = buildOdpFactoryLookup(workbook);
-  const hasProductType = index["product type"] != null;
-  for (const row of rows) {
-    const sku = normalizeText(row[index["new ark sku"]]);
-    const rawWh = row[index["new ark wh"]];
-    if (!sku) continue;
-    const quantity = safeFloat(row[index.quantity]);
-    const wh = mapTransitWhCode(rawWh);
-    const isArrivalPlanWarehouse = normalizeLower(rawWh).includes("arrival plan") && Boolean(wh);
-    if (!isArrivalPlanWarehouse) {
-      addMapNumber(domesticQty, sku, quantity);
-      const reference = normalizeText(row[index["tcl reference"]]);
+  const blockedDestinations = new Set([
+    "piraeus", "gdansk", "cork", "yangon", "limassol", "douala", "manila north",
+    "karachi", "dar es salaam", "laem chabang", "pointe des galets", "davao", "thessaloniki",
+  ]);
+  const sheetSpecs = [
+    { name: "PV SUPPLY DATA", category: "PV" },
+    { name: "ESS SUPPLY DATA", category: "ESS" },
+  ];
+
+  for (const sheetSpec of sheetSpecs) {
+    const ws = workbook.getWorksheet ? workbook.getWorksheet(sheetSpec.name) : workbook.Sheets[sheetSpec.name];
+    if (!ws) throw localizedError("odpSupplySheetMissing", { name: sheetSpec.name });
+    const { rows, index } = readSheetRows(ws);
+    const required = [
+      "sptn-pvhk new ark po#", "new ark po type", "allocation planning", "port destination", "new ark wh",
+      "new ark sku", "model", "quantity", "eta for new ark update",
+    ];
+    const missing = required.filter((key) => index[key] == null);
+    if (missing.length) throw localizedError("missingColumns", { sheet: sheetSpec.name, columns: missing.join(", ") });
+
+    for (const row of rows) {
+      if (normalizeText(row[index["sptn-pvhk new ark po#"]])) continue;
+      if (normalizeLower(row[index["new ark po type"]]) === "offshore") continue;
+      if (normalizeLower(row[index["allocation planning"]]) === "non-eu") continue;
+      if (blockedDestinations.has(normalizeLower(row[index["port destination"]]))) continue;
+
+      const sku = normalizeText(row[index["new ark sku"]]);
+      if (!sku) continue;
+      const rawWh = row[index["new ark wh"]];
+      const quantity = safeFloat(row[index.quantity]);
       const model = normalizeText(row[index.model]);
-      const factory = factoryLookup.get(reference) || "";
-      const detailKey = `${sku}\u0000${model}\u0000${factory}`;
-      const detail = domesticDetailMap.get(detailKey) || { SKU: sku, Model: model, Factory: factory, Quantity: 0, MW: 0 };
-      detail.Quantity += quantity;
-      detail.MW += safeFloat(row[index.mw]);
-      domesticDetailMap.set(detailKey, detail);
-      continue;
-    }
-    const rawEta = row[index["eta for new ark update"]];
-    if (["", "n/a", "na", "none", "null"].includes(normalizeLower(rawEta))) continue;
-    const parts = parseDateParts(rawEta);
-    if (!wh || !parts || parts.year <= 1900) continue;
-    const dateKey = partsToDateKey(parts);
-    if (!isWithinRange(dateKey, startValue, endValue)) continue;
-    addMapNumber(qty, `${sku}||${wh}||${dateKey}`, quantity);
-    if (hasProductType) {
-      const categoryValue = normalizeText(row[index["product type"]]);
-      const key = `${sku}||${wh}`;
-      if (categoryValue && !category.has(key)) category.set(key, categoryValue);
+      const wh = mapTransitWhCode(rawWh);
+      const virtualWarehouse = mapTransitVirtualWarehouse(rawWh) || "";
+      const isArrivalPlanWarehouse = normalizeLower(rawWh).includes("arrival plan") && Boolean(wh);
+      if (!isArrivalPlanWarehouse) {
+        addMapNumber(domesticQty, sku, quantity);
+        const factory = index["factory location"] == null ? "" : normalizeText(row[index["factory location"]]);
+        const mw = index.mw == null ? 0 : safeFloat(row[index.mw]);
+        const detailKey = `${sku}\u0000${model}\u0000${factory}`;
+        const detail = domesticDetailMap.get(detailKey) || { SKU: sku, Model: model, Factory: factory, Quantity: 0, MW: 0 };
+        detail.Quantity += quantity;
+        detail.MW += mw;
+        domesticDetailMap.set(detailKey, detail);
+        continue;
+      }
+
+      const rawEta = row[index["eta for new ark update"]];
+      if (["", "n/a", "na", "none", "null"].includes(normalizeLower(rawEta))) continue;
+      const parts = parseDateParts(rawEta);
+      if (!parts || parts.year <= 1900) continue;
+      const dateKey = partsToDateKey(parts);
+      if (!isWithinRange(dateKey, startValue, endValue)) continue;
+      addMapNumber(qty, transitRecordKey(sku, wh, virtualWarehouse, sheetSpec.category, model, dateKey), quantity);
+      const categoryKey = `${sku}||${wh}`;
+      if (!category.has(categoryKey)) category.set(categoryKey, sheetSpec.category);
     }
   }
   const domesticDetails = [...domesticDetailMap.values()]
@@ -447,15 +460,16 @@ function makeUnmatchedMapping() {
   };
 }
 
-function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0) {
+function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "") {
   return {
     WH: wh,
+    VirtualWarehouse: virtualWarehouse,
     SKU: sku,
-    Category: mapped.Category,
+    Category: sourceCategory || mapped.Category,
     Brand: mapped.Brand,
     ProductTCLReport: mapped["Product TCL Report"],
     Family: mapped.Family,
-    Model: mapped.Model,
+    Model: sourceProductModel || mapped.Model,
     Connector: mapped.Connector,
     Bin: mapped.Bin,
     MOQ: mapped.MOQ,
@@ -468,10 +482,12 @@ function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0) {
   };
 }
 
-function splitKey3(key) {
-  const first = key.indexOf("||");
-  const second = key.indexOf("||", first + 2);
-  return [key.slice(0, first), key.slice(first + 2, second), key.slice(second + 2)];
+function transitRecordKey(sku, wh, virtualWarehouse, category, productModel, dateKey) {
+  return [sku, wh, virtualWarehouse, category, productModel, dateKey].join("\u0000");
+}
+
+function splitTransitRecordKey(key) {
+  return key.split("\u0000");
 }
 
 function splitKey2(key) {
@@ -517,6 +533,7 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
   }
   const item = {
     WH: record.WH,
+    VirtualWarehouse: record.VirtualWarehouse,
     Category: record.Category,
     Brand: record.Brand,
     ProductTCLReport: record.ProductTCLReport,
@@ -580,7 +597,7 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet("stock");
   const baseHeaders = [
-    "WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
+    "WH", "Virtual Warehouse", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Bin", "MOQ",
     "To be allocated", "Total QTY", "Total MW", "MW", "Stock", "Domestic Stock",
   ];
   const dateHeaders = dateKeys.map(dateKeyToHeader);
@@ -621,7 +638,7 @@ function writeStockWorksheet(workbook, records, dateKeys, sourceTags) {
     record.MW = mw == null ? null : Number(mw.toFixed(3));
 
     const row = ws.addRow([
-      record.WH, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
+      record.WH, record.VirtualWarehouse, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
       record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock, record.DomesticStock,
       ...dateKeys.map((dateKey) => (record.Transit[dateKey] ? record.Transit[dateKey] : null)),
     ]);
@@ -663,17 +680,23 @@ function writeAllocationWorksheet(workbook, orders, skuLookup) {
   return ws;
 }
 
-function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty, odpTransitQty) {
+function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup) {
   const old = workbook.getWorksheet(TRANSIT_SOURCE_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(TRANSIT_SOURCE_SHEET_NAME);
-  ws.addRow(["SKU", "WH", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"]);
+  ws.addRow(["SKU", "WH", "Virtual Warehouse", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"]);
   const sourceKeys = new Set([...transitSourceTag.keys(), ...dailyTransitQty.keys(), ...odpTransitQty.keys()]);
   for (const key of [...sourceKeys].sort((a, b) => a.localeCompare(b))) {
-    const [sku, wh, dateKey] = splitKey3(key);
+    const [sku, wh, virtualWarehouse, category, productModel, dateKey] = splitTransitRecordKey(key);
+    const mapped = skuLookup.get(normalizeSkuKey(sku));
+    const resolvedCategory = category || normalizeText(mapped?.Category);
+    const resolvedProductModel = productModel || normalizeText(mapped?.Model);
     ws.addRow([
       sku,
       wh,
+      virtualWarehouse,
+      resolvedCategory,
+      resolvedProductModel,
       dateKeyToHeader(dateKey),
       transitSourceTag.get(key) || SOURCE_INV_DSP,
       safeFloat(dailyTransitQty.get(key)),
@@ -765,22 +788,25 @@ export async function buildStockOutputJs({
 
   const activeSkuKeys = new Set();
   for (const row of inventoryRows) if (safeFloat(row.Stock) !== 0) activeSkuKeys.add(normalizeSkuKey(row.SKU));
-  for (const [key, qty] of transitQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitKey3(key)[0]));
+  for (const [key, qty] of transitQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitTransitRecordKey(key)[0]));
   for (const [key, qty] of allocationData.need) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitKey2(key)[0]));
   for (const [sku, qty] of domesticQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(sku));
 
   const records = [];
   const rowByKey = new Map();
+  const transitRowByKey = new Map();
   const markedRows = [];
   const resolve = (sku) => {
     const mapped = skuLookup.get(normalizeSkuKey(sku));
     return mapped ? { mapped, unmatched: false } : { mapped: makeUnmatchedMapping(), unmatched: true };
   };
-  const appendRecord = (wh, sku, mapped, stock, domesticStock = 0) => {
-    const record = createStockRecord(wh, sku, mapped, stock, domesticStock);
+  const appendRecord = (wh, sku, mapped, stock, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "") => {
+    const record = createStockRecord(wh, sku, mapped, stock, domesticStock, virtualWarehouse, sourceCategory, sourceProductModel);
     records.push(record);
-    const key = recordKey(sku, wh);
-    if (!rowByKey.has(key)) rowByKey.set(key, record);
+    if (!normalizeText(virtualWarehouse)) {
+      const key = recordKey(sku, wh);
+      if (!rowByKey.has(key)) rowByKey.set(key, record);
+    }
     return record;
   };
 
@@ -788,7 +814,7 @@ export async function buildStockOutputJs({
     if (!activeSkuKeys.has(normalizeSkuKey(item.SKU))) continue;
     const { mapped, unmatched } = resolve(item.SKU);
     if (unmatched) markedRows.push({ SKU: item.SKU, WH: item.WH, Reason: UNMATCHED_SKU_MARK });
-    appendRecord(item.WH, item.SKU, mapped, item.Stock);
+    appendRecord(item.WH, item.SKU, mapped, item.Stock, 0, item.VirtualWarehouse, item.Category, item.ProductModel);
   }
   for (const [key, qty] of allocationData.need) {
     if (!safeFloat(qty)) continue;
@@ -812,14 +838,17 @@ export async function buildStockOutputJs({
   }
   for (const [key, qty] of transitQty) {
     if (!safeFloat(qty)) continue;
-    const [sku, wh, dateKey] = splitKey3(key);
+    const [sku, wh, virtualWarehouse, sourceCategory, sourceProductModel, dateKey] = splitTransitRecordKey(key);
     if (!activeSkuKeys.has(normalizeSkuKey(sku))) continue;
-    const rowKey = recordKey(sku, wh);
-    let record = rowByKey.get(rowKey);
+    const { mapped, unmatched } = resolve(sku);
+    const category = sourceCategory || mapped.Category;
+    const productModel = sourceProductModel || mapped.Model;
+    const rowKey = [sku, wh, virtualWarehouse, category, productModel].join("\u0000");
+    let record = transitRowByKey.get(rowKey);
     if (!record) {
-      const { mapped, unmatched } = resolve(sku);
       if (unmatched) markedRows.push({ SKU: sku, WH: wh, Reason: UNMATCHED_SKU_MARK });
-      record = appendRecord(wh, sku, mapped, 0);
+      record = appendRecord(wh, sku, mapped, 0, 0, virtualWarehouse, category, productModel);
+      transitRowByKey.set(rowKey, record);
     }
     record.Transit[dateKey] = (record.Transit[dateKey] || 0) + qty;
     record.TransitSource[dateKey] = mergeSourceTag(record.TransitSource[dateKey], transitSourceTag.get(key) || SOURCE_INV_DSP);
@@ -827,7 +856,9 @@ export async function buildStockOutputJs({
     record.StatusQuantity.ODP += safeFloat(odpTransitQty.get(key));
   }
   for (const record of records) {
-    record.ToBeAllocated = safeFloat(allocationData.need.get(recordKey(record.SKU, record.WH)) || 0);
+    record.ToBeAllocated = normalizeText(record.VirtualWarehouse)
+      ? 0
+      : safeFloat(allocationData.need.get(recordKey(record.SKU, record.WH)) || 0);
   }
 
   const dateSourceTags = {};
@@ -842,7 +873,7 @@ export async function buildStockOutputJs({
 
   writeStockWorksheet(templateWorkbook, records, dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
-  writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty);
+  writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
   writeDomesticStockWorksheet(templateWorkbook, domesticDetails);
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
   const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode, domesticDetails);
@@ -862,10 +893,10 @@ function localizedError(key, vars = {}) {
   const lang = localStorage.getItem("app_lang") === "en" ? "en" : "zh";
   const messages = {
     zh: {
-      noSheets: "工作簿中没有工作表。", skuSheetMissing: "未找到 SKU 工作表：{name}", invalidTransitRange: "在途日期范围无效。", missingColumns: "{sheet} 缺少字段：{columns}", odpSheetMissing: "ODP 文件中缺少“Total Stcok”或“Total Stock”工作表。", outputEngineMissing: "JavaScript Excel 输出引擎未加载。", inputEngineMissing: "JavaScript Excel 输入引擎未加载。", readFailed: "无法读取 {label}：{message}"
+      noSheets: "工作簿中没有工作表。", skuSheetMissing: "未找到 SKU 工作表：{name}", invalidTransitRange: "在途日期范围无效。", missingColumns: "{sheet} 缺少字段：{columns}", odpSupplySheetMissing: "ODP 文件中缺少工作表：{name}", outputEngineMissing: "JavaScript Excel 输出引擎未加载。", inputEngineMissing: "JavaScript Excel 输入引擎未加载。", readFailed: "无法读取 {label}：{message}"
     },
     en: {
-      noSheets: "Workbook has no worksheets.", skuSheetMissing: "SKU sheet not found: {name}", invalidTransitRange: "Invalid transit date range.", missingColumns: "{sheet} is missing columns: {columns}", odpSheetMissing: "ODP file is missing the 'Total Stcok' or 'Total Stock' sheet.", outputEngineMissing: "JavaScript Excel output engine is not loaded.", inputEngineMissing: "JavaScript Excel input engine is not loaded.", readFailed: "{label} could not be read: {message}"
+      noSheets: "Workbook has no worksheets.", skuSheetMissing: "SKU sheet not found: {name}", invalidTransitRange: "Invalid transit range.", missingColumns: "{sheet} is missing columns: {columns}", odpSupplySheetMissing: "ODP file is missing worksheet: {name}", outputEngineMissing: "JavaScript Excel output engine is not loaded.", inputEngineMissing: "JavaScript Excel input engine is not loaded.", readFailed: "{label} could not be read: {message}"
     }
   };
   let message = messages[lang][key] || key;

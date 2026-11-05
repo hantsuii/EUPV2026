@@ -146,20 +146,33 @@ def map_transit_wh_code(in_transit_code: Any) -> str | None:
     return None
 
 
-def excluded_row(brand: Any, sales_org_name: Any, virtual_warehouse_name: Any) -> bool:
-    if normalize_lower(brand) == "other":
-        return True
+def map_transit_virtual_warehouse(in_transit_code: Any) -> str | None:
+    text = normalize_text(in_transit_code).upper()
+    if not text:
+        return None
+    for code in WH_CODE_MAP:
+        if code in text:
+            return code
+    return None
 
+
+def excluded_row(sales_org_name: Any, physical_warehouse_name: Any, virtual_warehouse_name: Any) -> bool:
     sales_org = normalize_lower(sales_org_name)
     sales_org_compact = " ".join(sales_org.split())
     if (
         sales_org_compact == "china"
-        or "business planning departmen" in sales_org_compact
         or "business planning department" in sales_org_compact
     ):
         return True
 
-    if "arrival plan" in normalize_lower(virtual_warehouse_name):
+    physical_warehouse = " ".join(normalize_lower(physical_warehouse_name).split())
+    if physical_warehouse == "sptn china ftz(w73)":
+        return True
+
+    virtual_warehouse = normalize_lower(virtual_warehouse_name).strip()
+    if virtual_warehouse.startswith(("fru", "hold", "market material", "scrap", "spec")):
+        return True
+    if virtual_warehouse == "natec sunenergy b.v. consignment wh":
         return True
 
     return False
@@ -219,9 +232,9 @@ def parse_supply_date(value: Any) -> date | None:
 
 
 def merge_transit_payload(
-    base_qty: dict[tuple[str, str, str], float],
+    base_qty: dict[tuple[str, str, str, str, str, str], float],
     base_category: dict[tuple[str, str], str],
-    add_qty: dict[tuple[str, str, str], float],
+    add_qty: dict[tuple[str, str, str, str, str, str], float],
     add_category: dict[tuple[str, str], str],
 ) -> None:
     for key, qty in add_qty.items():
@@ -262,11 +275,12 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
 
     required = [
         "customer model",
+        "product model",
         "category",
         "actual stock" if stock_mode == "total" else "available stock",
         "sales organization name",
         "virtual warehouse name",
-        "brand",
+        "physical warehouse name",
     ]
     missing = [h for h in required if h not in idx]
     if missing:
@@ -274,31 +288,35 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
         raise ValueError(f"Inventory Detail missing columns: {missing}")
 
     stock_column = "actual stock" if stock_mode == "total" else "available stock"
-    grouped: dict[tuple[str, str, str], float] = defaultdict(float)
+    grouped: dict[tuple[str, str, str, str, str], float] = defaultdict(float)
     for row in ws.iter_rows(min_row=2, values_only=True):
-        brand = row[idx["brand"]]
         sales_org_name = row[idx["sales organization name"]]
         virtual_warehouse_name = row[idx["virtual warehouse name"]]
-        if excluded_row(brand, sales_org_name, virtual_warehouse_name):
+        physical_warehouse_name = row[idx["physical warehouse name"]]
+        if excluded_row(sales_org_name, physical_warehouse_name, virtual_warehouse_name):
             continue
 
         sku = normalize_text(row[idx["customer model"]])
         category = normalize_text(row[idx["category"]])
+        product_model = normalize_text(row[idx["product model"]])
         sales_org = normalize_text(sales_org_name)
+        virtual_warehouse = normalize_text(virtual_warehouse_name)
         if not sku:
             continue
 
         stock = safe_float(row[idx[stock_column]])
-        grouped[(sku, category, sales_org)] += stock
+        grouped[(sales_org, virtual_warehouse, category, sku, product_model)] += stock
 
     wb.close()
 
     out: list[dict[str, Any]] = []
-    for (sku, category, sales_org), stock in sorted(grouped.items()):
+    for (sales_org, virtual_warehouse, category, sku, product_model), stock in sorted(grouped.items()):
         out.append(
             {
                 "SKU": sku,
                 "Category": category,
+                "ProductModel": product_model,
+                "VirtualWarehouse": virtual_warehouse,
                 "Stock": round(stock, 3),
                 "WH": map_country_code(sales_org),
             }
@@ -353,31 +371,31 @@ def extract_transit_data(
     start_date: date,
     end_date: date,
     stock_mode: str = "available",
-) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str]]:
+) -> tuple[dict[tuple[str, str, str, str, str, str], float], dict[tuple[str, str], str]]:
     wb = load_workbook(daily_supply_plan_path, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
 
     headers = [cell.value for cell in ws[1]]
     idx = build_header_index(headers)
     quantity_column = "scheduled quantity" if stock_mode == "total" else "available quantity"
-    required = ["in-transit warehouse(code)", "customer model", "supply date", quantity_column]
+    required = ["in-transit warehouse(code)", "customer model", "product model", "category", "supply date", quantity_column]
     missing = [h for h in required if h not in idx]
     if missing:
         wb.close()
         raise ValueError(f"DailySupplyPlan missing columns: {missing}")
 
-    transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
+    transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
-
-    has_category = "category" in idx
 
     for row in ws.iter_rows(min_row=2, values_only=True):
         sku = normalize_text(row[idx["customer model"]])
         if not sku:
             continue
 
-        wh = map_transit_wh_code(row[idx["in-transit warehouse(code)"]])
-        if not wh:
+        raw_warehouse = row[idx["in-transit warehouse(code)"]]
+        wh = map_transit_wh_code(raw_warehouse)
+        virtual_warehouse = map_transit_virtual_warehouse(raw_warehouse)
+        if not wh or not virtual_warehouse:
             continue
 
         supply_date = parse_supply_date(row[idx["supply date"]])
@@ -386,12 +404,9 @@ def extract_transit_data(
 
         qty = safe_float(row[idx[quantity_column]])
         d_header = date_header(supply_date)
-        transit_qty[(sku, wh, d_header)] += qty
-
-        if has_category:
-            category_val = normalize_text(row[idx["category"]])
-            if category_val and (sku, wh) not in transit_category:
-                transit_category[(sku, wh)] = category_val
+        category_val = normalize_text(row[idx["category"]])
+        product_model = normalize_text(row[idx["product model"]])
+        transit_qty[(sku, wh, virtual_warehouse, category_val, product_model, d_header)] += qty
 
     wb.close()
     return transit_qty, transit_category
@@ -401,91 +416,79 @@ def extract_odp_transit_data(
     odp_master_path: Path,
     start_date: date,
     end_date: date,
-) -> tuple[dict[tuple[str, str, str], float], dict[tuple[str, str], str], dict[str, float], list[dict[str, Any]]]:
+) -> tuple[dict[tuple[str, str, str, str, str, str], float], dict[tuple[str, str], str], dict[str, float], list[dict[str, Any]]]:
     wb = load_workbook(odp_master_path, data_only=True, read_only=True)
-
-    sheet_name = None
-    for candidate in ("Total Stcok", "Total Stock"):
-        if candidate in wb.sheetnames:
-            sheet_name = candidate
-            break
-    if sheet_name is None:
-        wb.close()
-        raise ValueError("ODP file missing `Total Stcok`/`Total Stock` sheet")
-
-    ws = wb[sheet_name]
-    headers = [cell.value for cell in ws[1]]
-    idx = build_header_index(headers)
-
-    required = ["tcl reference", "new ark wh", "new ark sku", "model", "quantity", "mw", "eta for new ark update"]
-    missing = [h for h in required if h not in idx]
-    if missing:
-        wb.close()
-        raise ValueError(f"ODP Total Stock missing columns: {missing}")
-
-    transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
+    transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
     domestic_qty: dict[str, float] = defaultdict(float)
     domestic_detail_map: dict[tuple[str, str, str], dict[str, Any]] = {}
+    blocked_destinations = {
+        "piraeus", "gdansk", "cork", "yangon", "limassol", "douala", "manila north",
+        "karachi", "dar es salaam", "laem chabang", "pointe des galets", "davao", "thessaloniki",
+    }
+    sheet_specs = (("PV SUPPLY DATA", "PV"), ("ESS SUPPLY DATA", "ESS"))
 
-    factory_lookup: dict[str, str] = {}
-    for source_sheet in wb.worksheets:
-        source_header_values = next(source_sheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
-        if not source_header_values:
-            continue
-        source_idx = build_header_index(list(source_header_values))
-        reference_column = "tcl reference" if "tcl reference" in source_idx else (
-            "tcl reference no." if "tcl reference no." in source_idx else None
-        )
-        if reference_column is None or "factory location" not in source_idx:
-            continue
-        for source_row in source_sheet.iter_rows(min_row=2, values_only=True):
-            reference = normalize_text(source_row[source_idx[reference_column]])
-            factory = normalize_text(source_row[source_idx["factory location"]])
-            if reference and factory and reference not in factory_lookup:
-                factory_lookup[reference] = factory
+    for sheet_name, source_category in sheet_specs:
+        if sheet_name not in wb.sheetnames:
+            wb.close()
+            raise ValueError(f"ODP file missing `{sheet_name}` sheet")
+        ws = wb[sheet_name]
+        headers = [cell.value for cell in ws[1]]
+        idx = build_header_index(headers)
+        required = [
+            "sptn-pvhk new ark po#", "new ark po type", "allocation planning", "port destination", "new ark wh",
+            "new ark sku", "model", "quantity", "eta for new ark update",
+        ]
+        missing = [h for h in required if h not in idx]
+        if missing:
+            wb.close()
+            raise ValueError(f"{sheet_name} missing columns: {missing}")
 
-    has_product_type = "product type" in idx
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if normalize_text(row[idx["sptn-pvhk new ark po#"]]):
+                continue
+            if normalize_lower(row[idx["new ark po type"]]) == "offshore":
+                continue
+            if normalize_lower(row[idx["allocation planning"]]) == "non-eu":
+                continue
+            if normalize_lower(row[idx["port destination"]]) in blocked_destinations:
+                continue
 
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        sku = normalize_text(row[idx["new ark sku"]])
-        if not sku:
-            continue
-
-        raw_wh = row[idx["new ark wh"]]
-        wh = map_transit_wh_code(raw_wh)
-        is_arrival_plan_warehouse = "arrival plan" in normalize_lower(raw_wh) and bool(wh)
-        qty = safe_float(row[idx["quantity"]])
-        if not is_arrival_plan_warehouse:
-            domestic_qty[sku] += qty
-            reference = normalize_text(row[idx["tcl reference"]])
+            sku = normalize_text(row[idx["new ark sku"]])
+            if not sku:
+                continue
+            raw_wh = row[idx["new ark wh"]]
+            wh = map_transit_wh_code(raw_wh)
+            virtual_warehouse = map_transit_virtual_warehouse(raw_wh) or ""
+            qty = safe_float(row[idx["quantity"]])
             model = normalize_text(row[idx["model"]])
-            factory = factory_lookup.get(reference, "")
-            detail_key = (sku, model, factory)
-            detail = domestic_detail_map.setdefault(
-                detail_key,
-                {"SKU": sku, "Model": model, "Factory": factory, "Quantity": 0.0, "MW": 0.0},
-            )
-            detail["Quantity"] += qty
-            detail["MW"] += safe_float(row[idx["mw"]])
-            continue
+            is_arrival_plan_warehouse = "arrival plan" in normalize_lower(raw_wh) and bool(wh)
+            if not is_arrival_plan_warehouse:
+                domestic_qty[sku] += qty
+                factory = normalize_text(row[idx["factory location"]]) if "factory location" in idx else ""
+                mw = safe_float(row[idx["mw"]]) if "mw" in idx else 0.0
+                detail_key = (sku, model, factory)
+                detail = domestic_detail_map.setdefault(
+                    detail_key,
+                    {"SKU": sku, "Model": model, "Factory": factory, "Quantity": 0.0, "MW": 0.0},
+                )
+                detail["Quantity"] += qty
+                detail["MW"] += mw
+                continue
 
-        raw_eta = row[idx["eta for new ark update"]]
-        if normalize_lower(raw_eta) in {"", "n/a", "na", "none", "null"}:
-            continue
-        eta_date = parse_supply_date(raw_eta)
-        if eta_date is None or eta_date.year <= 1900:
-            continue
-        if eta_date < start_date or eta_date > end_date:
-            continue
+            raw_eta = row[idx["eta for new ark update"]]
+            if normalize_lower(raw_eta) in {"", "n/a", "na", "none", "null"}:
+                continue
+            eta_date = parse_supply_date(raw_eta)
+            if eta_date is None or eta_date.year <= 1900:
+                continue
+            if eta_date < start_date or eta_date > end_date:
+                continue
 
-        d_header = date_header(eta_date)
-        transit_qty[(sku, wh, d_header)] += qty
-
-        if has_product_type:
-            category_val = normalize_text(row[idx["product type"]])
-            if category_val and (sku, wh) not in transit_category:
-                transit_category[(sku, wh)] = category_val
+            d_header = date_header(eta_date)
+            transit_qty[(sku, wh, virtual_warehouse, source_category, model, d_header)] += qty
+            if (sku, wh) not in transit_category:
+                transit_category[(sku, wh)] = source_category
 
     wb.close()
     domestic_details = [
@@ -569,11 +572,11 @@ def write_output_sheet(
     stock_wb_path: Path,
     rows: list[dict[str, Any]],
     sku_lookup: dict[str, dict[str, Any]],
-    transit_qty: dict[tuple[str, str, str], float] | None = None,
+    transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
     transit_category: dict[tuple[str, str], str] | None = None,
-    transit_source_tag: dict[tuple[str, str, str], str] | None = None,
-    daily_transit_qty: dict[tuple[str, str, str], float] | None = None,
-    odp_transit_qty: dict[tuple[str, str, str], float] | None = None,
+    transit_source_tag: dict[tuple[str, str, str, str, str, str], str] | None = None,
+    daily_transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
+    odp_transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
     domestic_qty: dict[str, float] | None = None,
     domestic_details: list[dict[str, Any]] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
@@ -603,6 +606,7 @@ def write_output_sheet(
 
     base_headers = [
         "WH",
+        "Virtual Warehouse",
         "Category",
         "Brand",
         "Product TCL Report",
@@ -647,16 +651,20 @@ def write_output_sheet(
         mapped: dict[str, Any],
         stock: float,
         domestic_stock: float = 0,
+        virtual_warehouse: str = "",
+        source_category: str = "",
+        source_product_model: str = "",
     ) -> None:
         ws.append(
             [
                 wh,
-                mapped.get("Category"),
+                virtual_warehouse,
+                source_category or mapped.get("Category"),
                 mapped.get("Brand"),
                 mapped.get("Product TCL Report"),
                 mapped.get("Family"),
                 sku,
-                mapped.get("Model"),
+                source_product_model or mapped.get("Model"),
                 mapped.get("Connector"),
                 mapped.get("Bin"),
                 mapped.get("MOQ"),
@@ -684,7 +692,7 @@ def write_output_sheet(
     for item in rows:
         if safe_float(item.get("Stock")) != 0:
             active_sku_keys.add(normalize_sku_key(item.get("SKU")))
-    for (sku, _wh, _d_header), qty in transit_qty.items():
+    for (sku, _wh, _virtual_warehouse, _category, _product_model, _d_header), qty in transit_qty.items():
         if safe_float(qty) != 0:
             active_sku_keys.add(normalize_sku_key(sku))
     for (sku, _wh), qty in allocated_need.items():
@@ -700,14 +708,24 @@ def write_output_sheet(
         mapped, unmatched = resolve_sku_mapping(item["SKU"])
         if unmatched:
             marked_rows_info.append({"SKU": item["SKU"], "WH": item["WH"], "Reason": UNMATCHED_SKU_MARK})
-        append_stock_row(item["WH"], item["SKU"], mapped, item["Stock"])
+        append_stock_row(
+            item["WH"],
+            item["SKU"],
+            mapped,
+            item["Stock"],
+            virtual_warehouse=item.get("VirtualWarehouse", ""),
+            source_category=item.get("Category", ""),
+            source_product_model=item.get("ProductModel", ""),
+        )
 
     header_col = {h: i + 1 for i, h in enumerate(headers)}
     row_by_key: dict[tuple[str, str], int] = {}
+    transit_row_by_key: dict[tuple[str, str, str, str, str], int] = {}
     for r in range(2, ws.max_row + 1):
         sku = normalize_text(ws.cell(r, header_col["SKU"]).value)
         wh = normalize_text(ws.cell(r, header_col["WH"]).value)
-        if sku and wh and (sku, wh) not in row_by_key:
+        virtual_warehouse = normalize_text(ws.cell(r, header_col["Virtual Warehouse"]).value)
+        if sku and wh and not virtual_warehouse and (sku, wh) not in row_by_key:
             row_by_key[(sku, wh)] = r
 
     for (sku, wh), need_qty in sorted(allocated_need.items()):
@@ -746,7 +764,7 @@ def write_output_sheet(
             ws.cell(r, domestic_stock_col).fill = CELL_FILL_BY_SOURCE[SOURCE_ODP]
 
     date_source_summary: dict[str, str] = {}
-    for (_, _, d_header), src in transit_source_tag.items():
+    for (_, _, _, _, _, d_header), src in transit_source_tag.items():
         if d_header not in header_col:
             continue
         date_source_summary[d_header] = merge_source_tag(date_source_summary.get(d_header, ""), src)
@@ -754,31 +772,43 @@ def write_output_sheet(
     for d_header, src in date_source_summary.items():
         ws.cell(1, header_col[d_header]).fill = CELL_FILL_BY_SOURCE.get(normalize_source_tag(src), CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
 
-    for (sku, wh, d_header), qty in transit_qty.items():
+    for (sku, wh, virtual_warehouse, source_category, source_product_model, d_header), qty in transit_qty.items():
         if d_header not in header_col:
             continue
         if safe_float(qty) == 0 or normalize_sku_key(sku) not in active_sku_keys:
             continue
 
-        key = (sku, wh)
-        if key not in row_by_key:
-            mapped, unmatched = resolve_sku_mapping(sku)
+        mapped, unmatched = resolve_sku_mapping(sku)
+        category_value = source_category or normalize_text(mapped.get("Category"))
+        product_model_value = source_product_model or normalize_text(mapped.get("Model"))
+        transit_key = (sku, wh, virtual_warehouse, category_value, product_model_value)
+        if transit_key not in transit_row_by_key:
             if unmatched:
                 marked_rows_info.append({"SKU": sku, "WH": wh, "Reason": UNMATCHED_SKU_MARK})
-            append_stock_row(wh, sku, mapped, 0)
-            row_by_key[key] = ws.max_row
+            append_stock_row(
+                wh,
+                sku,
+                mapped,
+                0,
+                virtual_warehouse=virtual_warehouse,
+                source_category=category_value,
+                source_product_model=product_model_value,
+            )
+            transit_row_by_key[transit_key] = ws.max_row
 
-        row_num = row_by_key[key]
+        row_num = transit_row_by_key[transit_key]
         col_num = header_col[d_header]
         current = safe_float(ws.cell(row_num, col_num).value)
         ws.cell(row_num, col_num).value = round(current + qty, 3)
-        source_tag = normalize_source_tag(transit_source_tag.get((sku, wh, d_header), SOURCE_INV_DSP))
+        source_key = (sku, wh, virtual_warehouse, source_category, source_product_model, d_header)
+        source_tag = normalize_source_tag(transit_source_tag.get(source_key, SOURCE_INV_DSP))
         ws.cell(row_num, col_num).fill = CELL_FILL_BY_SOURCE.get(source_tag, CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
 
     for r in range(2, ws.max_row + 1):
         sku_val = normalize_text(ws.cell(r, header_col["SKU"]).value)
         wh_val = normalize_text(ws.cell(r, header_col["WH"]).value)
-        need_qty = safe_float(allocated_need.get((sku_val, wh_val), 0))
+        virtual_warehouse_val = normalize_text(ws.cell(r, header_col["Virtual Warehouse"]).value)
+        need_qty = 0 if virtual_warehouse_val else safe_float(allocated_need.get((sku_val, wh_val), 0))
         ws.cell(r, header_col["To be allocated"]).value = round(need_qty, 3)
 
         bin_qty = safe_float(ws.cell(r, header_col["Bin"]).value)
@@ -832,19 +862,26 @@ def write_output_sheet(
         )
 
     ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
-    ws_source.append(["SKU", "WH", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
+    ws_source.append(["SKU", "WH", "Virtual Warehouse", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
     source_keys = set(transit_source_tag) | set(daily_transit_qty) | set(odp_transit_qty)
-    for sku, wh, d_header in sorted(source_keys):
+    for sku, wh, virtual_warehouse, category_value, product_model_value, d_header in sorted(source_keys):
         if d_header not in header_col:
             continue
-        src = transit_source_tag.get((sku, wh, d_header), SOURCE_INV_DSP)
+        source_key = (sku, wh, virtual_warehouse, category_value, product_model_value, d_header)
+        src = transit_source_tag.get(source_key, SOURCE_INV_DSP)
+        mapped, _ = resolve_sku_mapping(sku)
+        resolved_category = category_value or normalize_text(mapped.get("Category"))
+        resolved_product_model = product_model_value or normalize_text(mapped.get("Model"))
         ws_source.append([
             sku,
             wh,
+            virtual_warehouse,
+            resolved_category,
+            resolved_product_model,
             d_header,
             normalize_source_tag(src),
-            round(safe_float(daily_transit_qty.get((sku, wh, d_header), 0)), 3),
-            round(safe_float(odp_transit_qty.get((sku, wh, d_header), 0)), 3),
+            round(safe_float(daily_transit_qty.get(source_key, 0)), 3),
+            round(safe_float(odp_transit_qty.get(source_key, 0)), 3),
         ])
 
     ws_domestic = wb.create_sheet(DOMESTIC_DETAIL_SHEET_NAME)
@@ -892,11 +929,11 @@ def run(
 
     sku_lookup = build_sku_lookup(stock_path, resolved_sku_sheet)
 
-    transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
+    transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
-    transit_source_tag: dict[tuple[str, str, str], str] = {}
-    daily_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
-    odp_transit_qty: dict[tuple[str, str, str], float] = defaultdict(float)
+    transit_source_tag: dict[tuple[str, str, str, str, str, str], str] = {}
+    daily_transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
+    odp_transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     domestic_qty: dict[str, float] = defaultdict(float)
     domestic_details: list[dict[str, Any]] = []
 
@@ -952,7 +989,7 @@ def run(
     if daily_supply_plan_path:
         print(f"Transit source (DailySupplyPlan): {daily_supply_plan_path}")
     if odp_master_path:
-        print(f"Transit source (ODP Total Stock): {odp_master_path}")
+        print(f"Transit source (ODP PV/ESS SUPPLY DATA): {odp_master_path}")
     if order_file_path:
         print(f"Order source (To be allocated): {order_file_path}")
     if daily_supply_plan_path or odp_master_path:
@@ -976,7 +1013,7 @@ def run(
     if daily_supply_plan_path:
         log_lines.append(f"Transit source (DailySupplyPlan): {daily_supply_plan_path}")
     if odp_master_path:
-        log_lines.append(f"Transit source (ODP Total Stock): {odp_master_path}")
+        log_lines.append(f"Transit source (ODP PV/ESS SUPPLY DATA): {odp_master_path}")
     if order_file_path:
         log_lines.append(f"Order source (To be allocated): {order_file_path}")
     if daily_supply_plan_path or odp_master_path:
