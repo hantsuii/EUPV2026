@@ -259,6 +259,7 @@ function buildSkuLookup(workbook) {
     || getWorksheetByNameInsensitive(workbook, "SKU Mapping");
   const legacyWorksheet = getWorksheetByNameInsensitive(workbook, "Legacy Mapping Product");
   if (!skuWorksheet && !legacyWorksheet) throw localizedError("skuSheetMissing", { name: "Legacy Mapping Product / SKU" });
+  const sheetName = [skuWorksheet?.name, legacyWorksheet?.name].filter(Boolean).join(", ");
 
   const lookup = new Map();
   if (skuWorksheet) {
@@ -312,7 +313,7 @@ function buildSkuLookup(workbook) {
       });
     }
   }
-  return lookup;
+  return { lookup, sheetName };
 }
 
 function extractInventoryRows(workbook, stockMode = "available") {
@@ -849,7 +850,7 @@ export async function buildStockOutputJs({
   const orderWorkbook = await loadSource(orderBytes, "Orderfile Base");
 
   const dateKeys = iterDateKeys(startDate, endDate);
-  const skuLookup = buildSkuLookup(templateWorkbook);
+  const { lookup: skuLookup, sheetName: skuSheetName } = buildSkuLookup(templateWorkbook);
   const normalizedStockMode = stockMode === "total" ? "total" : "available";
   const inventoryRows = extractInventoryRows(inventoryWorkbook, normalizedStockMode);
   const transitQty = new Map();
