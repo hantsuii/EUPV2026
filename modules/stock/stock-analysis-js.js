@@ -7,7 +7,7 @@ const ALLOC_SHEET_NAME = "To be allocated";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
 const UNMATCHED_SHEET_NAME = "Unmatched SKU";
 const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
-const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), "ESS+HP Stock"];
+const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `${country}_PV`), "ESS+HP Stock"];
 const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
 
 const CELL_FILL_BY_SOURCE = {
@@ -985,7 +985,10 @@ export async function buildStockOutputJs({
     }
   }
 
-  for (const obsoleteName of ["stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES]) {
+  for (const obsoleteName of [
+    "stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES,
+    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`),
+  ]) {
     const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
   }
@@ -993,7 +996,7 @@ export async function buildStockOutputJs({
   const unmatchedRecords = records.filter(isUnmatchedRecord);
   for (const country of PV_STOCK_COUNTRIES) {
     const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() === country);
-    writeStockWorksheet(templateWorkbook, `PV Stock ${country}`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
+    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
   }
   writeStockWorksheet(templateWorkbook, "ESS+HP Stock", matchedRecords.filter((record) => !isPvCategory(record.Category)), dateKeys, dateSourceTags);
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
@@ -1003,6 +1006,10 @@ export async function buildStockOutputJs({
   if (obsoleteDomestic) templateWorkbook.removeWorksheet(obsoleteDomestic.id);
   writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[0], domesticDetails.filter((item) => normalizeText(item.Category).toUpperCase() === "PV"));
   writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[1], domesticDetails.filter((item) => normalizeText(item.Category).toUpperCase() === "ESS"));
+  for (const mappingSheetName of ["Legacy Mapping Product", "SKU", "SKU Mapping"]) {
+    const mappingSheet = getWorksheetByNameInsensitive(templateWorkbook, mappingSheetName);
+    if (mappingSheet) templateWorkbook.removeWorksheet(mappingSheet.id);
+  }
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
   const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode, domesticDetails);
 

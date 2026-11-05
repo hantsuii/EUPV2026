@@ -1568,13 +1568,15 @@ def _merge_tag(curr, incoming):
     return "MIXED"
 
 wb = load_workbook('${outputPath}', data_only=True)
-stock_sheet_names = [name for name in ('PV Stock NL', 'PV Stock FR', 'PV Stock UK', 'PV Stock ES', 'PV Stock IT', 'ESS+HP Stock') if name in wb.sheetnames]
+stock_sheet_names = [name for name in ('NL_PV', 'FR_PV', 'UK_PV', 'ES_PV', 'IT_PV', 'ESS+HP Stock') if name in wb.sheetnames]
+if not stock_sheet_names:
+    stock_sheet_names = [name for name in ('PV Stock NL', 'PV Stock FR', 'PV Stock UK', 'PV Stock ES', 'PV Stock IT', 'ESS+HP Stock') if name in wb.sheetnames]
 if not stock_sheet_names:
     stock_sheet_names = [name for name in ('PV Stock', 'ESS+HP Stock') if name in wb.sheetnames]
 if not stock_sheet_names and 'stock' in wb.sheetnames:
     stock_sheet_names = ['stock']
 if not stock_sheet_names:
-    raise ValueError('Missing expected stock sheets: PV Stock NL/FR/UK/ES/IT / ESS+HP Stock')
+    raise ValueError('Missing expected stock sheets: NL_PV/FR_PV/UK_PV/ES_PV/IT_PV / ESS+HP Stock')
 ws = wb[stock_sheet_names[0]]
 headers = [cell.value for cell in ws[1]]
 header_to_idx = {str(h).strip(): i for i, h in enumerate(headers) if h is not None}

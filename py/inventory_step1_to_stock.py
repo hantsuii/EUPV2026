@@ -25,7 +25,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
-OUTPUT_SHEET_NAMES = [*[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"]
+OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"]
 SKU_SHEET_CANDIDATES = ["Legacy Mapping Product", "SKU", "SKU Mapping"]
 TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
@@ -672,7 +672,8 @@ def write_output_sheet(
         end_date = _default_end()
     wb = load_workbook(stock_wb_path)
 
-    for old_name in ["stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *OUTPUT_SHEET_NAMES]:
+    legacy_output_names = [f"PV Stock {country}" for country in PV_STOCK_COUNTRIES]
+    for old_name in ["stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *legacy_output_names, *OUTPUT_SHEET_NAMES]:
         if old_name in wb.sheetnames:
             wb.remove(wb[old_name])
     if ALLOC_SHEET_NAME in wb.sheetnames:
@@ -998,7 +999,7 @@ def write_output_sheet(
 
     for country in PV_STOCK_COUNTRIES:
         output_ws = wb.copy_worksheet(ws)
-        output_ws.title = f"PV Stock {country}"
+        output_ws.title = f"{country}_PV"
         if output_ws.max_row > 1:
             output_ws.delete_rows(2, output_ws.max_row - 1)
 
@@ -1080,6 +1081,11 @@ def write_output_sheet(
     unmatched_ws.auto_filter.ref = unmatched_ws.dimensions
     add_light_blue_table(unmatched_ws, "Tbl_Unmatched_SKU")
     wb.remove(ws)
+
+    mapping_sheet_names = {"legacy mapping product", "sku", "sku mapping"}
+    for sheet_name in list(wb.sheetnames):
+        if sheet_name.lower() in mapping_sheet_names:
+            wb.remove(wb[sheet_name])
 
     wb.save(stock_wb_path)
     wb.close()
