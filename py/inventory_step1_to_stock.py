@@ -21,6 +21,7 @@ from typing import Any
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
@@ -30,6 +31,7 @@ TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
 ALLOC_SHEET_NAME = "To be allocated"
 TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map"
+UNMATCHED_SHEET_NAME = "Unmatched SKU"
 DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"]
 
 SOURCE_INV_DSP = "INV_DSP"
@@ -80,6 +82,20 @@ def safe_float(value: Any) -> float:
         return float(text)
     except ValueError:
         return 0.0
+
+
+def add_light_blue_table(ws: Any, table_name: str) -> None:
+    if ws.max_row < 2:
+        return
+    table = Table(displayName=table_name, ref=ws.dimensions)
+    table.tableStyleInfo = TableStyleInfo(
+        name="TableStyleLight2",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False,
+    )
+    ws.add_table(table)
 
 
 def build_header_index(headers: list[Any]) -> dict[str, int]:
@@ -656,7 +672,7 @@ def write_output_sheet(
         end_date = _default_end()
     wb = load_workbook(stock_wb_path)
 
-    for old_name in ["stock", "PV Stock", "_stock_build", *OUTPUT_SHEET_NAMES]:
+    for old_name in ["stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *OUTPUT_SHEET_NAMES]:
         if old_name in wb.sheetnames:
             wb.remove(wb[old_name])
     if ALLOC_SHEET_NAME in wb.sheetnames:
@@ -785,6 +801,13 @@ def write_output_sheet(
         )
 
     header_col = {h: i + 1 for i, h in enumerate(headers)}
+
+    def is_unmatched_row(row_num: int) -> bool:
+        marker = UNMATCHED_SKU_MARK.lower()
+        return any(
+            normalize_lower(ws.cell(row_num, header_col[header]).value) == marker
+            for header in ("Category", "Brand", "Product TCL Report", "Family", "Model")
+        )
     row_by_key: dict[tuple[str, str], int] = {}
     transit_row_by_key: dict[tuple[str, str, str, str, str], int] = {}
     for r in range(2, ws.max_row + 1):
@@ -981,6 +1004,8 @@ def write_output_sheet(
 
         grouped_rows: dict[str, dict[str, Any]] = {}
         for row_num in range(2, ws.max_row + 1):
+            if is_unmatched_row(row_num):
+                continue
             if not normalize_text(ws.cell(row_num, category_col).value).upper().startswith("PV"):
                 continue
             if normalize_text(ws.cell(row_num, wh_col).value).upper() != country:
@@ -1024,14 +1049,36 @@ def write_output_sheet(
                 output_ws.cell(output_row, col_num).number_format = "#,##0.###"
         output_ws.freeze_panes = "A2"
         output_ws.auto_filter.ref = output_ws.dimensions
+        add_light_blue_table(output_ws, f"Tbl_PV_Stock_{country}")
 
     output_ws = wb.copy_worksheet(ws)
     output_ws.title = "ESS+HP Stock"
     for row_num in range(output_ws.max_row, 1, -1):
-        if normalize_text(output_ws.cell(row_num, category_col).value).upper().startswith("PV"):
+        marker = UNMATCHED_SKU_MARK.lower()
+        row_is_unmatched = any(
+            normalize_lower(output_ws.cell(row_num, header_col[header]).value) == marker
+            for header in ("Category", "Brand", "Product TCL Report", "Family", "Model")
+        )
+        if row_is_unmatched or normalize_text(output_ws.cell(row_num, category_col).value).upper().startswith("PV"):
             output_ws.delete_rows(row_num)
     output_ws.freeze_panes = "A2"
     output_ws.auto_filter.ref = output_ws.dimensions
+
+    add_light_blue_table(output_ws, "Tbl_ESS_HP_Stock")
+
+    unmatched_ws = wb.copy_worksheet(ws)
+    unmatched_ws.title = UNMATCHED_SHEET_NAME
+    for row_num in range(unmatched_ws.max_row, 1, -1):
+        marker = UNMATCHED_SKU_MARK.lower()
+        row_is_unmatched = any(
+            normalize_lower(unmatched_ws.cell(row_num, header_col[header]).value) == marker
+            for header in ("Category", "Brand", "Product TCL Report", "Family", "Model")
+        )
+        if not row_is_unmatched:
+            unmatched_ws.delete_rows(row_num)
+    unmatched_ws.freeze_panes = "A2"
+    unmatched_ws.auto_filter.ref = unmatched_ws.dimensions
+    add_light_blue_table(unmatched_ws, "Tbl_Unmatched_SKU")
     wb.remove(ws)
 
     wb.save(stock_wb_path)

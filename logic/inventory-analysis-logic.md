@@ -111,7 +111,7 @@ Daily Supply Plan 和 ODP 按各自完整仓库、产品和日期维度写入。
 
 ## 5. stock 输出和公式
 
-每次运行删除并重建 `PV Stock NL`、`PV Stock FR`、`PV Stock UK`、`PV Stock ES`、`PV Stock IT`、`ESS+HP Stock`、`Domestic Stock PV`、`Domestic Stock ESS`、`To be allocated`、`_Transit Source Map`。PV 库存按 WH 分入五张国家表，同一国家表内相同 SKU 的多个 Virtual Warehouse 来源合并为一行，数量和到货日期列求和，来源名称去重后保留；`Arrival Plan-SPTN(PVLFR024)` 等名称输出为 `Arrival Plan-SPTN`。ESS 和 HP 库存进入 `ESS+HP Stock`；国内库存明细按来源拆为 PV、ESS 两张表，并排除 Quantity 为 0 的行。各库存表的基础列顺序相同：
+每次运行删除并重建 `PV Stock NL`、`PV Stock FR`、`PV Stock UK`、`PV Stock ES`、`PV Stock IT`、`ESS+HP Stock`、`Unmatched SKU`、`Domestic Stock PV`、`Domestic Stock ESS`、`To be allocated`、`_Transit Source Map`。PV 库存按 WH 分入五张国家表，同一国家表内相同 SKU 的多个 Virtual Warehouse 来源合并为一行，数量和到货日期列求和，来源名称去重后保留；`Arrival Plan-SPTN(PVLFR024)` 等名称输出为 `Arrival Plan-SPTN`。ESS 和 HP 库存进入 `ESS+HP Stock`。无法从 Legacy Mapping Product 或 SKU 表匹配的记录不进入任何正常库存表，统一写入 `Unmatched SKU` 供检查。所有库存类工作表使用浅蓝色 Excel 超级表格式。国内库存明细按来源拆为 PV、ESS 两张表，并排除 Quantity 为 0 的行。各库存表的基础列顺序相同：
 
 `WH | Virtual Warehouse | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock | Domestic Stock`
 

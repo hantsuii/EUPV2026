@@ -5,6 +5,7 @@ const UNMATCHED_SKU_MARK = "SKU not matched";
 const DOMESTIC_WH = "CN";
 const ALLOC_SHEET_NAME = "To be allocated";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
+const UNMATCHED_SHEET_NAME = "Unmatched SKU";
 const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
 const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), "ESS+HP Stock"];
 const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
@@ -682,6 +683,16 @@ function aggregateRecordsBySku(records) {
   return [...grouped.values()];
 }
 
+function isUnmatchedRecord(record) {
+  const marker = UNMATCHED_SKU_MARK.toLowerCase();
+  return [record.Category, record.Brand, record.ProductTCLReport, record.Family, record.Model]
+    .some((value) => normalizeLower(value) === marker);
+}
+
+function stockTableName(sheetName) {
+  return `Tbl_${sheetName.replace(/[^A-Za-z0-9_]/g, "_")}`;
+}
+
 function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags) {
   const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
@@ -743,6 +754,20 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags)
       applyFill(row.getCell(dateStartCol + i), CELL_FILL_BY_SOURCE[source] || CELL_FILL_BY_SOURCE[SOURCE_INV_DSP]);
     }
   }
+
+  ws.addTable({
+    name: stockTableName(sheetName),
+    ref: "A1",
+    headerRow: true,
+    totalsRow: false,
+    style: { theme: "TableStyleLight2", showRowStripes: true, showColumnStripes: false },
+    columns: headers.map((name) => ({ name })),
+    rows: records.map((record) => [
+      record.WH, record.VirtualWarehouse, record.Category, record.Brand, record.ProductTCLReport, record.Family, record.SKU, record.Model, record.Connector,
+      record.Bin, record.MOQ, record.ToBeAllocated, record.TotalQTY, record.TotalMW, record.MW, record.Stock, record.DomesticStock,
+      ...dateKeys.map((dateKey) => (record.Transit[dateKey] ? record.Transit[dateKey] : null)),
+    ]),
+  });
 
   ws.columns.forEach((column, index) => {
     const defaultWidth = index < 7 ? 18 : 13;
@@ -960,15 +985,18 @@ export async function buildStockOutputJs({
     }
   }
 
-  for (const obsoleteName of ["stock", "PV Stock", ...STOCK_SHEET_NAMES]) {
+  for (const obsoleteName of ["stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES]) {
     const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
   }
+  const matchedRecords = records.filter((record) => !isUnmatchedRecord(record));
+  const unmatchedRecords = records.filter(isUnmatchedRecord);
   for (const country of PV_STOCK_COUNTRIES) {
-    const countryRecords = records.filter((record) => isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() === country);
+    const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() === country);
     writeStockWorksheet(templateWorkbook, `PV Stock ${country}`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
   }
-  writeStockWorksheet(templateWorkbook, "ESS+HP Stock", records.filter((record) => !isPvCategory(record.Category)), dateKeys, dateSourceTags);
+  writeStockWorksheet(templateWorkbook, "ESS+HP Stock", matchedRecords.filter((record) => !isPvCategory(record.Category)), dateKeys, dateSourceTags);
+  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
   const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");
