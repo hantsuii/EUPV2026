@@ -337,7 +337,7 @@ function availableArrivalPorts(){
   panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(a.date){const dest=resolvePort(r.rawDestination,"DEST");if(dest)ports.add(dest);}});
   return[...ports].sort((a,b)=>a.localeCompare(b));
 }
-function buildPortDailyData(){
+function buildPortDailyData({excludePlanned=false}={}){
   const startMonth=byId("portDailyStart").value,endMonth=byId("portDailyEnd").value;
   /* month inputs are YYYY-MM; convert to date range: start=1st of start month, end=last day of end month */
   const start=startMonth?new Date(startMonth+"-01T00:00:00"):null;
@@ -347,7 +347,7 @@ function buildPortDailyData(){
   const data=new Map();
   panelMainRecords("portDaily").forEach((r)=>{
     if(!isArrivalValid(r))return;
-    const a=arrivalInfo(r);if(!a.date)return;
+    const a=arrivalInfo(r);if(!a.date||excludePlanned&&a.type==="planned")return;
     if(start&&a.date<start||end&&a.date>end)return;
     if(modelSet&&!modelSet.has(modelKey(r)))return;
     const dest=resolvePort(r.rawDestination,"DEST");if(!dest)return;
@@ -388,7 +388,11 @@ function renderPortDailyChart(){
       const segments=modelList.filter((mk)=>modelMap.has(mk)).map((mk)=>({mk,val:modelMap.get(mk)||0}));
       if(!segments.length)return"";
       let acc=0;
-      return segments.map((s)=>{const by=y(acc+s.val),bh=top+plotH-by;acc+=s.val;return`<rect class="bar" x="${x(di).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${modelColor(s.mk)}" rx="2"><title>${escapeHtml(port)} | ${escapeHtml(s.mk)} | ${escapeHtml(day)} | ${fmtNumber(s.val,1)} ${escapeHtml(t("containerShort"))}</title></rect>`;}).join("");
+      return segments.map((s)=>{
+        const segmentBottom=y(acc),segmentTop=y(acc+s.val),segmentHeight=segmentBottom-segmentTop;
+        acc+=s.val;
+        return`<rect class="bar" tabindex="0" x="${x(di).toFixed(1)}" y="${segmentTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${segmentHeight.toFixed(1)}" fill="${modelColor(s.mk)}" rx="2" data-model="${escapeHtml(s.mk)}" data-date="${escapeHtml(day)}" data-containers="${escapeHtml(fmtNumber(s.val,1))}" aria-label="${escapeHtml(`${s.mk}, ${day}, ${fmtNumber(s.val,1)} ${t("containerShort")}`)}"></rect>`;
+      }).join("");
     }).join("");
     /* Show ~8 x-axis labels max */
     const labelStep=Math.max(1,Math.ceil(allDays.length/8));
@@ -396,11 +400,26 @@ function renderPortDailyChart(){
     /* Port total across all days/models */
     let portTotal=0;
     data.get(port).forEach((modelMap)=>modelMap.forEach((v)=>portTotal+=v));
-    /* Legend: list each model with its color swatch */
-    const legend=modelList.map((mk)=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:11px"><span style="display:inline-block;width:10px;height:10px;background:${modelColor(mk)};border-radius:2px"></span>${escapeHtml(mk)}</span>`).join("");
-    return`<div class="port-chart-item"><h4 style="margin:0 0 4px">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(portTotal,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("hArrivalDate"))}</text></svg><div style="margin-top:4px">${legend}</div></div>`;
+    return`<div class="port-chart-item"><h4 style="margin:0 0 4px">${escapeHtml(port)} <span style="color:#6c85a5;font-size:12px">(${escapeHtml(t("hContainers"))}: ${fmtNumber(portTotal,1)})</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;max-width:680px;height:auto"><line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${top+plotH}"/><line class="axis" x1="${left}" y1="${top+plotH}" x2="${W-right}" y2="${top+plotH}"/>${grid}${bars}${dayLabels}<text class="axis-title" x="${left+plotW/2}" y="${H-4}" text-anchor="middle" font-size="11">${escapeHtml(t("hArrivalDate"))}</text></svg><div class="port-chart-tooltip" role="status" aria-live="polite"></div></div>`;
   }).join("");
   target.innerHTML=`<div class="port-chart-grid">${charts}</div>`;
+  const showTooltip=(bar,clientX,clientY)=>{
+    const item=bar.closest(".port-chart-item"),tooltip=item?.querySelector(".port-chart-tooltip");
+    if(!item||!tooltip)return;
+    const itemRect=item.getBoundingClientRect();
+    tooltip.textContent=`${t("hModel")}: ${bar.dataset.model}\n${t("hArrivalDate")}: ${bar.dataset.date}\n${t("hContainers")}: ${bar.dataset.containers}`;
+    tooltip.style.left=`${Math.max(8,clientX-itemRect.left+12)}px`;
+    tooltip.style.top=`${Math.max(8,clientY-itemRect.top+12)}px`;
+    tooltip.classList.add("visible");
+  };
+  target.onpointermove=(event)=>{
+    const bar=event.target.closest?.(".bar");
+    target.querySelectorAll(".port-chart-tooltip.visible").forEach((el)=>el.classList.remove("visible"));
+    if(bar)showTooltip(bar,event.clientX,event.clientY);
+  };
+  target.onpointerleave=()=>target.querySelectorAll(".port-chart-tooltip.visible").forEach((el)=>el.classList.remove("visible"));
+  target.onfocusin=(event)=>{const bar=event.target.closest?.(".bar");if(!bar)return;const rect=bar.getBoundingClientRect();showTooltip(bar,rect.right,rect.top+rect.height/2);};
+  target.onfocusout=()=>target.querySelectorAll(".port-chart-tooltip.visible").forEach((el)=>el.classList.remove("visible"));
 }
 function renderPortDailyTable(){
   const data=buildPortDailyData();
@@ -439,7 +458,7 @@ function uniqueExcelSheetName(port,usedNames){
   return name;
 }
 function exportPortDaily(){
-  const data=buildPortDailyData();
+  const data=buildPortDailyData({excludePlanned:true});
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   if(!ports.length)return;
   const wb=XLSX.utils.book_new(),usedSheetNames=new Set();
