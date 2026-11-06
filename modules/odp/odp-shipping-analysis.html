@@ -36,6 +36,9 @@
         <div><button id="exportPortDailyBtn" class="secondary" type="button" data-i18n="exportPortDaily">导出 Excel</button></div>
       </div>
       <div id="portDailyChart" class="port-daily-chart"></div>
+      <h4 data-i18n="portDailySummaryTitle">所有港口综合统计</h4>
+      <div class="table-wrap" style="max-height:500px"><table id="portDailySummaryTable"></table></div>
+      <h4 data-i18n="portDailyDetailTitle">港口 / Model 明细</h4>
       <div class="table-wrap" style="max-height:500px"><table id="portDailyTable"></table></div>
     </section>
     <section id="mergeReviewTab" class="panel tab"><h2 data-i18n="mergeReviewTitle">POPV 空白行的重复提单检查</h2><p class="muted" data-i18n="mergeReviewNote">仅检查 POPV 为空且 MBL/HBL# 重复的 PV SUPPLY DATA 行。产品、收货人与港口字段全部一致时建议合并数量；TCL REFERENCE 和 Quantity 仅展示，不参与判定。</p><div class="kpis"><div class="kpi"><small data-i18n="blankPopvRows">POPV 空白行</small><strong id="blankPopvKpi">—</strong></div><div class="kpi"><small data-i18n="duplicateBillGroups">重复提单组</small><strong id="duplicateBillKpi">—</strong></div><div class="kpi"><small data-i18n="mergeableGroups">可合并组</small><strong id="mergeableKpi">—</strong></div><div class="kpi"><small data-i18n="reviewGroups">需核对组</small><strong id="mergeWarningKpi">—</strong></div></div><div id="mergeReviewMessage" class="status"></div><div class="table-wrap merge-review-wrap"><table id="mergeReviewTable"></table></div></section>

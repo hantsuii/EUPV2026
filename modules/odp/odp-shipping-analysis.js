@@ -369,18 +369,19 @@ function renderPortDailyChart(){
   if(!allDays.length){target.innerHTML=`<div class="port-daily-chart-empty">${escapeHtml(t("noData"))}</div>`;return;}
   /* Fixed-size chart per port: 680x300 viewBox */
   const W=680,H=300,left=60,right=20,top=24,bottom=56,plotW=W-left-right,plotH=H-top-bottom;
-  const maxVal=Math.max(1,...ports.flatMap((p)=>[...data.get(p).values()].map((m)=>[...m.values()].reduce((s,v)=>s+v,0))));
-  const yMax=Math.max(10,Math.ceil(maxVal*1.1));
   const barW=Math.max(4,Math.min(30,plotW/Math.max(allDays.length,1)-4));
   const gap=(plotW-barW*allDays.length)/Math.max(allDays.length,1);
   const x=(di)=>left+di*(barW+gap)+gap/2;
-  const y=(val)=>top+(1-val/yMax)*plotH;
-  const yTicks=Array.from({length:Math.min(6,yMax+1)},(_,i)=>Math.round(yMax*i/Math.min(5,yMax)));
   /* Collect all models across the data, assign fixed color indices */
   const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
   const modelColor=(mk)=>PORT_DAILY_COLORS[modelList.indexOf(mk)%PORT_DAILY_COLORS.length];
   const charts=ports.map((port)=>{
     const portDays=[...data.get(port).keys()].sort();
+    /* Each port uses its own vertical scale so lower-volume ports remain readable. */
+    const portMax=Math.max(1,...[...data.get(port).values()].map((m)=>[...m.values()].reduce((s,v)=>s+v,0)));
+    const yMax=Math.max(1,Math.ceil(portMax*1.1));
+    const y=(val)=>top+(1-val/yMax)*plotH;
+    const tickDivisions=Math.min(5,yMax),yTicks=Array.from({length:tickDivisions+1},(_,i)=>Math.round(yMax*i/tickDivisions));
     const grid=yTicks.map((v)=>`<line class="grid" x1="${left}" y1="${y(v)}" x2="${W-right}" y2="${y(v)}"/><text x="${left-8}" y="${y(v)+4}" text-anchor="end" font-size="11">${v}</text>`).join("");
     /* Stacked bars: for each day, draw a rect per model segment bottom-up */
     const bars=portDays.map((day)=>{
@@ -425,6 +426,14 @@ function renderPortDailyTable(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
+  /* All-port summary: one row per port, with every Model combined by arrival day. */
+  const summaryHeaders=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
+  const summaryRows=ports.map((port)=>{
+    const portDayMap=data.get(port);
+    const dayTotals=allDays.map((day)=>{const modelMap=portDayMap.get(day);return modelMap?[...modelMap.values()].reduce((sum,value)=>sum+value,0):0;});
+    return[port,t("hContainers"),...dayTotals.map((value)=>fmtNumber(value,1)),fmtNumber(dayTotals.reduce((sum,value)=>sum+value,0),1)];
+  });
+  renderTable("portDailySummaryTable",summaryHeaders,summaryRows);
   const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
   const headers=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
   const bodyParts=[];
