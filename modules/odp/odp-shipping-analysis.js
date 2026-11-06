@@ -426,14 +426,6 @@ function renderPortDailyTable(){
   const data=buildPortDailyData();
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   const allDays=[...new Set(ports.flatMap((p)=>[...data.get(p).keys()]))].sort();
-  /* All-port summary: one row per port, with every Model combined by arrival day. */
-  const summaryHeaders=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
-  const summaryRows=ports.map((port)=>{
-    const portDayMap=data.get(port);
-    const dayTotals=allDays.map((day)=>{const modelMap=portDayMap.get(day);return modelMap?[...modelMap.values()].reduce((sum,value)=>sum+value,0):0;});
-    return[port,t("hContainers"),...dayTotals.map((value)=>fmtNumber(value,1)),fmtNumber(dayTotals.reduce((sum,value)=>sum+value,0),1)];
-  });
-  renderTable("portDailySummaryTable",summaryHeaders,summaryRows);
   const modelList=[...new Set(ports.flatMap((p)=>[...data.get(p).values()].flatMap((m)=>[...m.keys()])))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
   const headers=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
   const bodyParts=[];
@@ -471,6 +463,17 @@ function exportPortDaily(){
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
   if(!ports.length)return;
   const wb=XLSX.utils.book_new(),usedSheetNames=new Set();
+  /* One all-port summary sheet: one port per row, with every Model combined by day. */
+  const allDays=[...new Set(ports.flatMap((port)=>[...data.get(port).keys()]))].sort();
+  const summaryHeader=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
+  const summaryRows=ports.map((port)=>{
+    const portDayMap=data.get(port);
+    const dayTotals=allDays.map((day)=>{const modelMap=portDayMap.get(day);return modelMap?[...modelMap.values()].reduce((sum,value)=>sum+value,0):0;});
+    return[port,t("hContainers"),...dayTotals,dayTotals.reduce((sum,value)=>sum+value,0)];
+  });
+  const summarySheet=XLSX.utils.aoa_to_sheet([summaryHeader,...summaryRows]);
+  summarySheet["!cols"]=[{wch:18},{wch:18},...allDays.map(()=>({wch:14})),{wch:14}];
+  XLSX.utils.book_append_sheet(wb,summarySheet,uniqueExcelSheetName(t("portDailySummarySheet"),usedSheetNames));
   ports.forEach((port)=>{
     const portDayMap=data.get(port);
     const portDays=[...portDayMap.keys()].sort();
