@@ -458,6 +458,16 @@ function uniqueExcelSheetName(port,usedNames){
   usedNames.add(name.toLocaleLowerCase());
   return name;
 }
+function portDailyPeriodColumns(days){
+  const weeks=[...new Set(days.map((day)=>isoWeek(toDate(day))).filter(Boolean))].sort();
+  const months=[...new Set(days.map((day)=>day.slice(0,7)).filter(Boolean))].sort();
+  return{weeks,months};
+}
+function aggregateDailyByPeriod(days,dayValues,periods,keyForDay){
+  const totals=new Map(periods.map((period)=>[period,0]));
+  days.forEach((day,index)=>{const period=keyForDay(day);if(totals.has(period))totals.set(period,totals.get(period)+(dayValues[index]||0));});
+  return periods.map((period)=>totals.get(period)||0);
+}
 function exportPortDaily(){
   const data=buildPortDailyData({excludePlanned:true});
   const ports=[...data.keys()].sort((a,b)=>a.localeCompare(b));
@@ -465,30 +475,38 @@ function exportPortDaily(){
   const wb=XLSX.utils.book_new(),usedSheetNames=new Set();
   /* One all-port summary sheet: one port per row, with every Model combined by day. */
   const allDays=[...new Set(ports.flatMap((port)=>[...data.get(port).keys()]))].sort();
-  const summaryHeader=[t("hDestination"),t("hModel"),...allDays,t("hContainers")];
+  const {weeks:allWeeks,months:allMonths}=portDailyPeriodColumns(allDays);
+  const summaryHeader=[t("hDestination"),t("hModel"),...allDays,...allWeeks.map((week)=>t("naturalWeekColumn",{period:week})),...allMonths.map((month)=>t("naturalMonthColumn",{period:month})),t("hContainers")];
   const summaryRows=ports.map((port)=>{
     const portDayMap=data.get(port);
     const dayTotals=allDays.map((day)=>{const modelMap=portDayMap.get(day);return modelMap?[...modelMap.values()].reduce((sum,value)=>sum+value,0):0;});
-    return[port,t("hContainers"),...dayTotals,dayTotals.reduce((sum,value)=>sum+value,0)];
+    const weekTotals=aggregateDailyByPeriod(allDays,dayTotals,allWeeks,(day)=>isoWeek(toDate(day)));
+    const monthTotals=aggregateDailyByPeriod(allDays,dayTotals,allMonths,(day)=>day.slice(0,7));
+    return[port,t("hContainers"),...dayTotals,...weekTotals,...monthTotals,dayTotals.reduce((sum,value)=>sum+value,0)];
   });
   const summarySheet=XLSX.utils.aoa_to_sheet([summaryHeader,...summaryRows]);
-  summarySheet["!cols"]=[{wch:18},{wch:18},...allDays.map(()=>({wch:14})),{wch:14}];
+  summarySheet["!cols"]=[{wch:18},{wch:18},...allDays.map(()=>({wch:14})),...allWeeks.map(()=>({wch:18})),...allMonths.map(()=>({wch:18})),{wch:14}];
   XLSX.utils.book_append_sheet(wb,summarySheet,uniqueExcelSheetName(t("portDailySummarySheet"),usedSheetNames));
   ports.forEach((port)=>{
     const portDayMap=data.get(port);
     const portDays=[...portDayMap.keys()].sort();
+    const {weeks:portWeeks,months:portMonths}=portDailyPeriodColumns(portDays);
     const modelList=[...new Set([...portDayMap.values()].flatMap((m)=>[...m.keys()]))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
-    const headerRow=[t("hDestination"),t("hModel"),...portDays,t("hContainers")],rows=[];
+    const headerRow=[t("hDestination"),t("hModel"),...portDays,...portWeeks.map((week)=>t("naturalWeekColumn",{period:week})),...portMonths.map((month)=>t("naturalMonthColumn",{period:month})),t("hContainers")],rows=[];
     modelList.forEach((mk)=>{
       const dayVals=portDays.map((day)=>{const m=portDayMap.get(day);return m&&m.has(mk)?m.get(mk):0;});
+      const weekVals=aggregateDailyByPeriod(portDays,dayVals,portWeeks,(day)=>isoWeek(toDate(day)));
+      const monthVals=aggregateDailyByPeriod(portDays,dayVals,portMonths,(day)=>day.slice(0,7));
       const total=dayVals.reduce((s,v)=>s+v,0);
-      rows.push([port,mk,...dayVals,total]);
+      rows.push([port,mk,...dayVals,...weekVals,...monthVals,total]);
     });
     const dayTotals=portDays.map((day)=>{const m=portDayMap.get(day);return m?[...m.values()].reduce((s,v)=>s+v,0):0;});
+    const weekTotals=aggregateDailyByPeriod(portDays,dayTotals,portWeeks,(day)=>isoWeek(toDate(day)));
+    const monthTotals=aggregateDailyByPeriod(portDays,dayTotals,portMonths,(day)=>day.slice(0,7));
     const portTotal=dayTotals.reduce((s,v)=>s+v,0);
-    rows.push([port,t("hContainers"),...dayTotals,portTotal]);
+    rows.push([port,t("hContainers"),...dayTotals,...weekTotals,...monthTotals,portTotal]);
     const ws=XLSX.utils.aoa_to_sheet([headerRow,...rows]);
-    ws["!cols"]=[{wch:18},{wch:18},...portDays.map(()=>({wch:14})),{wch:14}];
+    ws["!cols"]=[{wch:18},{wch:18},...portDays.map(()=>({wch:14})),...portWeeks.map(()=>({wch:18})),...portMonths.map(()=>({wch:18})),{wch:14}];
     XLSX.utils.book_append_sheet(wb,ws,uniqueExcelSheetName(port,usedSheetNames));
   });
   XLSX.writeFile(wb,`Port_Daily_Containers_${isoDate(new Date()).replaceAll("-","")}.xlsx`);
