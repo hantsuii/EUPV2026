@@ -332,6 +332,7 @@ function exportAssumptionATP(){
 
 /* ── Port daily arrival container analysis ── */
 const PORT_DAILY_COLORS=["#3f8bff","#e85f3a","#2ecc8f","#f5a623","#9b59d4","#1ab6e0","#e74c8c","#3ac569"];
+const SPECIAL_STORAGE_MODEL="SP-RH-B5K-G1";
 function availableArrivalPorts(){
   const ports=new Set();
   panelMainRecords("portDaily").forEach((r)=>{if(!isArrivalValid(r))return;const a=arrivalInfo(r);if(a.date){const dest=resolvePort(r.rawDestination,"DEST");if(dest)ports.add(dest);}});
@@ -487,6 +488,23 @@ function exportPortDaily(){
   const summarySheet=XLSX.utils.aoa_to_sheet([summaryHeader,...summaryRows]);
   summarySheet["!cols"]=[{wch:18},{wch:18},...allDays.map(()=>({wch:14})),...allWeeks.map(()=>({wch:18})),...allMonths.map(()=>({wch:18})),{wch:14}];
   XLSX.utils.book_append_sheet(wb,summarySheet,uniqueExcelSheetName(t("portDailySummarySheet"),usedSheetNames));
+  /* Dedicated cross-port sheet for the 5 kWh storage battery model, when present. */
+  const specialPorts=ports.filter((port)=>[...data.get(port).values()].some((modelMap)=>modelMap.has(SPECIAL_STORAGE_MODEL)));
+  if(specialPorts.length){
+    const specialDays=[...new Set(specialPorts.flatMap((port)=>[...data.get(port).entries()].filter(([,modelMap])=>modelMap.has(SPECIAL_STORAGE_MODEL)).map(([day])=>day)))].sort();
+    const {weeks:specialWeeks,months:specialMonths}=portDailyPeriodColumns(specialDays);
+    const specialHeader=[t("hDestination"),t("hModel"),...specialDays,...specialWeeks.map((week)=>t("naturalWeekColumn",{period:week})),...specialMonths.map((month)=>t("naturalMonthColumn",{period:month})),t("hContainers")];
+    const specialRows=specialPorts.map((port)=>{
+      const portDayMap=data.get(port);
+      const dayValues=specialDays.map((day)=>portDayMap.get(day)?.get(SPECIAL_STORAGE_MODEL)||0);
+      const weekValues=aggregateDailyByPeriod(specialDays,dayValues,specialWeeks,(day)=>isoWeek(toDate(day)));
+      const monthValues=aggregateDailyByPeriod(specialDays,dayValues,specialMonths,(day)=>day.slice(0,7));
+      return[port,SPECIAL_STORAGE_MODEL,...dayValues,...weekValues,...monthValues,dayValues.reduce((sum,value)=>sum+value,0)];
+    });
+    const specialSheet=XLSX.utils.aoa_to_sheet([specialHeader,...specialRows]);
+    specialSheet["!cols"]=[{wch:18},{wch:20},...specialDays.map(()=>({wch:14})),...specialWeeks.map(()=>({wch:18})),...specialMonths.map(()=>({wch:18})),{wch:14}];
+    XLSX.utils.book_append_sheet(wb,specialSheet,uniqueExcelSheetName(SPECIAL_STORAGE_MODEL,usedSheetNames));
+  }
   ports.forEach((port)=>{
     const portDayMap=data.get(port);
     const portDays=[...portDayMap.keys()].sort();
