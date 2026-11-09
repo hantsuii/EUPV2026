@@ -213,6 +213,21 @@
     .product-chart-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr); gap: 12px; }
     .product-chart-grid .chart-box { margin-top: 0; }
     .asp-panel + .asp-panel { margin-top: 14px; }
+    .yoy-panel {
+      margin: 12px 0 16px;
+      padding: 14px;
+      border: 1px solid #bfd6f4;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+    }
+    .yoy-panel-header { display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:4px; }
+    .yoy-panel-header .sub-title { margin:0; }
+    .yoy-scope-control { min-width:220px; }
+    .yoy-scope-control label { display:block;margin-bottom:4px;color:#406491;font-size:13px;font-weight:700; }
+    .yoy-scope-control select { width:100%;border:1px solid #c5d9f4;border-radius:10px;padding:8px 10px;background:#fff;color:#2a4d7a; }
+    .yoy-product-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px; }
+    .yoy-product-grid .chart-box { margin-top:0; }
+    .yoy-product-grid .chart { height:280px; }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -315,6 +330,7 @@
       .chart-grid-2 { grid-template-columns: 1fr; }
       .product-hierarchy-grid, .product-control-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
       .product-chart-grid { grid-template-columns: 1fr; }
+      .yoy-product-grid { grid-template-columns: 1fr; }
       .customer-toolbar { grid-template-columns:repeat(2,minmax(180px,1fr)); }
       .customer-chart-grid { grid-template-columns:1fr; }
       .chart { height: 300px; }
@@ -323,6 +339,8 @@
       .repo-row input[type="text"] { min-width: 100%; }
       .filter-grid { grid-template-columns: 1fr; }
       .customer-toolbar { grid-template-columns:1fr; }
+      .yoy-panel-header { align-items:stretch;flex-direction:column; }
+      .yoy-scope-control { min-width:0; }
       .chart { height: 280px; }
     }
   </style>
@@ -583,6 +601,29 @@
         <h2 id="regionDetailTitle">地区总计 Dashboard</h2>
         <button id="regionDetailClose" class="modal-close" type="button" aria-label="关闭" data-i18n-aria-label="close">×</button>
       </div>
+      <section class="yoy-panel">
+        <div class="yoy-panel-header">
+          <div class="sub-title" data-i18n="yoyTitle">2025–2026 YOY 与 BP 对比</div>
+          <div class="yoy-scope-control">
+            <label for="detailYoyScopeSel" data-i18n="yoyScope">数据范围</label>
+            <select id="detailYoyScopeSel">
+              <option value="region" data-i18n="yoyScopeRegion">当前地区</option>
+              <option value="all" data-i18n="yoyScopeAll">全体数据</option>
+            </select>
+          </div>
+        </div>
+        <p class="filter-note" data-i18n="yoyNote">Actual 采用已开票数据；收入单位为百万欧元，组件销量单位为 MW。</p>
+        <div id="detailYoyKpiRow" class="kpi-grid kpi-grid-4"></div>
+        <div class="chart-box"><div id="detailYoyRevenueChart" class="chart"></div></div>
+        <div class="sub-title" data-i18n="yoyProductTitle">PV 系列每月销量</div>
+        <div class="table-wrap"><table id="detailYoyProductTable"></table></div>
+        <div class="yoy-product-grid">
+          <div class="chart-box"><div id="detailYoyTCLChart" class="chart"></div></div>
+          <div class="chart-box"><div id="detailYoyP7RESChart" class="chart"></div></div>
+          <div class="chart-box"><div id="detailYoyP7COMChart" class="chart"></div></div>
+          <div class="chart-box"><div id="detailYoyMAXChart" class="chart"></div></div>
+        </div>
+      </section>
       <div class="dashboard-brand-bar">
         <label data-i18n="brand">品牌</label>
         <select id="detailBrandSel"></select>

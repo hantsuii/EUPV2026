@@ -10,13 +10,14 @@ const essAspFilters = { region: byId("essAspRegionSel"), brand: byId("essAspBran
 const detailPvAspFilters = { region: byId("detailPvAspRegionSel"), brand: byId("detailPvAspBrandSel"), level1: byId("detailPvAspLevel1Sel"), level2: byId("detailPvAspLevel2Sel") };
 const detailEssAspFilters = { region: byId("detailEssAspRegionSel"), brand: byId("detailEssAspBrandSel"), level1: byId("detailEssAspLevel1Sel"), level2: byId("detailEssAspLevel2Sel") };
 const regionDetailModal = byId("regionDetailModal"), regionDetailClose = byId("regionDetailClose"), regionDetailTitle = byId("regionDetailTitle");
+const detailYoyScopeSel = byId("detailYoyScopeSel");
 const dashboardBrandSel = byId("dashboardBrandSel"), detailBrandSel = byId("detailBrandSel");
 const productHierarchyFilters = { category: byId("productCategorySel"), brand: byId("productBrandSel") };
 const productLevelSel = byId("productLevelSel"), productLevelValuesSel = byId("productLevelValuesSel");
 const productMetricSel = byId("productMetricSel"), productIncomeSel = byId("productIncomeSel");
 const productRegionSel = byId("productRegionSel"), productStartMonthSel = byId("productStartMonthSel"), productEndMonthSel = byId("productEndMonthSel");
 let currentLang = ["zh", "en"].includes(localStorage.getItem(APP_LANG_KEY)) ? localStorage.getItem(APP_LANG_KEY) : "zh";
-let allRows = [], allTargets = [], activeDetailRegion = null;
+let allRows = [], allTargets = [], allHistoricalRows = [], activeDetailRegion = null;
 let lastStatus = { key: "statusInit", vars: {} };
 
 const REGION_ROLLUP_MAP = {
@@ -41,6 +42,7 @@ const I18N = {
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)", chartPvQty: "组件销量(MW)", chartEssQty: "储能销量(Sets)", chartPvQtyTitle: "2026 月度组件销量(MW)", chartEssQtyTitle: "2026 月度储能销量(Sets)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
+    yoyTitle: "2025–2026 YOY 与 BP 对比", yoyScope: "数据范围", yoyScopeRegion: "当前地区", yoyScopeAll: "全体数据", yoyNote: "Actual 采用已开票数据；收入单位为百万欧元，组件销量单位为 MW。", yoyRevenueTitle: "每月销售收入", yoyProductTitle: "PV 系列每月销量", yoyRevenueAxis: "销售收入(百万€)", yoyQtyAxis: "销量(MW)", yoyRevenue2026: "2026 Actual 收入", yoyRevenue2025: "2025 收入", yoyGrowth: "收入 YOY", yoyBpRevenue: "2026 BP 收入", yoyBpAch: "收入 BP 达成", yoyProduct: "产品系列", yoyQty2026: "2026 Actual", yoyQty2025: "2025", yoyQtyGrowth: "YOY", yoyQtyBp: "2026 BP", yoyQtyBpAch: "BP 达成", yoyActual2026: "2026 Actual", yoyActual2025: "2025 Actual", yoyBp2026: "2026 BP",
     productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", velocityTitle: "PV 动销率（月度销量矩阵）", velocityNote: "展示每个地区 × 版型（Level2）在 2026 年各月的 PV 销量（MW），右列为月均。复用上方产品层级筛选与分析条件。", velocityRegion: "地区", velocityProduct: "版型", velocityAvg: "月均", velocityHeatmapTitle: "PV 月度销量热力图（MW）", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
     customerTitle:"客户分析", customerSubtitle:"先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。", customerRegion:"分析地区", customerYear:"分析年份", customerProduct:"产品线", customerBrand:"品牌", customerSearch:"搜索客户", customerSearchPlaceholder:"客户名称 / 国家", customerCurrentScope:"当前分析范围", customerTabRegion:"地区概览", customerTabProduct:"产品结构", customerTabActivity:"活跃度", customerTabValue:"客户价值", customerTabDetail:"客户明细", orderAnalysisTitle:"订单分析", orderAnalysisSubtitle:"查看各地区当月订单状态及季度客户 × Model MW矩阵。", orderStatusSectionTitle:"当月订单状态", orderQuarterSectionTitle:"季度订单矩阵", orderSearchPlaceholder:"客户名称 / Model", customerStatusMonth:"分析月份", customerQuarter:"分析季度", customerStatusNote:"按地区、客户和 Model 汇总 Total MW；状态列来自 Order Status，MW全为0的状态列自动隐藏，CRD/SAD/SSD 展示不重复日期。", customerQuarterNote:"按客户和 Model 展示所选季度各月的 Total MW，并提供订单数和 MW 汇总；地区使用上方筛选。", customerDefinition:"活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。",
   },
@@ -54,6 +56,7 @@ const I18N = {
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Pending Confirmation (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)", chartPvQty: "PV Qty (MW)", chartEssQty: "ESS Qty (Sets)", chartPvQtyTitle: "2026 Monthly PV Qty (MW)", chartEssQtyTitle: "2026 Monthly ESS Qty (Sets)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
+    yoyTitle: "2025–2026 YOY and BP Comparison", yoyScope: "Data scope", yoyScopeRegion: "Current region", yoyScopeAll: "All data", yoyNote: "Actual uses invoiced data. Revenue is in € millions and PV volume is in MW.", yoyRevenueTitle: "Monthly Sales Revenue", yoyProductTitle: "Monthly PV Series Volume", yoyRevenueAxis: "Sales Revenue (€m)", yoyQtyAxis: "Volume (MW)", yoyRevenue2026: "2026 Actual Revenue", yoyRevenue2025: "2025 Revenue", yoyGrowth: "Revenue YOY", yoyBpRevenue: "2026 BP Revenue", yoyBpAch: "Revenue BP Achievement", yoyProduct: "Product Series", yoyQty2026: "2026 Actual", yoyQty2025: "2025", yoyQtyGrowth: "YOY", yoyQtyBp: "2026 BP", yoyQtyBpAch: "BP Achievement", yoyActual2026: "2026 Actual", yoyActual2025: "2025 Actual", yoyBp2026: "2026 BP",
     productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", velocityTitle: "PV Sales Velocity (Monthly Matrix)", velocityNote: "PV MW per Region × Level2 (product family) for each month of 2026, with monthly average on the right. Reuses the product filters and settings above.", velocityRegion: "Region", velocityProduct: "Product", velocityAvg: "Avg", velocityHeatmapTitle: "PV Monthly Qty Heatmap (MW)", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
     customerTitle:"Customer Analysis", customerSubtitle:"Start with the overview, then choose a region for product, activity, value and customer details.", customerRegion:"Analysis Region", customerYear:"Analysis Year", customerProduct:"Product Line", customerBrand:"Brand", customerSearch:"Search Customer", customerSearchPlaceholder:"Customer name / country", customerCurrentScope:"Current scope", customerTabRegion:"Regional Overview", customerTabProduct:"Product Mix", customerTabActivity:"Activity", customerTabValue:"Customer Value", customerTabDetail:"Customer Details", orderAnalysisTitle:"Order Analysis", orderAnalysisSubtitle:"Review monthly order status by region and the quarterly Customer × Model MW matrix.", orderStatusSectionTitle:"Monthly Order Status", orderQuarterSectionTitle:"Quarterly Order Matrix", orderSearchPlaceholder:"Customer name / Model", customerStatusMonth:"Analysis Month", customerQuarter:"Analysis Quarter", customerStatusNote:"Total MW by region, customer and Model. Status columns come from Order Status; all-zero MW columns are hidden; CRD/SAD/SSD list distinct dates.", customerQuarterNote:"Total MW by customer and Model for each month in the selected quarter, with order count and MW totals. Region follows the filter above.", customerDefinition:"Active: ordered in the last 3 months from current date; sleeping: no order for 4–6 months; at risk: no order for more than 6 months.",
   },
@@ -99,6 +102,24 @@ function rowValue(row, aliases, fallback = "") {
   }
   return fallback;
 }
+function normalizePvSeries(value) {
+  const product = String(value || "").trim().toUpperCase();
+  if (product === "TCL") return "TCL";
+  if (product.startsWith("P7-RES")) return "P7-RES";
+  if (product.startsWith("P7-COM")) return "P7-COM";
+  if (product.includes("MAX") || product === "M CLASS") return "MAX";
+  return null;
+}
+function targetPvSeries(row, category, brand) {
+  if (category !== "PV") return null;
+  if (String(brand || "").trim().toUpperCase() === "TCL") return "TCL";
+  const product = String(rowValue(row, ["Product"], "")).trim().toUpperCase();
+  const productSub = String(rowValue(row, ["Product-Sub", "Product Sub"], "")).trim().toUpperCase();
+  if (product.startsWith("P7-RES")) return "P7-RES";
+  if (product.startsWith("P7-COM")) return "P7-COM";
+  if (productSub === "M CLASS" || product.startsWith("M-CLASS") || product.startsWith("M-S")) return "MAX";
+  return null;
+}
 
 function normalizeRows(rawRows) {
   return rawRows.map((row, rowIndex) => {
@@ -120,8 +141,18 @@ function normalizeRows(rawRows) {
     const ssd = parseExcelDate(rowValue(row, ["SSD", "Scheduled Ship Date", "Shipment Schedule Date"], null));
     const level1 = String(rowValue(row, ["Level1", "Size Family"], "Unknown")).trim() || "Unknown";
     const level2 = String(rowValue(row, ["Level2", "Product Family"], "Unknown")).trim() || "Unknown";
-    return { year, quarter, month, region: mapRegionForStats(row["Region"]), country, customer, orderId, orderDate, revenue, status2, status2Label: status2Raw, orderStatus, orderStatusLabel: orderStatusRaw, model, crd, sad, ssd, isInvoiced: status2 === "invoiced", isConfirm: status2 === "confirm", category, isPV, isESS, isHP: category === "HP", brand: String(row["Brand"] || "Unknown").trim() || "Unknown", level1, level2, pvAmount: isPV ? revenue : 0, essAmount: isESS ? revenue : 0, pvQty: isPV ? totalMw : 0, essQty: essQtyEligible ? orderedQty : 0, hpQty: category === "HP" ? orderedQty : 0, orderedQty, totalMw };
+    return { year, quarter, month, region: mapRegionForStats(row["Region"]), country, customer, orderId, orderDate, revenue, status2, status2Label: status2Raw, orderStatus, orderStatusLabel: orderStatusRaw, model, crd, sad, ssd, isInvoiced: status2 === "invoiced", isConfirm: status2 === "confirm", category, isPV, isESS, isHP: category === "HP", brand: String(row["Brand"] || "Unknown").trim() || "Unknown", level1, level2, productSeries: normalizePvSeries(tcl), pvAmount: isPV ? revenue : 0, essAmount: isESS ? revenue : 0, pvQty: isPV ? totalMw : 0, essQty: essQtyEligible ? orderedQty : 0, hpQty: category === "HP" ? orderedQty : 0, orderedQty, totalMw };
   }).filter((r) => Number.isFinite(r.year) && r.quarter && r.month);
+}
+function normalizeHistoricalRows(rawRows) {
+  return rawRows.map((row) => {
+    const invoiceDate = row["Invoice Date"] ?? row["Actual Month of TCL Reserves"] ?? row["Month"];
+    const month = normalizeMonth(invoiceDate), rawYear = n(row["YEAR"] ?? row["Year"]);
+    const year = rawYear > 0 ? Math.trunc(rawYear) : (month ? Number(month.slice(0, 4)) : null);
+    const category = String(row["LV1"] || "Unknown").trim().toUpperCase();
+    const isPV = category === "PV", pvQty = isPV ? n(row["MW"] ?? row["QTY"]) : 0;
+    return { year, month, quarter: normalizeQuarter(row["Qtr"] ?? row["Quarter"], month), region: mapRegionForStats(row["TCL Sales Region"] ?? row["Region"]), revenue: n(row["Revenue €"] ?? row["Revenue EUR"]), category, isPV, productSeries: normalizePvSeries(row["TCL Product Report"]), pvQty, isInvoiced: true };
+  }).filter((r) => Number.isFinite(r.year) && r.month && r.region !== "Unknown");
 }
 function normalizeTargets(rawRows) {
   return rawRows.map((row) => {
@@ -129,7 +160,7 @@ function normalizeTargets(rawRows) {
     const category = String(row["category"] ?? row["Category"] ?? "Unknown").trim().toUpperCase(), quantity = n(row["Quantity"]);
     const categorySub = String(row["category Sub"] ?? row["Category Sub"] ?? row["Sub Type"] ?? "").trim().toUpperCase();
     const brand = String(row["Brand"] ?? row["brand"] ?? "Unknown").trim() || "Unknown";
-    return { year, month, quarter: normalizeQuarter(row["Quartely"], month), region: mapRegionForStats(row["Region"] ?? row["Country"]), category, brand, revenue: n(row["Revenue EUR"]), quantity, pvQty: category === "PV" ? quantity : 0, essQty: category === "ESS" && categorySub === "KITS" ? quantity : 0 };
+    return { year, month, quarter: normalizeQuarter(row["Quartely"], month), region: mapRegionForStats(row["Region"] ?? row["Country"]), category, brand, productSeries: targetPvSeries(row, category, brand), revenue: n(row["Revenue EUR"]), quantity, pvQty: category === "PV" ? quantity : 0, essQty: category === "ESS" && categorySub === "KITS" ? quantity : 0 };
   }).filter((r) => Number.isFinite(r.year) && r.month && r.quarter && r.region !== "Unknown");
 }
 
@@ -278,19 +309,28 @@ function applyAspFilters(rows, filters) {
   result = filterMulti(result, selected(filters.level1), (r) => r.level1);
   return filterMulti(result, selected(filters.level2), (r) => r.level2);
 }
+function aspYAxis(values, title) {
+  const finiteValues = values.filter(Number.isFinite);
+  if (!finiteValues.length) return { title, domain: [0.52, 1], anchor: "x" };
+  const min = Math.min(...finiteValues), max = Math.max(...finiteValues), span = max - min;
+  const reference = Math.max(Math.abs(max), 1);
+  const topPadding = span > 0 ? span * 0.18 : reference * 0.12;
+  const bottomPadding = span > 0 ? span * 0.08 : reference * 0.04;
+  return { title, domain: [0.52, 1], anchor: "x", range: [Math.max(0, min - bottomPadding), max + topPadding] };
+}
 function renderAspCharts(yearRows, pvChartId, essChartId, filters = null) {
   const months = Array.from({ length: 12 }, (_, i) => `${TARGET_YEAR}-${String(i + 1).padStart(2, "0")}`);
   const pvRows = yearRows.filter((r) => r.isPV), essRows = yearRows.filter((r) => r.isESS);
   const pvData = months.map((m) => aggregate(applyAspFilters(pvRows.filter((r) => r.month === m), filters?.pv))), pv = pvData.map((x) => x.pvQty !== 0 ? x.pvAmount / (x.pvQty * 1000000) : null);
   const essData = months.map((m) => aggregate(applyAspFilters(essRows.filter((r) => r.month === m), filters?.ess))), ess = essData.map((x) => x.essQty !== 0 ? x.essAmount / x.essQty : null);
   renderPlot(pvChartId, [
-    { x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 }, xaxis: "x", yaxis: "y" },
+    { x: months, y: pv, type: "scatter", mode: "lines+markers+text", text: pv.map((v) => v == null ? "" : fmtAsp3(v)), textposition: "top center", cliponaxis: false, name: t("chartPvAsp"), line: { color: "#2E7CFF", width: 3 }, xaxis: "x", yaxis: "y" },
     { x: months, y: pvData.map((x) => x.pvQty), type: "bar", name: t("chartPvQty"), marker: { color: "#B4D0FF" }, xaxis: "x2", yaxis: "y2" }
-  ], { title: t("chartPvAspTitle"), xaxis: { domain: [0, 1], anchor: "y", showticklabels: false }, yaxis: { title: t("chartPvAsp"), domain: [0.52, 1], anchor: "x" }, xaxis2: { domain: [0, 1], anchor: "y2" }, yaxis2: { title: t("chartPvQty"), domain: [0, 0.45], anchor: "x2" }, margin: { l: 62, r: 32, t: 52, b: 42 } });
+  ], { title: t("chartPvAspTitle"), xaxis: { domain: [0, 1], anchor: "y", showticklabels: false }, yaxis: aspYAxis(pv, t("chartPvAsp")), xaxis2: { domain: [0, 1], anchor: "y2" }, yaxis2: { title: t("chartPvQty"), domain: [0, 0.45], anchor: "x2" }, margin: { l: 62, r: 32, t: 52, b: 42 } });
   renderPlot(essChartId, [
-    { x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 }, xaxis: "x", yaxis: "y" },
+    { x: months, y: ess, type: "scatter", mode: "lines+markers+text", text: ess.map((v) => v == null ? "" : fmtInt(v)), textposition: "top center", cliponaxis: false, name: t("chartEssAsp"), line: { color: "#9D63FF", width: 3 }, xaxis: "x", yaxis: "y" },
     { x: months, y: essData.map((x) => x.essQty), type: "bar", name: t("chartEssQty"), marker: { color: "#E0D0FF" }, xaxis: "x2", yaxis: "y2" }
-  ], { title: t("chartEssAspTitle"), xaxis: { domain: [0, 1], anchor: "y", showticklabels: false }, yaxis: { title: t("chartEssAsp"), domain: [0.52, 1], anchor: "x" }, xaxis2: { domain: [0, 1], anchor: "y2" }, yaxis2: { title: t("chartEssQty"), domain: [0, 0.45], anchor: "x2" }, margin: { l: 62, r: 32, t: 52, b: 42 } });
+  ], { title: t("chartEssAspTitle"), xaxis: { domain: [0, 1], anchor: "y", showticklabels: false }, yaxis: aspYAxis(ess, t("chartEssAsp")), xaxis2: { domain: [0, 1], anchor: "y2" }, yaxis2: { title: t("chartEssQty"), domain: [0, 0.45], anchor: "x2" }, margin: { l: 62, r: 32, t: 52, b: 42 } });
 }
 
 function renderRegion() {
@@ -305,8 +345,9 @@ function renderRegion() {
 
 function openRegionDetails(region) {
   activeDetailRegion = region;
-  renderRegionDetails(true);
   regionDetailModal.classList.add("open");
+  regionDetailModal.scrollTop = 0;
+  renderRegionDetails(true);
 }
 function filterByDetailBrand(rows) {
   if (!detailBrandSel) return rows;
@@ -320,6 +361,52 @@ function filterTargetsByDetailBrand(rows) {
   if (!brand || brand === "__ALL__") return rows;
   return rows.filter((r) => r.brand === brand);
 }
+function sumMetric(rows, picker) { return rows.reduce((sum, row) => sum + n(picker(row)), 0); }
+function yoyChange(current, prior) { return prior !== 0 ? (current - prior) / prior * 100 : null; }
+function renderRegionYoyDashboard() {
+  if (!activeDetailRegion || !detailYoyScopeSel) return;
+  const useAll = detailYoyScopeSel.value === "all";
+  const inScope = (row) => useAll || row.region === activeDetailRegion;
+  const months = Array.from({ length: 12 }, (_, index) => index + 1);
+  const monthLabels = months.map((month) => String(month).padStart(2, "0"));
+  const actual2026 = allRows.filter((row) => row.year === TARGET_YEAR && row.isInvoiced && inScope(row));
+  const actual2025 = allHistoricalRows.filter((row) => row.year === TARGET_YEAR - 1 && inScope(row));
+  const bp2026 = allTargets.filter((row) => row.year === TARGET_YEAR && inScope(row));
+  const revenue2026 = months.map((month) => sumMetric(actual2026.filter((row) => row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.revenue) / 1000000);
+  const revenue2025 = months.map((month) => sumMetric(actual2025.filter((row) => row.month === `${TARGET_YEAR - 1}-${String(month).padStart(2, "0")}`), (row) => row.revenue) / 1000000);
+  const revenueBp = months.map((month) => sumMetric(bp2026.filter((row) => row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.revenue) / 1000000);
+  const total2026 = revenue2026.reduce((sum, value) => sum + value, 0), total2025 = revenue2025.reduce((sum, value) => sum + value, 0), totalBp = revenueBp.reduce((sum, value) => sum + value, 0);
+  byId("detailYoyKpiRow").innerHTML = [
+    card(t("yoyRevenue2026"), fmtOne(total2026)),
+    card(t("yoyRevenue2025"), fmtOne(total2025)),
+    card(t("yoyGrowth"), fmtPct(yoyChange(total2026, total2025))),
+    card(t("yoyBpAch"), fmtPct(achievement(total2026, totalBp)), `${t("yoyBpRevenue")}: ${fmtOne(totalBp)}`),
+  ].join("");
+  renderPlot("detailYoyRevenueChart", [
+    { x: monthLabels, y: revenue2025, type: "bar", name: t("yoyActual2025"), marker: { color: "#A9B9CF" } },
+    { x: monthLabels, y: revenue2026, type: "bar", name: t("yoyActual2026"), marker: { color: "#3F8BFF" } },
+    { x: monthLabels, y: revenueBp, type: "bar", name: t("yoyBp2026"), marker: { color: "#F2B84B" } },
+  ], { title: t("yoyRevenueTitle"), barmode: "group", xaxis: { type: "category" }, yaxis: { title: t("yoyRevenueAxis"), rangemode: "tozero" }, margin: { l: 64, r: 24, t: 52, b: 62 } });
+
+  const productSeries = ["TCL", "P7-RES", "P7-COM", "MAX"];
+  const summaryRows = productSeries.map((series) => {
+    const current = sumMetric(actual2026.filter((row) => row.isPV && row.productSeries === series), (row) => row.pvQty);
+    const prior = sumMetric(actual2025.filter((row) => row.isPV && row.productSeries === series), (row) => row.pvQty);
+    const bp = sumMetric(bp2026.filter((row) => row.category === "PV" && row.productSeries === series), (row) => row.pvQty);
+    return [series, fmtOne(current), fmtOne(prior), fmtPct(yoyChange(current, prior)), fmtOne(bp), fmtPct(achievement(current, bp))];
+  });
+  table("detailYoyProductTable", [t("yoyProduct"), t("yoyQty2026"), t("yoyQty2025"), t("yoyQtyGrowth"), t("yoyQtyBp"), t("yoyQtyBpAch")], summaryRows);
+  productSeries.forEach((series) => {
+    const current = months.map((month) => sumMetric(actual2026.filter((row) => row.isPV && row.productSeries === series && row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.pvQty));
+    const prior = months.map((month) => sumMetric(actual2025.filter((row) => row.isPV && row.productSeries === series && row.month === `${TARGET_YEAR - 1}-${String(month).padStart(2, "0")}`), (row) => row.pvQty));
+    const bp = months.map((month) => sumMetric(bp2026.filter((row) => row.category === "PV" && row.productSeries === series && row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.pvQty));
+    renderPlot(`detailYoy${series.replace(/[^A-Z0-9]/g, "")}Chart`, [
+      { x: monthLabels, y: prior, type: "bar", name: t("yoyActual2025"), marker: { color: "#A9B9CF" } },
+      { x: monthLabels, y: current, type: "bar", name: t("yoyActual2026"), marker: { color: "#3F8BFF" } },
+      { x: monthLabels, y: bp, type: "bar", name: t("yoyBp2026"), marker: { color: "#F2B84B" } },
+    ], { title: series, barmode: "group", xaxis: { type: "category" }, yaxis: { title: t("yoyQtyAxis"), rangemode: "tozero" }, margin: { l: 56, r: 18, t: 48, b: 58 }, legend: { orientation: "h", y: -0.3, font: { size: 10 } } });
+  });
+}
 function renderRegionDetails(resetFilters = false) {
   if (!activeDetailRegion) return;
   const region = activeDetailRegion;
@@ -328,7 +415,9 @@ function renderRegionDetails(resetFilters = false) {
   if (resetFilters) {
     const allOption = { value: "__ALL__", label: t("all") };
     fillSelect(detailBrandSel, [allOption, ...optionsForRows(allRows.filter((r) => r.region === region), "brand")], ["__ALL__"]);
+    detailYoyScopeSel.value = "region";
   }
+  renderRegionYoyDashboard();
   refreshAspCascade(detailPvAspFilters, resetFilters, rows.filter((r) => r.isPV)); refreshAspCascade(detailEssAspFilters, resetFilters, rows.filter((r) => r.isESS));
   renderDashboard(rows, targets, {
     year: "detailYearKpiRow", future: "detailFutureKpiRow", h1: "detailH1KpiRow", quarter: "detailQuarterProgressTable",
@@ -452,6 +541,7 @@ function applyLanguage() {
     renderRegion();
     renderProduct();
     renderVelocity();
+    if (activeDetailRegion && regionDetailModal.classList.contains("open")) renderRegionDetails(false);
     if (typeof renderCustomerAnalysis === "function") renderCustomerAnalysis(false);
     if (typeof renderOrderAnalysis === "function") renderOrderAnalysis(false);
   } else {
@@ -459,13 +549,13 @@ function applyLanguage() {
   }
 }
 function setLanguage(lang) { currentLang = lang; localStorage.setItem(APP_LANG_KEY, lang); applyLanguage(); }
-async function parseWorkbookFromArrayBuffer(buffer) { const workbook = XLSX.read(buffer, { type: "array" }), ordersSheet = workbook.Sheets["Order details"], targetSheet = workbook.Sheets.Target; if (!ordersSheet) throw new Error(t("ordersMissing")); if (!targetSheet) throw new Error(t("targetMissing")); return { orders: XLSX.utils.sheet_to_json(ordersSheet, { defval: null }), targets: XLSX.utils.sheet_to_json(targetSheet, { defval: null }) }; }
+async function parseWorkbookFromArrayBuffer(buffer) { const workbook = XLSX.read(buffer, { type: "array" }), ordersSheet = workbook.Sheets["Order details"], targetSheet = workbook.Sheets.Target, historicalSheet = workbook.Sheets["2025 details"]; if (!ordersSheet) throw new Error(t("ordersMissing")); if (!targetSheet) throw new Error(t("targetMissing")); return { orders: XLSX.utils.sheet_to_json(ordersSheet, { defval: null }), targets: XLSX.utils.sheet_to_json(targetSheet, { defval: null }), historical: historicalSheet ? XLSX.utils.sheet_to_json(historicalSheet, { defval: null }) : [] }; }
 async function loadWorkbookBySource() { const source = document.querySelector("input[name='salesSource']:checked")?.value || "upload"; if (source === "repo") { const path = String(repoSalesPathEl.value || "").trim(); if (!path) throw new Error(t("statusNoPath")); setStatus("statusReadRepo", { path }); const response = await fetch(path, { cache: "no-store" }); if (!response.ok) throw new Error(t("repoMissing", { path, status: response.status })); return parseWorkbookFromArrayBuffer(await response.arrayBuffer()); } const file = fileEl.files?.[0]; if (!file) throw new Error(t("statusNoFile")); setStatus("statusReadUpload", { name: file.name }); return parseWorkbookFromArrayBuffer(await file.arrayBuffer()); }
 function bindMultiSelectToggle(el) { el.addEventListener("mousedown", (event) => { const option = event.target; if (!(option instanceof HTMLOptionElement)) return; event.preventDefault(); if (["__ALL__", "total"].includes(option.value)) [...el.options].forEach((o) => { o.selected = o === option; }); else { option.selected = !option.selected; [...el.options].forEach((o) => { if (["__ALL__", "total"].includes(o.value)) o.selected = false; }); if (![...el.options].some((o) => o.selected)) { const fallback = [...el.options].find((o) => ["__ALL__", "total"].includes(o.value)); if (fallback) fallback.selected = true; } } setTimeout(() => el.dispatchEvent(new Event("change", { bubbles: true })), 0); }); }
 
 document.querySelectorAll("input[name='salesSource']").forEach((radio) => radio.addEventListener("change", () => { const useRepo = document.querySelector("input[name='salesSource']:checked")?.value === "repo"; repoRow.classList.toggle("active", useRepo); uploadRow.style.display = useRepo ? "none" : "grid"; }));
 byId("jumpWrap").querySelectorAll(".jump-btn").forEach((btn) => btn.addEventListener("click", () => { byId("jumpWrap").querySelectorAll(".jump-btn").forEach((x) => x.classList.toggle("active", x === btn)); document.querySelectorAll(".content-block").forEach((panel) => panel.classList.toggle("active", panel.id === btn.dataset.target)); window.dispatchEvent(new Event("resize")); }));
-runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); if (!allRows.length) { setStatus("statusNoRows"); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); renderVelocity(); if (typeof initCustomerAnalysis === "function") initCustomerAnalysis(); } catch (error) { setStatus("statusFail", { msg: error.message || error }); } });
+runBtn.addEventListener("click", async () => { try { const raw = await loadWorkbookBySource(); allRows = normalizeRows(raw.orders); allTargets = normalizeTargets(raw.targets); allHistoricalRows = normalizeHistoricalRows(raw.historical || []); if (!allRows.length) { setStatus("statusNoRows"); return; } initFilters(); renderOverview(); renderRegion(); renderProduct(); renderVelocity(); if (typeof initCustomerAnalysis === "function") initCustomerAnalysis(); } catch (error) { setStatus("statusFail", { msg: error.message || error }); } });
 [incomeTypeSel, monthSel].forEach((el) => el.addEventListener("change", renderRegion));
 yearSel.addEventListener("change", () => { refreshRegionMonthOptions(); renderRegion(); });
 quarterSel.addEventListener("change", () => { refreshRegionMonthOptions(); renderRegion(); });
@@ -473,6 +563,7 @@ Object.values(pvAspFilters).forEach((el) => el.addEventListener("change", () => 
 Object.values(essAspFilters).forEach((el) => el.addEventListener("change", () => { refreshAspCascade(essAspFilters, false, allRows.filter((r) => r.isESS)); renderOverview(); }));
 dashboardBrandSel.addEventListener("change", renderOverview);
 detailBrandSel.addEventListener("change", () => renderRegionDetails(false));
+detailYoyScopeSel.addEventListener("change", renderRegionYoyDashboard);
 Object.values(detailPvAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailPvAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isPV)); renderRegionDetails(false); }));
 Object.values(detailEssAspFilters).forEach((el) => el.addEventListener("change", () => { if (!activeDetailRegion) return; refreshAspCascade(detailEssAspFilters, false, allRows.filter((r) => r.region === activeDetailRegion && r.isESS)); renderRegionDetails(false); }));
 [productMetricSel, productIncomeSel, productRegionSel, productStartMonthSel, productEndMonthSel].forEach((el) => el.addEventListener("change", () => { renderProduct(); renderVelocity(); }));
