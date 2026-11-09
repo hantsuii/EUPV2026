@@ -42,7 +42,7 @@ const I18N = {
     qPeriod: "季度 / 月份", qInvoicedAmount: "开票收入(万€)", qConfirmAmount: "待确认收入(万€)", qAllAmount: "总收入(万€)", qTargetAmount: "BP金额(万€)", qInvRate: "开票达成率", qAllRate: "总计达成率", qPvQty: "组件销量(MW)", qEssQty: "储能销量(Sets)",
     chartAmountTitle: "2026 月度销售金额变化（折线=总金额，柱=组件/ESS）", chartAmountY: "金额(万€)", chartTotalAmount: "总金额(万€)", chartPvAmount: "组件金额(万€)", chartEssAmount: "ESS金额(万€)", pvAspFilterTitle: "PV ASP 筛选", essAspFilterTitle: "ESS ASP 筛选", chartPvAspTitle: "2026 月度组件ASP变化", chartPvAsp: "组件ASP(€/W)", chartEssAspTitle: "2026 月度储能ASP变化", chartEssAsp: "储能ASP(€/Set)", chartPvQty: "组件销量(MW)", chartEssQty: "储能销量(Sets)", chartPvQtyTitle: "2026 月度组件销量(MW)", chartEssQtyTitle: "2026 月度储能销量(Sets)",
     regTotal: "总金额(万€)", regBp: "BP金额(万€)", regBpRate: "BP达成（开票/总计）", regShare: "总金额占比", regEssAmount: "储能金额(万€)", regEssQty: "储能销量(Sets)", regEssAsp: "储能ASP(€/Set)", regPvAmount: "组件金额(万€)", regPvQty: "组件销量(MW)", regPvAsp: "组件ASP(€/W)", regionDetails: "查看详情", regionDetailTitle: "{region} 总计 Dashboard",
-    yoyTitle: "2025–2026 YOY 与 BP 对比", yoyScope: "数据范围", yoyScopeRegion: "当前地区", yoyScopeAll: "全体数据", yoyNote: "Actual 采用已开票数据；收入单位为百万欧元，组件销量单位为 MW。", yoyRevenueTitle: "每月销售收入", yoyProductTitle: "PV 系列每月销量", yoyRevenueAxis: "销售收入(百万€)", yoyQtyAxis: "销量(MW)", yoyRevenue2026: "2026 Actual 收入", yoyRevenue2025: "2025 收入", yoyGrowth: "收入 YOY", yoyBpRevenue: "2026 BP 收入", yoyBpAch: "收入 BP 达成", yoyProduct: "产品系列", yoyQty2026: "2026 Actual", yoyQty2025: "2025", yoyQtyGrowth: "YOY", yoyQtyBp: "2026 BP", yoyQtyBpAch: "BP 达成", yoyActual2026: "2026 Actual", yoyActual2025: "2025 Actual", yoyBp2026: "2026 BP",
+    yoyTitle: "季度 YOY 与 BP 达成", yoyScope: "数据范围", yoyScopeRegion: "当前地区", yoyScopeAll: "全体数据", yoyNote: "Actual 采用已开票数据；BP 销售金额汇总 Target 的 Revenue LCY，产品按 Product-Sub 分类，表内数值均为 2026 BP 完成度。", yoyRevenueTitle: "季度销售金额：2025 / 2026 Actual / BP", yoyRevenueAxis: "销售金额(百万)", yoyPeriod: "季度", yoySalesAch: "销售金额", yoyTclAch: "TCL 销量", yoyP7ResAch: "P7 RES 销量", yoyP7ComAch: "P7 COM 销量", yoyMaxAch: "MAX 销量", yoyAnnual: "全年总计", yoyActual2026: "2026 Actual", yoyActual2025: "2025 Actual", yoyBp2026: "2026 BP (LCY)",
     productTitle: "产品销售分析", productMetric: "分析指标", productHierarchyTitle: "产品层级筛选", productControlTitle: "分析条件", metricRevenue: "销售收入", metricPvQty: "PV 销量 (MW)", metricEssQty: "ESS 销量 (Sets)", startMonth: "开始月份", endMonth: "结束月份", productNote: "数量视图分别显示 PV MW 或 ESS Sets；请选择一个产品层级进行筛选、趋势和排名分析。", velocityTitle: "PV 动销率（月度销量矩阵）", velocityNote: "展示每个地区 × 版型（Level2）在 2026 年各月的 PV 销量（MW），右列为月均。复用上方产品层级筛选与分析条件。", velocityRegion: "地区", velocityProduct: "版型", velocityAvg: "月均", velocityHeatmapTitle: "PV 月度销量热力图（MW）", productTotal: "筛选区间总计", productTop: "领先产品", productTopShare: "领先产品占比", productMom: "最近月环比", productTrend: "月度趋势", productShare: "销售占比", rankName: "产品", rankValue: "指标值", rankShare: "占比", rankLatest: "最近月", rankPrevious: "上月", rankMom: "环比", noData: "无数据", other: "其他", empty: "",
     customerTitle:"客户分析", customerSubtitle:"先看客户总览，再选择地区查看产品、活跃度、价值和客户明细。", customerRegion:"分析地区", customerYear:"分析年份", customerProduct:"产品线", customerBrand:"品牌", customerSearch:"搜索客户", customerSearchPlaceholder:"客户名称 / 国家", customerCurrentScope:"当前分析范围", customerTabRegion:"地区概览", customerTabProduct:"产品结构", customerTabActivity:"活跃度", customerTabValue:"客户价值", customerTabDetail:"客户明细", orderAnalysisTitle:"订单分析", orderAnalysisSubtitle:"查看各地区当月订单状态及季度客户 × Model MW矩阵。", orderStatusSectionTitle:"当月订单状态", orderQuarterSectionTitle:"季度订单矩阵", orderSearchPlaceholder:"客户名称 / Model", customerStatusMonth:"分析月份", customerQuarter:"分析季度", customerStatusNote:"按地区、客户和 Model 汇总 Total MW；状态列来自 Order Status，MW全为0的状态列自动隐藏，CRD/SAD/SSD 展示不重复日期。", customerQuarterNote:"按客户和 Model 展示所选季度各月的 Total MW，并提供订单数和 MW 汇总；地区使用上方筛选。", customerDefinition:"活跃客户：当前时间往前3个月内有订单；沉睡客户：4–6个月未下单；风险客户：超过6个月未下单。",
   },
@@ -56,7 +56,7 @@ const I18N = {
     qPeriod: "Quarter / Month", qInvoicedAmount: "Invoiced (10k €)", qConfirmAmount: "Pending Confirmation (10k €)", qAllAmount: "Total (10k €)", qTargetAmount: "BP (10k €)", qInvRate: "Invoiced Achievement", qAllRate: "Total Achievement", qPvQty: "PV Qty (MW)", qEssQty: "ESS Qty (Sets)",
     chartAmountTitle: "2026 Monthly Sales Amount (line=total, bars=PV/ESS)", chartAmountY: "Amount (10k €)", chartTotalAmount: "Total Amount (10k €)", chartPvAmount: "PV Amount (10k €)", chartEssAmount: "ESS Amount (10k €)", pvAspFilterTitle: "PV ASP Filters", essAspFilterTitle: "ESS ASP Filters", chartPvAspTitle: "2026 Monthly PV ASP", chartPvAsp: "PV ASP (€/W)", chartEssAspTitle: "2026 Monthly ESS ASP", chartEssAsp: "ESS ASP (€/Set)", chartPvQty: "PV Qty (MW)", chartEssQty: "ESS Qty (Sets)", chartPvQtyTitle: "2026 Monthly PV Qty (MW)", chartEssQtyTitle: "2026 Monthly ESS Qty (Sets)",
     regTotal: "Total Amount (10k €)", regBp: "BP Revenue (10k €)", regBpRate: "BP Achievement (Inv./Total)", regShare: "Share", regEssAmount: "ESS Amount (10k €)", regEssQty: "ESS Qty (Sets)", regEssAsp: "ESS ASP (€/Set)", regPvAmount: "PV Amount (10k €)", regPvQty: "PV Qty (MW)", regPvAsp: "PV ASP (€/W)", regionDetails: "View details", regionDetailTitle: "{region} Total Dashboard",
-    yoyTitle: "2025–2026 YOY and BP Comparison", yoyScope: "Data scope", yoyScopeRegion: "Current region", yoyScopeAll: "All data", yoyNote: "Actual uses invoiced data. Revenue is in € millions and PV volume is in MW.", yoyRevenueTitle: "Monthly Sales Revenue", yoyProductTitle: "Monthly PV Series Volume", yoyRevenueAxis: "Sales Revenue (€m)", yoyQtyAxis: "Volume (MW)", yoyRevenue2026: "2026 Actual Revenue", yoyRevenue2025: "2025 Revenue", yoyGrowth: "Revenue YOY", yoyBpRevenue: "2026 BP Revenue", yoyBpAch: "Revenue BP Achievement", yoyProduct: "Product Series", yoyQty2026: "2026 Actual", yoyQty2025: "2025", yoyQtyGrowth: "YOY", yoyQtyBp: "2026 BP", yoyQtyBpAch: "BP Achievement", yoyActual2026: "2026 Actual", yoyActual2025: "2025 Actual", yoyBp2026: "2026 BP",
+    yoyTitle: "Quarterly YOY and BP Achievement", yoyScope: "Data scope", yoyScopeRegion: "Current region", yoyScopeAll: "All data", yoyNote: "Actual uses invoiced data. BP revenue sums Target Revenue LCY; products follow Product-Sub. Every table value is 2026 BP achievement.", yoyRevenueTitle: "Quarterly Revenue: 2025 / 2026 Actual / BP", yoyRevenueAxis: "Sales Amount (million)", yoyPeriod: "Quarter", yoySalesAch: "Sales Amount", yoyTclAch: "TCL Volume", yoyP7ResAch: "P7 RES Volume", yoyP7ComAch: "P7 COM Volume", yoyMaxAch: "MAX Volume", yoyAnnual: "Full Year", yoyActual2026: "2026 Actual", yoyActual2025: "2025 Actual", yoyBp2026: "2026 BP (LCY)",
     productTitle: "Product Sales Analysis", productMetric: "Metric", productHierarchyTitle: "Product Hierarchy Filters", productControlTitle: "Analysis Settings", metricRevenue: "Sales Revenue", metricPvQty: "PV Qty (MW)", metricEssQty: "ESS Qty (Sets)", startMonth: "Start Month", endMonth: "End Month", productNote: "PV MW and ESS Sets are shown separately; choose one product level for filters, trends and ranking.", velocityTitle: "PV Sales Velocity (Monthly Matrix)", velocityNote: "PV MW per Region × Level2 (product family) for each month of 2026, with monthly average on the right. Reuses the product filters and settings above.", velocityRegion: "Region", velocityProduct: "Product", velocityAvg: "Avg", velocityHeatmapTitle: "PV Monthly Qty Heatmap (MW)", productTotal: "Period Total", productTop: "Leading Product", productTopShare: "Leading Product Share", productMom: "Latest MoM", productTrend: "Monthly Trend", productShare: "Sales Share", rankName: "Product", rankValue: "Value", rankShare: "Share", rankLatest: "Latest Month", rankPrevious: "Previous Month", rankMom: "MoM", noData: "No data", other: "Other", empty: "",
     customerTitle:"Customer Analysis", customerSubtitle:"Start with the overview, then choose a region for product, activity, value and customer details.", customerRegion:"Analysis Region", customerYear:"Analysis Year", customerProduct:"Product Line", customerBrand:"Brand", customerSearch:"Search Customer", customerSearchPlaceholder:"Customer name / country", customerCurrentScope:"Current scope", customerTabRegion:"Regional Overview", customerTabProduct:"Product Mix", customerTabActivity:"Activity", customerTabValue:"Customer Value", customerTabDetail:"Customer Details", orderAnalysisTitle:"Order Analysis", orderAnalysisSubtitle:"Review monthly order status by region and the quarterly Customer × Model MW matrix.", orderStatusSectionTitle:"Monthly Order Status", orderQuarterSectionTitle:"Quarterly Order Matrix", orderSearchPlaceholder:"Customer name / Model", customerStatusMonth:"Analysis Month", customerQuarter:"Analysis Quarter", customerStatusNote:"Total MW by region, customer and Model. Status columns come from Order Status; all-zero MW columns are hidden; CRD/SAD/SSD list distinct dates.", customerQuarterNote:"Total MW by customer and Model for each month in the selected quarter, with order count and MW totals. Region follows the filter above.", customerDefinition:"Active: ordered in the last 3 months from current date; sleeping: no order for 4–6 months; at risk: no order for more than 6 months.",
   },
@@ -110,15 +110,10 @@ function normalizePvSeries(value) {
   if (product.includes("MAX") || product === "M CLASS") return "MAX";
   return null;
 }
-function targetPvSeries(row, category, brand) {
+function targetPvSeries(row, category) {
   if (category !== "PV") return null;
-  if (String(brand || "").trim().toUpperCase() === "TCL") return "TCL";
-  const product = String(rowValue(row, ["Product"], "")).trim().toUpperCase();
   const productSub = String(rowValue(row, ["Product-Sub", "Product Sub"], "")).trim().toUpperCase();
-  if (product.startsWith("P7-RES")) return "P7-RES";
-  if (product.startsWith("P7-COM")) return "P7-COM";
-  if (productSub === "M CLASS" || product.startsWith("M-CLASS") || product.startsWith("M-S")) return "MAX";
-  return null;
+  return { "TCL SOLAR": "TCL", "P RES": "P7-RES", "P COM": "P7-COM", "M CLASS": "MAX" }[productSub] || null;
 }
 
 function normalizeRows(rawRows) {
@@ -160,7 +155,7 @@ function normalizeTargets(rawRows) {
     const category = String(row["category"] ?? row["Category"] ?? "Unknown").trim().toUpperCase(), quantity = n(row["Quantity"]);
     const categorySub = String(row["category Sub"] ?? row["Category Sub"] ?? row["Sub Type"] ?? "").trim().toUpperCase();
     const brand = String(row["Brand"] ?? row["brand"] ?? "Unknown").trim() || "Unknown";
-    return { year, month, quarter: normalizeQuarter(row["Quartely"], month), region: mapRegionForStats(row["Region"] ?? row["Country"]), category, brand, productSeries: targetPvSeries(row, category, brand), revenue: n(row["Revenue EUR"]), quantity, pvQty: category === "PV" ? quantity : 0, essQty: category === "ESS" && categorySub === "KITS" ? quantity : 0 };
+    return { year, month, quarter: normalizeQuarter(row["Quartely"], month), region: mapRegionForStats(row["Region"] ?? row["Country"]), category, brand, productSeries: targetPvSeries(row, category), revenue: n(row["Revenue EUR"]), revenueLcy: n(row["Revenue LCY"]), quantity, pvQty: category === "PV" ? quantity : 0, essQty: category === "ESS" && categorySub === "KITS" ? quantity : 0 };
   }).filter((r) => Number.isFinite(r.year) && r.month && r.quarter && r.region !== "Unknown");
 }
 
@@ -362,50 +357,31 @@ function filterTargetsByDetailBrand(rows) {
   return rows.filter((r) => r.brand === brand);
 }
 function sumMetric(rows, picker) { return rows.reduce((sum, row) => sum + n(picker(row)), 0); }
-function yoyChange(current, prior) { return prior !== 0 ? (current - prior) / prior * 100 : null; }
 function renderRegionYoyDashboard() {
   if (!activeDetailRegion || !detailYoyScopeSel) return;
   const useAll = detailYoyScopeSel.value === "all";
   const inScope = (row) => useAll || row.region === activeDetailRegion;
-  const months = Array.from({ length: 12 }, (_, index) => index + 1);
-  const monthLabels = months.map((month) => String(month).padStart(2, "0"));
   const actual2026 = allRows.filter((row) => row.year === TARGET_YEAR && row.isInvoiced && inScope(row));
   const actual2025 = allHistoricalRows.filter((row) => row.year === TARGET_YEAR - 1 && inScope(row));
   const bp2026 = allTargets.filter((row) => row.year === TARGET_YEAR && inScope(row));
-  const revenue2026 = months.map((month) => sumMetric(actual2026.filter((row) => row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.revenue) / 1000000);
-  const revenue2025 = months.map((month) => sumMetric(actual2025.filter((row) => row.month === `${TARGET_YEAR - 1}-${String(month).padStart(2, "0")}`), (row) => row.revenue) / 1000000);
-  const revenueBp = months.map((month) => sumMetric(bp2026.filter((row) => row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.revenue) / 1000000);
-  const total2026 = revenue2026.reduce((sum, value) => sum + value, 0), total2025 = revenue2025.reduce((sum, value) => sum + value, 0), totalBp = revenueBp.reduce((sum, value) => sum + value, 0);
-  byId("detailYoyKpiRow").innerHTML = [
-    card(t("yoyRevenue2026"), fmtOne(total2026)),
-    card(t("yoyRevenue2025"), fmtOne(total2025)),
-    card(t("yoyGrowth"), fmtPct(yoyChange(total2026, total2025))),
-    card(t("yoyBpAch"), fmtPct(achievement(total2026, totalBp)), `${t("yoyBpRevenue")}: ${fmtOne(totalBp)}`),
-  ].join("");
+  const quarters = ["Q1", "Q2", "Q3", "Q4"];
+  const revenue2026 = quarters.map((quarter) => sumMetric(actual2026.filter((row) => row.quarter === quarter), (row) => row.revenue) / 1000000);
+  const revenue2025 = quarters.map((quarter) => sumMetric(actual2025.filter((row) => row.quarter === quarter), (row) => row.revenue) / 1000000);
+  const revenueBp = quarters.map((quarter) => sumMetric(bp2026.filter((row) => row.quarter === quarter), (row) => row.revenueLcy) / 1000000);
   renderPlot("detailYoyRevenueChart", [
-    { x: monthLabels, y: revenue2025, type: "bar", name: t("yoyActual2025"), marker: { color: "#A9B9CF" } },
-    { x: monthLabels, y: revenue2026, type: "bar", name: t("yoyActual2026"), marker: { color: "#3F8BFF" } },
-    { x: monthLabels, y: revenueBp, type: "bar", name: t("yoyBp2026"), marker: { color: "#F2B84B" } },
+    { x: quarters, y: revenue2025, type: "bar", name: t("yoyActual2025"), marker: { color: "#A9B9CF" } },
+    { x: quarters, y: revenue2026, type: "bar", name: t("yoyActual2026"), marker: { color: "#3F8BFF" } },
+    { x: quarters, y: revenueBp, type: "bar", name: t("yoyBp2026"), marker: { color: "#F2B84B" } },
   ], { title: t("yoyRevenueTitle"), barmode: "group", xaxis: { type: "category" }, yaxis: { title: t("yoyRevenueAxis"), rangemode: "tozero" }, margin: { l: 64, r: 24, t: 52, b: 62 } });
-
-  const productSeries = ["TCL", "P7-RES", "P7-COM", "MAX"];
-  const summaryRows = productSeries.map((series) => {
-    const current = sumMetric(actual2026.filter((row) => row.isPV && row.productSeries === series), (row) => row.pvQty);
-    const prior = sumMetric(actual2025.filter((row) => row.isPV && row.productSeries === series), (row) => row.pvQty);
-    const bp = sumMetric(bp2026.filter((row) => row.category === "PV" && row.productSeries === series), (row) => row.pvQty);
-    return [series, fmtOne(current), fmtOne(prior), fmtPct(yoyChange(current, prior)), fmtOne(bp), fmtPct(achievement(current, bp))];
+  const periodRows = [...quarters.map((quarter) => ({ label: quarter, quarter })), { label: t("yoyAnnual"), quarter: null }];
+  const rate = (actualRows, targetRows, actualPicker, targetPicker) => fmtPct(achievement(sumMetric(actualRows, actualPicker), sumMetric(targetRows, targetPicker))) || "—";
+  const achievementRows = periodRows.map(({ label, quarter }) => {
+    const current = quarter ? actual2026.filter((row) => row.quarter === quarter) : actual2026;
+    const target = quarter ? bp2026.filter((row) => row.quarter === quarter) : bp2026;
+    const productRate = (series) => rate(current.filter((row) => row.isPV && row.productSeries === series), target.filter((row) => row.category === "PV" && row.productSeries === series), (row) => row.pvQty, (row) => row.pvQty);
+    return [label, rate(current, target, (row) => row.revenue, (row) => row.revenueLcy), productRate("TCL"), productRate("P7-RES"), productRate("P7-COM"), productRate("MAX")];
   });
-  table("detailYoyProductTable", [t("yoyProduct"), t("yoyQty2026"), t("yoyQty2025"), t("yoyQtyGrowth"), t("yoyQtyBp"), t("yoyQtyBpAch")], summaryRows);
-  productSeries.forEach((series) => {
-    const current = months.map((month) => sumMetric(actual2026.filter((row) => row.isPV && row.productSeries === series && row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.pvQty));
-    const prior = months.map((month) => sumMetric(actual2025.filter((row) => row.isPV && row.productSeries === series && row.month === `${TARGET_YEAR - 1}-${String(month).padStart(2, "0")}`), (row) => row.pvQty));
-    const bp = months.map((month) => sumMetric(bp2026.filter((row) => row.category === "PV" && row.productSeries === series && row.month === `${TARGET_YEAR}-${String(month).padStart(2, "0")}`), (row) => row.pvQty));
-    renderPlot(`detailYoy${series.replace(/[^A-Z0-9]/g, "")}Chart`, [
-      { x: monthLabels, y: prior, type: "bar", name: t("yoyActual2025"), marker: { color: "#A9B9CF" } },
-      { x: monthLabels, y: current, type: "bar", name: t("yoyActual2026"), marker: { color: "#3F8BFF" } },
-      { x: monthLabels, y: bp, type: "bar", name: t("yoyBp2026"), marker: { color: "#F2B84B" } },
-    ], { title: series, barmode: "group", xaxis: { type: "category" }, yaxis: { title: t("yoyQtyAxis"), rangemode: "tozero" }, margin: { l: 56, r: 18, t: 48, b: 58 }, legend: { orientation: "h", y: -0.3, font: { size: 10 } } });
-  });
+  table("detailYoyAchievementTable", [t("yoyPeriod"), t("yoySalesAch"), t("yoyTclAch"), t("yoyP7ResAch"), t("yoyP7ComAch"), t("yoyMaxAch")], achievementRows);
 }
 function renderRegionDetails(resetFilters = false) {
   if (!activeDetailRegion) return;
