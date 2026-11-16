@@ -352,6 +352,7 @@
     .order-compare-status { margin:8px 0;color:#4f6f9d;font-size:13px; }
     .order-compare-results[hidden] { display:none; }
     .order-compare-section { margin-top:20px; }
+    .order-compare-kpis { grid-template-columns:repeat(2,minmax(220px,1fr)); }
 
     @media (max-width: 1180px) {
       .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
@@ -372,6 +373,7 @@
       .filter-grid { grid-template-columns: 1fr; }
       .customer-toolbar { grid-template-columns:1fr; }
       .order-compare-upload, .order-compare-filters { grid-template-columns:1fr; }
+      .order-compare-kpis { grid-template-columns:1fr; }
       .yoy-panel-header { align-items:stretch;flex-direction:column; }
       .yoy-scope-control { min-width:0; }
       .chart { height: 280px; }
@@ -626,7 +628,7 @@
               <div><label for="compareMonthSel" data-order-compare-text="month">月份</label><select id="compareMonthSel"></select></div>
               <div><label for="compareProductSel" data-order-compare-text="product">产品线</label><select id="compareProductSel"></select></div>
             </div>
-            <div id="orderCompareKpis" class="kpi-grid kpi-grid-4"></div>
+            <div id="orderCompareKpis" class="kpi-grid order-compare-kpis"></div>
 
             <div class="order-compare-section">
               <div class="sub-title" data-order-compare-text="regionChange">地区当月订单变化</div>
@@ -635,10 +637,6 @@
             <div class="order-compare-section">
               <div class="sub-title" data-order-compare-text="statusChange">Order Status 对比</div>
               <div class="table-wrap"><table id="orderCompareStatusTable"></table></div>
-            </div>
-            <div class="order-compare-section">
-              <div class="sub-title" data-order-compare-text="statusTransition">状态迁移</div>
-              <div class="table-wrap"><table id="orderCompareTransitionTable"></table></div>
             </div>
             <div class="order-compare-section">
               <div class="sub-title" data-order-compare-text="customerQuarter">当前季度客户订单变化</div>

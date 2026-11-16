@@ -89,6 +89,10 @@ function ocMetrics(row) {
   if (!row) return { pv: 0, ess: 0, lines: 0 };
   return { pv: row.category === "PV" ? row.totalMw : 0, ess: row.category === "ESS" ? row.essQty : 0, lines: 1 };
 }
+function ocSelectedMetric() {
+  const isEss = ocProductSel.value === "ESS";
+  return { key:isEss ? "ess" : "pv", label:ocText(isEss ? "essQty" : "pvMw"), digits:isEss ? 0 : 1, unit:isEss ? "" : " MW" };
+}
 function ocAddMetrics(target, metrics) {
   target.pv += metrics.pv; target.ess += metrics.ess; target.lines += metrics.lines; return target;
 }
@@ -142,84 +146,89 @@ function ocStatusLabel(rows, status) {
 function ocRenderKpis() {
   const oldMonth = ocAggregate(ocMonthlyRows(orderComparisonState.oldSnapshot)), newMonth = ocAggregate(ocMonthlyRows(orderComparisonState.newSnapshot));
   const oldQuarter = ocAggregate(ocQuarterRows(orderComparisonState.oldSnapshot)), newQuarter = ocAggregate(ocQuarterRows(orderComparisonState.newSnapshot));
+  const metric = ocSelectedMetric();
   byId("orderCompareKpis").innerHTML = [
-    card(ocText("currentMonthPv"), `${ocNumber(oldMonth.pv)} → ${ocNumber(newMonth.pv)}`, `${ocText("delta")} ${ocSigned(newMonth.pv - oldMonth.pv)} MW`),
-    card(ocText("currentMonthEss"), `${ocNumber(oldMonth.ess, 0)} → ${ocNumber(newMonth.ess, 0)}`, `${ocText("delta")} ${ocSigned(newMonth.ess - oldMonth.ess, 0)}`),
-    card(`${ocText("currentQuarterPv")} (${ocCurrentPeriod().quarter})`, `${ocNumber(oldQuarter.pv)} → ${ocNumber(newQuarter.pv)}`, `${ocText("delta")} ${ocSigned(newQuarter.pv - oldQuarter.pv)} MW`),
-    card(`${ocText("currentQuarterEss")} (${ocCurrentPeriod().quarter})`, `${ocNumber(oldQuarter.ess, 0)} → ${ocNumber(newQuarter.ess, 0)}`, `${ocText("delta")} ${ocSigned(newQuarter.ess - oldQuarter.ess, 0)}`)
+    card(`${ocMonthSel.value} ${metric.label}`, `${ocNumber(oldMonth[metric.key], metric.digits)} → ${ocNumber(newMonth[metric.key], metric.digits)}`, `${ocText("delta")} ${ocSigned(newMonth[metric.key] - oldMonth[metric.key], metric.digits)}${metric.unit}`),
+    card(`${ocText("quarter")} ${ocCurrentPeriod().quarter} ${metric.label}`, `${ocNumber(oldQuarter[metric.key], metric.digits)} → ${ocNumber(newQuarter[metric.key], metric.digits)}`, `${ocText("delta")} ${ocSigned(newQuarter[metric.key] - oldQuarter[metric.key], metric.digits)}${metric.unit}`)
   ].join("");
 }
 function ocRenderRegionTable() {
   const oldRows = ocMonthlyRows(orderComparisonState.oldSnapshot), newRows = ocMonthlyRows(orderComparisonState.newSnapshot);
   const regions = [...new Set([...oldRows, ...newRows].map((row) => row.region))].sort();
   const changeRecords = orderComparisonState.comparison.records.filter(ocRecordMatchesMonthly);
+  const metric = ocSelectedMetric();
   const values = regions.map((region) => {
     const oldAgg = ocAggregate(oldRows.filter((row) => row.region === region)), newAgg = ocAggregate(newRows.filter((row) => row.region === region));
     const regionChanges = changeRecords.filter((record) => ocRecordRegion(record) === region);
     const countType = (type) => regionChanges.filter((record) => record.types.includes(type)).length;
-    return [region, ocNumber(oldAgg.pv), ocNumber(newAgg.pv), ocSigned(newAgg.pv - oldAgg.pv), ocNumber(oldAgg.ess, 0), ocNumber(newAgg.ess, 0), ocSigned(newAgg.ess - oldAgg.ess, 0), countType("added"), countType("cancelled"), countType("delayed"), countType("advanced")];
+    return [region, ocNumber(oldAgg[metric.key], metric.digits), ocNumber(newAgg[metric.key], metric.digits), ocSigned(newAgg[metric.key] - oldAgg[metric.key], metric.digits), countType("added"), countType("cancelled"), countType("delayed"), countType("advanced")];
   });
-  table("orderCompareRegionTable", [ocText("region"), `${ocText("previous")} ${ocText("pvMw")}`, `${ocText("current")} ${ocText("pvMw")}`, `${ocText("delta")} ${ocText("pvMw")}`, `${ocText("previous")} ${ocText("essQty")}`, `${ocText("current")} ${ocText("essQty")}`, `${ocText("delta")} ${ocText("essQty")}`, ocText("added"), ocText("cancelled"), ocText("delayed"), ocText("advanced")], values);
+  table("orderCompareRegionTable", [ocText("region"), `${ocText("previous")} ${metric.label}`, `${ocText("current")} ${metric.label}`, `${ocText("delta")} ${metric.label}`, ocText("added"), ocText("cancelled"), ocText("delayed"), ocText("advanced")], values);
 }
 function ocRenderStatusTable() {
   const oldRows = ocMonthlyRows(orderComparisonState.oldSnapshot), newRows = ocMonthlyRows(orderComparisonState.newSnapshot), allRowsForLabels = [...oldRows, ...newRows];
   const statuses = [...new Set(allRowsForLabels.map((row) => row.orderStatus))].sort();
+  const metric = ocSelectedMetric();
   const values = statuses.map((status) => {
     const oldAgg = ocAggregate(oldRows.filter((row) => row.orderStatus === status)), newAgg = ocAggregate(newRows.filter((row) => row.orderStatus === status));
-    return [ocStatusLabel(allRowsForLabels, status), oldAgg.lines, newAgg.lines, newAgg.lines - oldAgg.lines, ocNumber(oldAgg.pv), ocNumber(newAgg.pv), ocSigned(newAgg.pv - oldAgg.pv), ocNumber(oldAgg.ess, 0), ocNumber(newAgg.ess, 0), ocSigned(newAgg.ess - oldAgg.ess, 0)];
+    return [ocStatusLabel(allRowsForLabels, status), ocNumber(oldAgg[metric.key], metric.digits), ocNumber(newAgg[metric.key], metric.digits), ocSigned(newAgg[metric.key] - oldAgg[metric.key], metric.digits)];
   });
-  table("orderCompareStatusTable", [ocText("status"), `${ocText("previous")} ${ocText("orderLines")}`, `${ocText("current")} ${ocText("orderLines")}`, ocText("delta"), `${ocText("previous")} ${ocText("pvMw")}`, `${ocText("current")} ${ocText("pvMw")}`, `${ocText("delta")} ${ocText("pvMw")}`, `${ocText("previous")} ${ocText("essQty")}`, `${ocText("current")} ${ocText("essQty")}`, `${ocText("delta")} ${ocText("essQty")}`], values);
-}
-function ocRenderTransitions() {
-  const groups = new Map(), records = orderComparisonState.comparison.records.filter(ocRecordMatchesMonthly);
-  records.forEach((record) => {
-    const oldStatus = record.oldRow ? record.oldRow.orderStatusLabel : ocText("added"), newStatus = record.newRow ? record.newRow.orderStatusLabel : ocText("cancelled");
-    if (record.oldRow && record.newRow && record.oldRow.orderStatus === record.newRow.orderStatus) return;
-    const key = `${oldStatus}\u0001${newStatus}`;
-    if (!groups.has(key)) groups.set(key, { oldStatus, newStatus, count: 0, pv: 0, ess: 0 });
-    const group = groups.get(key), oldMetrics = ocMetrics(record.oldRow), newMetrics = ocMetrics(record.newRow);
-    group.count += 1; group.pv += newMetrics.pv - oldMetrics.pv; group.ess += newMetrics.ess - oldMetrics.ess;
-  });
-  const values = [...groups.values()].sort((a, b) => b.count - a.count).map((group) => [`${group.oldStatus} → ${group.newStatus}`, group.count, ocSigned(group.pv), ocSigned(group.ess, 0)]);
-  table("orderCompareTransitionTable", [ocText("transition"), ocText("orderLines"), `${ocText("delta")} ${ocText("pvMw")}`, `${ocText("delta")} ${ocText("essQty")}`], values);
+  table("orderCompareStatusTable", [ocText("status"), `${ocText("previous")} ${metric.label}`, `${ocText("current")} ${metric.label}`, `${ocText("delta")} ${metric.label}`], values);
 }
 function ocRenderCustomerQuarter() {
   const oldRows = ocQuarterRows(orderComparisonState.oldSnapshot), newRows = ocQuarterRows(orderComparisonState.newSnapshot);
-  const customers = [...new Set([...oldRows, ...newRows].map((row) => row.customer))].sort();
-  const values = customers.map((customer) => {
-    const oldAgg = ocAggregate(oldRows.filter((row) => row.customer === customer)), newAgg = ocAggregate(newRows.filter((row) => row.customer === customer));
-    return { sortValue:Math.abs(newAgg.pv - oldAgg.pv) + Math.abs(newAgg.ess - oldAgg.ess), values:[customer, oldAgg.lines, newAgg.lines, newAgg.lines - oldAgg.lines, ocNumber(oldAgg.pv), ocNumber(newAgg.pv), ocSigned(newAgg.pv - oldAgg.pv), ocNumber(oldAgg.ess, 0), ocNumber(newAgg.ess, 0), ocSigned(newAgg.ess - oldAgg.ess, 0)] };
-  }).sort((a, b) => b.sortValue - a.sortValue).map((item) => item.values);
-  table("orderCompareCustomerTable", [ocText("customer"), `${ocText("previous")} ${ocText("orderLines")}`, `${ocText("current")} ${ocText("orderLines")}`, ocText("delta"), `${ocText("previous")} ${ocText("pvMw")}`, `${ocText("current")} ${ocText("pvMw")}`, `${ocText("delta")} ${ocText("pvMw")}`, `${ocText("previous")} ${ocText("essQty")}`, `${ocText("current")} ${ocText("essQty")}`, `${ocText("delta")} ${ocText("essQty")}`], values);
+  const metric = ocSelectedMetric(), groups = new Map();
+  const addRows = (rows, side) => rows.forEach((row) => {
+    const key = `${row.customer}\u0001${row.model}`;
+    if (!groups.has(key)) groups.set(key, { customer:row.customer, model:row.model, regions:new Set(), old:0, current:0 });
+    const group = groups.get(key); group.regions.add(row.region); group[side] += ocMetrics(row)[metric.key];
+  });
+  addRows(oldRows, "old"); addRows(newRows, "current");
+  const values = [...groups.values()].map((group) => ({ ...group, delta:group.current - group.old }))
+    .filter((group) => Math.abs(group.delta) > 1e-9)
+    .sort((a, b) => b.delta - a.delta)
+    .map((group) => [[...group.regions].sort().join(", "), group.customer, group.model, ocNumber(group.old, metric.digits), ocNumber(group.current, metric.digits), ocSigned(group.delta, metric.digits)]);
+  table("orderCompareCustomerTable", [ocText("region"), ocText("customer"), ocText("model"), `${ocText("previous")} ${metric.label}`, `${ocText("current")} ${metric.label}`, `${ocText("delta")} ${metric.label}`], values);
 }
 function ocRenderDetails() {
-  const values = orderComparisonState.comparison.records.filter((record) => ocRecordMatchesMonthly(record) && !record.types.includes("unchanged")).map((record) => {
-    const oldRow = record.oldRow, newRow = record.newRow, row = newRow || oldRow, oldMetrics = ocMetrics(oldRow), newMetrics = ocMetrics(newRow);
-    return [row.orderId, row.orderLine, row.region, row.customer, row.model, record.types.map((type) => ocText(type)).join(" / "), oldRow?.month || ocText("notAvailable"), newRow?.month || ocText("notAvailable"), oldRow?.orderStatusLabel || ocText("notAvailable"), newRow?.orderStatusLabel || ocText("notAvailable"), ocNumber(oldMetrics.pv), ocNumber(newMetrics.pv), ocSigned(newMetrics.pv - oldMetrics.pv), ocNumber(oldMetrics.ess, 0), ocNumber(newMetrics.ess, 0), ocSigned(newMetrics.ess - oldMetrics.ess, 0)];
+  const metric = ocSelectedMetric(), groups = new Map();
+  orderComparisonState.comparison.records.filter(ocRecordMatchesMonthly).forEach((record) => {
+    const visibleTypes = record.types.filter((type) => !["statusChanged", "unchanged"].includes(type));
+    if (!visibleTypes.length) return;
+    const row = record.newRow || record.oldRow, key = `${row.customer}\u0001${row.model}`;
+    if (!groups.has(key)) groups.set(key, { customer:row.customer, model:row.model, regions:new Set(), types:new Set(), oldMonths:new Set(), currentMonths:new Set(), old:0, current:0 });
+    const group = groups.get(key); group.regions.add(row.region); visibleTypes.forEach((type) => group.types.add(type));
+    if (record.oldRow) { group.oldMonths.add(record.oldRow.month); group.old += ocMetrics(record.oldRow)[metric.key]; }
+    if (record.newRow) { group.currentMonths.add(record.newRow.month); group.current += ocMetrics(record.newRow)[metric.key]; }
   });
-  table("orderCompareDetailTable", [ocText("soNo"), ocText("soLine"), ocText("region"), ocText("customer"), ocText("model"), ocText("changeType"), ocText("previousMonth"), ocText("currentMonth"), ocText("previousStatus"), ocText("currentStatus"), `${ocText("previous")} ${ocText("pvMw")}`, `${ocText("current")} ${ocText("pvMw")}`, `${ocText("delta")} ${ocText("pvMw")}`, `${ocText("previous")} ${ocText("essQty")}`, `${ocText("current")} ${ocText("essQty")}`, `${ocText("delta")} ${ocText("essQty")}`], values);
+  const values = [...groups.values()].map((group) => ({ ...group, delta:group.current - group.old }))
+    .sort((a, b) => b.delta - a.delta)
+    .map((group) => [[...group.regions].sort().join(", "), group.customer, group.model, [...group.types].map((type) => ocText(type)).join(" / "), [...group.oldMonths].sort().join(", ") || ocText("notAvailable"), [...group.currentMonths].sort().join(", ") || ocText("notAvailable"), ocNumber(group.old, metric.digits), ocNumber(group.current, metric.digits), ocSigned(group.delta, metric.digits)]);
+  table("orderCompareDetailTable", [ocText("region"), ocText("customer"), ocText("model"), ocText("changeType"), ocText("previousMonth"), ocText("currentMonth"), `${ocText("previous")} ${metric.label}`, `${ocText("current")} ${metric.label}`, `${ocText("delta")} ${metric.label}`], values);
 }
 function ocReviewRows(snapshot) {
-  const duplicateRows = snapshot.duplicateGroups.map((group) => {
-    const first = group.rows[0], aggregate = ocAggregate(group.rows);
-    return [snapshot.label, ocText("duplicateKey"), first.orderId, first.orderLine, group.rows.length, [...new Set(group.rows.map((row) => row.month))].sort().join(", "), first.region, first.customer, first.model, ocNumber(aggregate.pv), ocNumber(aggregate.ess, 0)];
+  const metric = ocSelectedMetric();
+  const duplicateRows = snapshot.duplicateGroups.filter((group) => group.rows.some(ocProductMatches)).map((group) => {
+    const matchingRows = group.rows.filter(ocProductMatches), first = matchingRows[0], aggregate = ocAggregate(matchingRows);
+    return [snapshot.label, ocText("duplicateKey"), first.orderId, first.orderLine, matchingRows.length, [...new Set(matchingRows.map((row) => row.month))].sort().join(", "), first.region, first.customer, first.model, ocNumber(aggregate[metric.key], metric.digits)];
   });
-  const missingRows = snapshot.missing.map((row) => [snapshot.label, ocText("missingKey"), row.orderId || ocText("notAvailable"), row.orderLine || ocText("notAvailable"), 1, row.month, row.region, row.customer, row.model, ocNumber(ocMetrics(row).pv), ocNumber(ocMetrics(row).ess, 0)]);
+  const missingRows = snapshot.missing.filter(ocProductMatches).map((row) => [snapshot.label, ocText("missingKey"), row.orderId || ocText("notAvailable"), row.orderLine || ocText("notAvailable"), 1, row.month, row.region, row.customer, row.model, ocNumber(ocMetrics(row)[metric.key], metric.digits)]);
   return [...duplicateRows, ...missingRows];
 }
 function ocRenderReview() {
-  table("orderCompareDuplicateTable", [ocText("source"), ocText("reason"), ocText("soNo"), ocText("soLine"), ocText("count"), ocText("months"), ocText("region"), ocText("customer"), ocText("model"), ocText("pvMw"), ocText("essQty")], [...ocReviewRows(orderComparisonState.oldSnapshot), ...ocReviewRows(orderComparisonState.newSnapshot)]);
+  const metric = ocSelectedMetric();
+  table("orderCompareDuplicateTable", [ocText("source"), ocText("reason"), ocText("soNo"), ocText("soLine"), ocText("count"), ocText("months"), ocText("region"), ocText("customer"), ocText("model"), metric.label], [...ocReviewRows(orderComparisonState.oldSnapshot), ...ocReviewRows(orderComparisonState.newSnapshot)]);
 }
 function ocRenderAll() {
   if (!orderComparisonState) return;
-  ocRenderKpis(); ocRenderRegionTable(); ocRenderStatusTable(); ocRenderTransitions(); ocRenderCustomerQuarter(); ocRenderDetails(); ocRenderReview();
+  ocRenderKpis(); ocRenderRegionTable(); ocRenderStatusTable(); ocRenderCustomerQuarter(); ocRenderDetails(); ocRenderReview();
 }
 function ocPopulateFilters() {
   const allRowsForFilters = [...orderComparisonState.oldSnapshot.validRows, ...orderComparisonState.newSnapshot.validRows], currentPeriod = ocCurrentPeriod();
   const regions = [...new Set(allRowsForFilters.map((row) => row.region))].sort(), months = [...new Set([...allRowsForFilters.map((row) => row.month), currentPeriod.month])].sort();
   ocFillSingleSelect(ocRegionSel, [{ value:"__ALL__", label:ocText("all") }, ...regions.map((value) => ({ value, label:value }))], "__ALL__");
   ocFillSingleSelect(ocMonthSel, months.map((value) => ({ value, label:value })), currentPeriod.month);
-  ocFillSingleSelect(ocProductSel, [{ value:"__ALL__", label:ocText("all") }, { value:"PV", label:"PV" }, { value:"ESS", label:"ESS" }], "__ALL__");
+  ocFillSingleSelect(ocProductSel, [{ value:"PV", label:"PV" }, { value:"ESS", label:"ESS" }], "PV");
 }
 function ocDoneStatus() {
   const reviewCount = orderComparisonState.oldSnapshot.duplicateGroups.length + orderComparisonState.newSnapshot.duplicateGroups.length + orderComparisonState.oldSnapshot.missing.length + orderComparisonState.newSnapshot.missing.length;
