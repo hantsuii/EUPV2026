@@ -126,7 +126,11 @@ function normalizeRows(rawRows) {
     const essQtyEligible = isESS && hasValue(row["Unit Price * Qty"]) && n(row["Unit Price * Qty"]) !== 0 && (mid === "HYBRID INVERTER" || ["ENERGY+_KIT GEN1", "ENERGY+_KIT", "TCL"].includes(tcl));
     const customer = String(rowValue(row, ["Customer Level 6 NAME", "Customer Name", "Customer", "Sold-to Party Name", "Sold To Party", "Account Name", "Client", "Distributor"], "Unknown Customer")).trim() || "Unknown Customer";
     const country = String(rowValue(row, ["Country", "Market", "Ship-to Country", "Ship To Country", "Customer Country"], "Unknown")).trim() || "Unknown";
-    const orderId = String(rowValue(row, ["Sales Order", "Sales Order No", "Order Number", "Order No", "Order ID", "TCL Reference", "PO Number"], `ROW-${rowIndex + 1}`)).trim();
+    const orderNumberRaw = rowValue(row, ["SO No.", "SO No", "SO", "Sales Order", "Sales Order No", "Order Number", "Order No", "Order ID", "TCL Reference", "PO Number"], null);
+    const orderLineRaw = rowValue(row, ["SO Line", "SO Line No.", "SO Line No", "Sales Order Line", "Order Line", "Line No."], null);
+    const orderId = String(hasValue(orderNumberRaw) ? orderNumberRaw : `ROW-${rowIndex + 1}`).trim();
+    const orderLine = String(hasValue(orderLineRaw) ? orderLineRaw : "").trim();
+    const orderKey = hasValue(orderNumberRaw) && orderLine ? `${orderId}\u0001${orderLine}` : "";
     const orderDate = parseExcelDate(rowValue(row, ["Order Date", "Sales Order Date", "PO Date", "Created Date"], `${month}-01`));
     const orderedQty = n(rowValue(row, ["Ordered Qty", "Order Qty", "Quantity", "Qty"], 0));
     const totalMw = n(rowValue(row, ["Total MW", "MW"], 0));
@@ -136,7 +140,7 @@ function normalizeRows(rawRows) {
     const ssd = parseExcelDate(rowValue(row, ["SSD", "Scheduled Ship Date", "Shipment Schedule Date"], null));
     const level1 = String(rowValue(row, ["Level1", "Size Family"], "Unknown")).trim() || "Unknown";
     const level2 = String(rowValue(row, ["Level2", "Product Family"], "Unknown")).trim() || "Unknown";
-    return { year, quarter, month, region: mapRegionForStats(row["Region"]), country, customer, orderId, orderDate, revenue, status2, status2Label: status2Raw, orderStatus, orderStatusLabel: orderStatusRaw, model, crd, sad, ssd, isInvoiced: status2 === "invoiced", isConfirm: status2 === "confirm", category, isPV, isESS, isHP: category === "HP", brand: String(row["Brand"] || "Unknown").trim() || "Unknown", level1, level2, productSeries: normalizePvSeries(tcl), pvAmount: isPV ? revenue : 0, essAmount: isESS ? revenue : 0, pvQty: isPV ? totalMw : 0, essQty: essQtyEligible ? orderedQty : 0, hpQty: category === "HP" ? orderedQty : 0, orderedQty, totalMw };
+    return { year, quarter, month, region: mapRegionForStats(row["Region"]), country, customer, orderId, orderLine, orderKey, orderDate, revenue, status2, status2Label: status2Raw, orderStatus, orderStatusLabel: orderStatusRaw, model, crd, sad, ssd, isInvoiced: status2 === "invoiced", isConfirm: status2 === "confirm", category, isPV, isESS, isHP: category === "HP", brand: String(row["Brand"] || "Unknown").trim() || "Unknown", level1, level2, productSeries: normalizePvSeries(tcl), pvAmount: isPV ? revenue : 0, essAmount: isESS ? revenue : 0, pvQty: isPV ? totalMw : 0, essQty: essQtyEligible ? orderedQty : 0, hpQty: category === "HP" ? orderedQty : 0, orderedQty, totalMw };
   }).filter((r) => Number.isFinite(r.year) && r.quarter && r.month);
 }
 function normalizeHistoricalRows(rawRows) {
@@ -523,6 +527,7 @@ function applyLanguage() {
   } else {
     setStatus(lastStatus.key, lastStatus.vars);
   }
+  if (typeof refreshOrderComparisonLanguage === "function") refreshOrderComparisonLanguage();
 }
 function setLanguage(lang) { currentLang = lang; localStorage.setItem(APP_LANG_KEY, lang); applyLanguage(); }
 async function parseWorkbookFromArrayBuffer(buffer) { const workbook = XLSX.read(buffer, { type: "array" }), ordersSheet = workbook.Sheets["Order details"], targetSheet = workbook.Sheets.Target, historicalSheet = workbook.Sheets["2025 details"]; if (!ordersSheet) throw new Error(t("ordersMissing")); if (!targetSheet) throw new Error(t("targetMissing")); return { orders: XLSX.utils.sheet_to_json(ordersSheet, { defval: null }), targets: XLSX.utils.sheet_to_json(targetSheet, { defval: null }), historical: historicalSheet ? XLSX.utils.sheet_to_json(historicalSheet, { defval: null }) : [] }; }
