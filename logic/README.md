@@ -12,7 +12,7 @@
 ## 当前关键约定
 
 - 库存分析的 SKU 主数据来自库存模板中的 `SKU` sheet，SKU 按去空格并转大写后匹配。
-- `SKU` sheet 的 `Connector`/`CONNECTOR` 值会写入生成的 `stock` sheet，并进入 Product 的检索标签；标签顺序为 `Model | SKU | Connector`。
+- 优先按 SKU 从 `SKU` sheet 匹配，匹配不到时使用 `Legacy Mapping Product`；SKU 侧的 `Connector` 和 `Cable Length` 会写入库存 Sheet，Product 标签为 `Model | Connector + Cable Length`，`Size` 仅用于网页筛选。
 - 日报/销售分析的原始数据来自 `Order details` sheet，当前页面展示的是总览和地区看板。
 - 两个模块都在浏览器端完成读取和计算；库存分析默认使用 SheetJS + ExcelJS，保留 Pyodide + openpyxl 作为 Python Legacy 回退；日报/销售分析使用 SheetJS 读取 Excel、Plotly 绘图。
 - 修改库存来源、计算、输出字段或展示逻辑时，同时检查 `stock-analysis-js.js`、`available-stock-analysis.js`、`py/inventory_step1_to_stock.py`，并同步更新 `说明.md` 和 `inventory-analysis-logic.md`。

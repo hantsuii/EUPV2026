@@ -186,12 +186,20 @@ async function uploadGeneratedStock(bytes, fileName) {
 }
 function stockHistoryRows(bytes, date) {
   const workbook = XLSX.read(bytes, { type: "array", cellDates: true });
-  const sheet = workbook.Sheets.stock || workbook.Sheets[workbook.SheetNames[0]];
-  if (!sheet) return null;
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
+  const stockSheetNames = ["NL_PV", "FR_PV", "UK_PV", "ES_PV", "IT_PV", "ESS+HP Stock", "Unmatched SKU"];
+  const sheets = stockSheetNames.map((name) => workbook.Sheets[name]).filter(Boolean);
+  if (!sheets.length) {
+    const fallback = workbook.Sheets.stock || workbook.Sheets[workbook.SheetNames[0]];
+    if (fallback) sheets.push(fallback);
+  }
+  if (!sheets.length) return null;
+  const rows = sheets.flatMap((sheet) => XLSX.utils.sheet_to_json(sheet, { defval: 0 }));
   const find = (row, names) => { const key = Object.keys(row).find((x) => names.includes(String(x).trim().toLowerCase())); return Number(key ? row[key] : 0) || 0; };
-  const transitKeys = rows.length ? Object.keys(rows[0]).filter((key) => /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(String(key).trim()) || /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(String(key).trim())) : [];
-  return { date, stock: rows.reduce((s, r) => s + find(r, ["stock", "inventory"]) + find(r, ["domestic stock"]), 0), transit: rows.reduce((s, r) => s + transitKeys.reduce((n, key) => n + (Number(r[key]) || 0), 0), 0), allocated: rows.reduce((s, r) => s + find(r, ["to be allocated", "allocated"]), 0) };
+  const transitKeys = rows.length ? Array.from(new Set(rows.flatMap((row) => Object.keys(row).filter((key) => /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(String(key).trim()) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(String(key).trim()))))) : [];
+  const allocationSheet = workbook.Sheets["To be allocated"];
+  const allocationRows = allocationSheet ? XLSX.utils.sheet_to_json(allocationSheet, { defval: 0 }) : [];
+  const allocated = allocationRows.reduce((sum, row) => sum + find(row, ["ordered qty", "to be allocated", "allocated"]), 0);
+  return { date, stock: rows.reduce((s, r) => s + find(r, ["stock", "inventory"]), 0), transit: rows.reduce((s, r) => s + transitKeys.reduce((n, key) => n + (Number(r[key]) || 0), 0), 0), allocated };
 }
 async function loadStockHistory() {
   const config = githubConfig();
@@ -217,8 +225,8 @@ async function loadStockHistory() {
 const levelDefs = [
   { key: "WH", el: whFilterEl },
   { key: "Category", el: categoryFilterEl },
-  { key: "ProductTCLReport", el: productReportFilterEl },
-  { key: "Family", el: familyFilterEl },
+  { key: "Family", el: productReportFilterEl },
+  { key: "Size", el: familyFilterEl },
   { key: "ProductKey", el: productFilterEl, labelKey: "ProductKeyLabel" },
 ];
 
@@ -608,8 +616,8 @@ function getFilterState() {
 function matchByFilters(row, filters) {
   if (filters.wh.size && !filters.wh.has(String(row.WH))) return false;
   if (filters.category.size && !filters.category.has(String(row.Category))) return false;
-  if (filters.productReport.size && !filters.productReport.has(String(row.ProductTCLReport))) return false;
-  if (filters.family.size && !filters.family.has(String(row.Family))) return false;
+  if (filters.productReport.size && !filters.productReport.has(String(row.Family))) return false;
+  if (filters.family.size && !filters.family.has(String(row.Size))) return false;
   if (filters.product.size && !filters.product.has(String(row.ProductKey))) return false;
   return true;
 }
@@ -785,7 +793,7 @@ function matchOverviewFilters(row) {
   const brands = selectedSet(inventoryBrandFilterEl);
   const series = selectedSet(inventorySeriesFilterEl);
   if (brands.size && !brands.has(String(row.Brand || ""))) return false;
-  if (series.size && !series.has(String(row.Family || ""))) return false;
+  if (series.size && !series.has(String(row.Size || ""))) return false;
   return true;
 }
 
@@ -1516,6 +1524,17 @@ function switchStockMode(mode) {
 }
 
 async function extractVisualizationData(outputPath, stockMode) {
+  const sidecarPath = stockMode === "total" ? "/work/stock_vis_total.json" : "/work/stock_vis_available.json";
+  try {
+    const sidecarText = pyodide.FS.readFile(sidecarPath, { encoding: "utf8" });
+    if (sidecarText) {
+      const sidecarPayload = JSON.parse(sidecarText);
+      sidecarPayload.stockMode = stockMode;
+      return sidecarPayload;
+    }
+  } catch (_) {
+    // Older Python runs do not create the sidecar; use workbook extraction below.
+  }
   await pyodide.runPythonAsync(`
 import json
 from datetime import date, datetime

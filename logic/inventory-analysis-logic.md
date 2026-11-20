@@ -1,157 +1,225 @@
 # 库存分析逻辑
 
-## 1. 页面和执行链路
+## 1. 执行范围
 
-入口为 `modules/stock/available-stock-analysis.html`，页面逻辑为 `modules/stock/available-stock-analysis.js`。
+库存分析由 `modules/stock/available-stock-analysis.html`、`modules/stock/available-stock-analysis.js` 和 `modules/stock/stock-analysis-js.js` 实现，并保留 `py/inventory_step1_to_stock.py` 作为 Python 备用引擎。
 
-库存输出有两套可切换引擎：
+Inventory 和 Daily Supply Plan 是必选来源；ODP 和 Orderfile Base 是可选来源。上传文件优先，未上传但勾选默认文件时读取 `templates/` 中的对应文件。
 
-1. JavaScript 默认路径：`stock-analysis-js.js` 使用 SheetJS 读取来源文件，使用 ExcelJS 读取 `stock_template.xlsx` 并写出 `NL_PV/FR_PV/UK_PV/ES_PV/IT_PV`、`ESS+HP Stock`、两张 Domestic Stock 明细、`To be allocated`、`_Transit Source Map`。映射完成后，下载文件不保留 `Legacy Mapping Product`、`SKU` 或 `SKU Mapping`。
-2. Python Legacy 回退路径：`py/inventory_step1_to_stock.py` 由 Pyodide 执行，保留原有 openpyxl 流程。
+系统同时生成可用库存和总库存两套数据：
 
-两套路径的输入优先级、日期范围、SKU 映射、来源清洗、计算公式、Product 标签和零数量 SKU 过滤保持一致。JS 路径生成后直接把内存中的可视化数据交给页面；Python 路径则合并读取生成的五张 PV Stock、`ESS+HP Stock` 和 `_Transit Source Map`，构建可视化数据。
+- 可用库存：Inventory 使用 `Available Stock`，Daily Supply Plan 使用 `Available Quantity`。
+- 总库存：Inventory 使用 `Actual Stock`，Daily Supply Plan 使用 `Scheduled Quantity`。
+- ODP 在网页分析中继续保留，但不写入库存结果 Sheet 的数量和日期列。
 
-Inventory 和 Daily Supply Plan 必须提供；ODP 和 Orderfile Base 可选。上传文件优先，未上传但勾选仓库默认文件时读取 `templates/` 中的对应文件。默认日期范围为 `2026-08-01` 至 `2026-12-31`。
+## 2. SKU 主数据匹配
 
-## 2. SKU 主数据和 Connector
+SKU 匹配严格按 SKU 值执行 trim + upper：
 
-### SKU sheet 选择
+1. 优先在模板 `SKU` Sheet 匹配；`SKU Mapping` 作为旧名称兼容。
+2. SKU Sheet 匹配不到时，再到 `Legacy Mapping Product` 匹配。
+3. 同一 Sheet 内同一 SKU 重复时保留第一条。
 
-- SKU 映射优先读取 `Legacy Mapping Product`；该表没有对应 SKU 时，再读取 `SKU`（兼容旧名称 `SKU Mapping`），工作表名称匹配不区分大小写。Legacy 表缺少的 Connector 等字段可由 SKU 表补充。
-- 没有候选名称时使用模板第一个 sheet。
+SKU Sheet 字段映射：
 
-### SKU 字段
-
-SKU 主键为 `Sku No`，匹配前执行 trim 和 upper；同一 SKU 重复时保留第一条。
-
-必须存在：`Sku No`、`Product Model`、`Category`、`Brand`、`Level2`、`Level3`、`Billable Watts(W)`、`Connector`、`Total PCS per 40HQ Container`。
-
-| 输出字段 | SKU sheet 来源 |
-| --- | --- |
+| 输出/可视化字段 | SKU Sheet 字段 |
+|---|---|
 | Category | Category |
 | Brand | Brand |
-| Product TCL Report | Level2 |
-| Family | Level3 |
+| Family | Level2 |
+| Size | Level3 |
 | Model | Product Model |
-| Connector | Connector / CONNECTOR |
+| Connector | Connector |
+| Cable Length | Cable Length |
 | Bin | Billable Watts(W) |
 | MOQ | Total PCS per 40HQ Container |
 
-Connector 会回填到 Inventory 现货行、Daily Supply Plan/ODP 仅在途行、To be allocated 明细和最终 Product 标签。Product 显示顺序固定为：
+Legacy Mapping Product 字段映射：
 
-`Model | SKU | Connector`
+| 输出/可视化字段 | Legacy 字段 |
+|---|---|
+| Category | 根据 Family + Brand 推导 PV/ESS/HP |
+| Brand | Brand |
+| Family | Family |
+| Size | Size；没有该列时为空 |
+| Model | Anaplan PL6 |
+| Bin | Bins |
+| MOQ | Container Loading |
 
-未匹配 SKU 的字段写为 `SKU not matched`，工作簿保留该行用于追溯，但可视化读取时跳过。
+如果使用 Legacy Mapping Product 匹配，Connector 和 Cable Length 均为空。如果两个主数据表都匹配不到，记录进入 `Unmatched SKU`，不进入正常库存 Sheet 和网页可视化。
 
-## 3. 各来源取数和清洗
+网页 Product 显示名称为：
 
-库存分析一次运行同时计算两种口径，生成后在可视化区域直接切换：
+```text
+Model | Connector + Cable Length
+```
 
-- 可用库存：Inventory 使用 `Available stock`，Daily Supply Plan 使用 `Available Quantity`，其余逻辑保持原样。
-- 总库存：Inventory 使用 `Actual stock`，Daily Supply Plan 使用 `Scheduled Quantity`，不考虑占用；ODP 数量在两种口径下保持一致。
+空字段不显示多余分隔符。`Size` 不写入 Excel 库存 Sheet，只用于网页筛选和可视化数据。
 
-### 3.1 Inventory
+网页筛选级联顺序为：
 
-- 读取第一个 sheet，表头为第 1 行。
-- 必需字段：`Customer Model`、`Product Model`、`Category`、当前库存口径字段（`Available Stock` 或 `Actual Stock`）、`Sales Organization Name`、`Virtual Warehouse Name`、`Physical Warehouse Name`。
-- 先排除销售组织=`China` 或销售组织名称中包含 `Business Planning Department` 的行。
-- 再排除 Physical Warehouse Name=`SPTN China FTZ(W73)` 的行。
-- 再排除 Virtual Warehouse Name 以 `FRU`、`HOLD`、`Market Material`、`SCRAP`、`SPEC` 开头的行，以及名称等于 `Natec Sunenergy B.V. Consignment WH` 的行。文本比较忽略大小写和首尾空格。
-- Brand=`Other` 不排除。
-- 按 `(Sales Organization Name, Virtual Warehouse Name, Category, Customer Model, Product Model)` 汇总当前库存口径数量。Inventory 行的 Category 和 Model 直接使用来源文件中的 Category 和 Product Model。
-- 销售组织映射：Netherlands→NL、France→FR、United Kingdom/UK→UK、Italy→IT、Spain→ES；未识别时取前两位大写。
+```text
+WH → Category → Family → Size → Product
+```
 
-### 3.2 Daily Supply Plan
+## 3. Inventory 处理
 
-- 读取第一个 sheet。
-- 必需字段：`In-transit Warehouse(Code)`、`Customer Model`、`Product Model`、`Category`、`Supply Date`，以及当前口径对应的 `Available Quantity` 或 `Scheduled Quantity`。
-- 通过仓库编码识别 NL、FR、UK、IT、ES；无法识别的仓库跳过。`Virtual Warehouse` 只保留标准代码 SPNL、SPTN、SPFR、SPUK、SPIT、SPES，不保留括号中的代码或其他前后缀。
-- 只保留起止日期内的 Supply Date。
-- 按 `(WH, Virtual Warehouse, Category, Customer Model, Product Model, Supply Date)` 汇总当前口径数量，来源标记为 `INV_DSP`。
-- Category 和 Product Model 优先使用 Daily Supply Plan 自带字段；字段值为空时，分别按 SKU 从 SKU 主数据补充 Category 和 Model。
+读取第一个 Sheet，表头为第 1 行。SKU 使用 `Customer Model`，Model 和 Category 使用 Inventory 来源字段。
 
-### 3.3 ODP
+排除以下行：
 
-- 直接读取 `PV SUPPLY DATA` 和 `ESS SUPPLY DATA`，不再读取 `Total Stcok` 或 `Total Stock`。
-- 必需字段：`SPTN-PVHK New Ark PO#`、`New Ark PO Type`、`ALLOCATION Planning`、`PORT DESTINATION`、`New Ark WH`、`New Ark SKU`、`Model`、`QUANTITY`、`ETA for New Ark update`。
-- 先排除 `SPTN-PVHK New Ark PO#` 不为空的行，再排除 `New Ark PO Type=Offshore` 和 `ALLOCATION Planning=Non-EU` 的行。
-- 再排除 PORT DESTINATION 为 PIRAEUS、GDANSK、CORK、Yangon、LIMASSOL、Douala、MANILA NORTH、KARACHI、DAR ES SALAAM、LAEM CHABANG、Pointe des Galets、DAVAO、Thessaloniki 的行。文本比较忽略大小写及首尾空格。
-- `New Ark SKU` 为空的行跳过；PV/ESS Category 由来源 sheet 确定，Model 直接取来源字段。
-- `New Ark WH` 能匹配 Arrival Plan 标准仓库的行按 ETA 进入到货日期列，Virtual Warehouse 保留 SPNL、SPTN、SPFR、SPUK、SPIT、SPES 标准代码。
-- 不能匹配 Arrival Plan 标准仓库的行不进入到货日期列，按 SKU 汇总为 `Domestic Stock`，计入 `Total QTY` 和总库存概览；国内库存明细直接使用来源 sheet 的 `Factory Location` 和 `MW`（存在时）。
-- ETA 为空、无效、1900 年及以前或不在日期范围内时跳过。
-- 按 `(New Ark SKU, WH, Virtual Warehouse, Category, Model, ETA 日期)` 汇总 `QUANTITY`，来源标记为 `ODP`。
+- Sales Organization = `China`。
+- Sales Organization 包含 `Business Planning Department`。
+- Physical Warehouse = `SPTN China FTZ(W73)`。
+- Virtual Warehouse 以 `FRU`、`HOLD`、`Market Material`、`SCRAP`、`SPEC` 开头。
+- Virtual Warehouse = `Natec Sunenergy B.V. Consignment WH`。
 
-### 3.4 来源合并
+库存数量按以下维度汇总：
 
-Daily Supply Plan 和 ODP 按各自完整仓库、产品和日期维度写入。完整维度相同且同一天同时存在两种来源时，来源标记为 `MIXED`；输出单元格使用对应来源颜色，并写入 `_Transit Source Map`。
+```text
+Sales Organization + Virtual Warehouse + Category + SKU + Product Model
+```
 
-可视化中，`WH=CN` 的 `Domestic Stock` 作为期初库存加入可用库存和总库存曲线，并纳入有效行判断、产品明细及库存汇总。图表期初库存口径为 `Stock + Domestic Stock`。
+销售组织映射：Netherlands→NL、France→FR、United Kingdom/UK→UK、Italy→IT、Spain→ES，无法识别时取前两位大写。
 
-### 3.5 To be allocated
+## 4. Daily Supply Plan 处理
 
-- Orderfile Base 的表头在第 2 行。
-- 只保留 `Allocation Status = to be allocated`。
-- 必需字段包括 `Material`、`Ordered Qty`、`CRD`、客户名称、SO、SO Line、Model、Factory。
-- Material 为 SKU；Factory 通过仓库编码映射为 WH。
-- 按 `(SKU, WH)` 汇总 Ordered Qty 写入 stock 的 `To be allocated`。
-- 原始订单明细写入 `To be allocated`，并增加 Connector；`Ordered Qty = 0` 的明细不输出。
+读取第一个 Sheet，按 `In-transit Warehouse(Code)` 识别仓库：
 
-## 4. 四来源零数量 SKU 过滤
+```text
+SPNL→NL，SPFR→FR，SPTN→FR，SPUK→UK，SPIT→IT，SPES→ES
+```
 
-先在 SKU 级别建立活动集合：
+无法识别的仓库跳过，只保留生成日期范围内的 `Supply Date`。
 
-- Inventory 的 Stock 非零；或
-- 日期范围内 Daily Supply Plan/ODP 的在途数量非零；或
-- To be allocated 的 Ordered Qty 非零。
+按以下维度汇总：
 
-活动集合之外的 SKU 不写入 `stock`。因此，Inventory、Daily Supply Plan、ODP、To be allocated 四个来源都没有数量的 SKU，在生成的 stock 表、Product 筛选、图表和明细表中都不体现。
+```text
+SKU + WH + Virtual Warehouse + Category + Model + Supply Date
+```
 
-如果一个 SKU 在某个来源有数量但某个 WH 行为零，该 SKU 仍保留；过滤是 SKU 级别。若只有 To be allocated 有量，则创建对应 SKU/WH 行。
+来源标记为 `INV_DSP`。DSP 数量进入库存 Excel 的日期列和 `Available QTY` 计算。
 
-## 5. stock 输出和公式
+## 5. ODP 处理
 
-每次运行删除并重建 `NL_PV`、`FR_PV`、`UK_PV`、`ES_PV`、`IT_PV`、`ESS+HP Stock`、`Unmatched SKU`、`Domestic Stock PV`、`Domestic Stock ESS`、`To be allocated`、`_Transit Source Map`。PV 库存按 WH 分入五张国家表，同一国家表内相同 SKU 的多个 Virtual Warehouse 来源先在内部合并，数量和到货日期列求和。下载库存表不显示 `Virtual Warehouse` 列。ESS 和 HP 库存进入 `ESS+HP Stock`，其中 WH=CN 且没有 ETA Update 的国内库存仅保留在 `Domestic Stock ESS`，不再进入 ESS+HP 表。无法从 Legacy Mapping Product 或 SKU 表匹配的记录不进入任何正常库存表，统一写入 `Unmatched SKU` 供检查。所有下载 Sheet 输出为无样式纯数据，不创建超级表、颜色、冻结窗格或筛选格式。所有库存 Sheet 排除 `Total QTY = 0` 的行。国内库存明细按来源拆为 PV、ESS 两张表，并排除 Quantity 为 0 的行。各库存表的基础列顺序相同：
+ODP 继续读取 `PV SUPPLY DATA` 和 `ESS SUPPLY DATA`，并继续执行原有过滤、ETA、港口、Arrival Plan、国内库存和来源追踪逻辑。
 
-`WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock | Domestic Stock`
+ODP 数据继续进入：
 
-后面追加起止日期内每日列，表头为 `YYYY.M.D`。
+- 网页总库存概览。
+- 网页库存曲线。
+- 网页产品明细。
+- `_Transit Source Map`。
+- ODP/MIXED 来源标记。
 
-每一行：
+ODP 数据不进入以下库存结果 Sheet 的数量计算：
 
-- `Virtual Warehouse` 仅用于内部归并和 To be allocated 计算，不写入下载库存 Sheet。
-- `To be allocated` = 同 SKU/WH 的 Ordered Qty 汇总，仅写入 Virtual Warehouse 为空的汇总行。
-- `Transit Total` = 所有日期列在途数量之和。
-- `Total QTY = Stock + Domestic Stock + Transit Total`。
-- 仅 PV 产品计算 `MW = Stock × Bin / 1,000,000` 和 `Total MW = Total QTY × Bin / 1,000,000`。
-- ESS、HP 产品的 `MW`、`Total MW` 留空，只保留 Quantity。
-- To be allocated 不从 Total QTY 或 Total MW 中扣除。
+```text
+NL_PV / FR_PV / UK_PV / ES_PV / IT_PV / ESS+HP Stock / Unmatched SKU
+```
 
-现货列使用 Inventory/Daily Supply 的蓝色标记；日期列按 INV_DSP、ODP、MIXED 使用来源颜色。
+因此库存结果 Sheet 只使用：
 
-## 6. 可视化取数和筛选
+```text
+Inventory Stock + Daily Supply Plan Transit
+```
 
-可视化对象要求存在 `WH`、`Category`、`Product TCL Report`、`Family`、`SKU`、`Model`、`Connector`、`Stock`、`To be allocated`。格式为三段数字的列识别为日期列。
+`Domestic Stock PV` 和 `Domestic Stock ESS` 保留表头，但不写入 ODP 明细，内容为空。
 
-每行包含 WH、Category、Brand、Product TCL Report、Family、SKU、Model、Connector、Bin、Stock、StockMW、StatusQuantity、To be allocated、日期在途数量和日期来源。PV 的 `StockMW = Stock × Bin / 1,000,000`，ESS、HP 的 StockMW 为 0。`StatusQuantity` 仅服务总库存统计，分别保留 Inventory、Daily Supply Plan、ODP 数量。Product 内部键为 `SKU||Model`，显示标签为 `Model | SKU | Connector`。
+## 6. To be allocated
 
-筛选级联顺序为：`WH → Category → Product TCL Report → Family → Product`。下级选项只从上级当前选择范围重建。
+Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`。
 
-## 7. 图表和明细表
+按 `SKU + WH` 汇总 `Ordered Qty`，订单明细写入 `To be allocated` Sheet，并增加 Connector、Cable Length。Legacy SKU 的这两个字段为空。数量为 0 的订单不输出。
 
-- 总库存概览按当前维度筛选结果统计 Inventory 在库、Daily Supply Plan 在途、ODP 国内未发货三种状态。PV 将三种状态的 Quantity 分别乘以 Bin 后换算为 MW；ESS、HP 保持 Quantity。顶部总数为三种状态之和，三个环形图分别展示各状态的数值和占比。DSP 与 ODP 使用生成库存文件时选择的日期范围；待分配不进入总库存概览。
-- 总库存概览提供 Brand 和 Family（系列）多选筛选，仅列出 PV/ESS 且三种状态合计不为零的数据。筛选结果为零的品类会同时隐藏顶部指标和状态图，剩余卡片自动重排。
-- `_Transit Source Map` 除来源标签外，同时保存 Virtual Warehouse、Category、Model、Daily Supply Plan Qty 和 ODP Qty，确保完整维度相同的两个来源仍可准确拆分状态。
-- 现货曲线从 Stock 开始，每个日期累加当日及之前的在途数量。
-- Daily 直接按日；Weekly 按 ISO 周；Monthly 按月份。
-- `total` 展示全部选中产品；`split` 按 Product 分线，最多显示结束值最高的 12 条；`warehouse` 按 WH 分线。
-- 另绘制 Inventory/Daily Supply、ODP、Mixed 的累计在途来源线；无数据的来源不显示。
-- To be allocated 按 CRD 月份映射为图表标记点。
-- 明细按 Product 聚合，列出 In-stock、日期范围内 In-transit、To be allocated、Available Qty 和非零在途日期。
-- `Available Qty = In-stock + In-transit(range) - To be allocated`。
-- 图表、筛选和明细表都不显示四来源均为零的 SKU。
-- 页面新增独立的“高库存产品”表，固定读取可用口径，不随页面切换到总库存口径而改变。按 `(Model, WH)` 汇总；在库可用库存大于 5,000，或当前可视化日期范围内在途可用库存合计大于 10,000 时入表。表格列出版型、仓库、在库可用库存、在途合计以及范围内逐月在途数量，触发阈值的数值使用红色突出显示，并跟随页面维度筛选。
+## 7. 活动 SKU 过滤
 
-## 8. 模板兼容性和回退
+SKU 满足以下任一条件即保留：
 
-JS 输出已用当前真实模板和来源文件与 Python Legacy 对比，数量结果一致，并保留主数据 sheet、表格、公式和生成的输出 sheet。ExcelJS 对部分自定义名称、外部链接、批注等历史工作簿元数据的保留能力有限；如果这些元数据影响用户后续 Excel 工作流，页面选择 Python Legacy 生成文件。
+- Inventory Stock 非零。
+- DSP 或 ODP 在途非零。
+- ODP Domestic Stock 非零。
+- To be allocated 非零。
+
+四类来源完全没有数量的 SKU，不进入网页和结果文件。过滤是 SKU 级别，不是单行级别。
+
+## 8. Excel 库存结果
+
+输出 Sheet 为：
+
+```text
+NL_PV
+FR_PV
+UK_PV
+ES_PV
+IT_PV
+ESS+HP Stock
+Domestic Stock PV
+Domestic Stock ESS
+To be allocated
+Unmatched SKU
+```
+
+系统内部的 `_Transit Source Map` 仍保留，用于网页恢复 DSP、ODP 和 MIXED 来源。
+
+库存 Sheet 基础列顺序为：
+
+```text
+WH
+Brand
+Family
+Bin
+Model
+SKU
+Connector
+Cable Length
+MOQ
+Available QTY
+MW
+Stock
+```
+
+后面追加生成日期范围内的每日 DSP 在途列，表头格式为 `YYYY.M.D`。
+
+其中：
+
+```text
+Available QTY = Stock + DSP 日期在途合计
+```
+
+`Available QTY` 保留原 `Total QTY` 的计算方法和数值口径。
+
+`MW` 保留原 `Total MW` 的计算方法和数值口径：
+
+```text
+PV MW = Available QTY × Bin ÷ 1,000,000
+ESS/HP MW = 空白
+```
+
+原来的独立现货 MW 列不再输出；网页可视化仍可单独计算 StockMW。To be allocated 不从 Excel 的 `Available QTY` 或 `MW` 中扣除。
+
+## 9. 网页可视化
+
+网页数据同时保留 Inventory、DSP、ODP 三种状态：
+
+- Inventory：Inventory 现货。
+- Daily Supply Plan：DSP 在途。
+- ODP：ODP 到货在途和 Domestic Stock。
+
+网页曲线期初库存仍为：
+
+```text
+Stock + Domestic Stock
+```
+
+网页明细的可用数量继续按原逻辑计算：
+
+```text
+Available Qty = In-stock + 日期范围内在途 - To be allocated
+```
+
+总库存口径下仍不扣除待分配。支持 Daily、Weekly、Monthly 三种粒度，以及总计、按产品拆分、按仓库拆分三种曲线模式。ODP、MIXED 来源线继续保留。
+
+## 10. 双引擎
+
+JavaScript 引擎负责默认处理并直接将内存数据交给网页；Python Legacy 引擎生成相同的库存 Sheet，并通过可视化旁路数据恢复 Size、ODP 和来源明细，避免把 Size 或 ODP 数量写入库存 Sheet。

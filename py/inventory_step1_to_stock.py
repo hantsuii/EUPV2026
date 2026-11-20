@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from collections import defaultdict
 from copy import copy
 from datetime import date, datetime, timedelta
@@ -26,7 +27,7 @@ from openpyxl.styles import PatternFill
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
 OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"]
-SKU_SHEET_CANDIDATES = ["Legacy Mapping Product", "SKU", "SKU Mapping"]
+SKU_SHEET_CANDIDATES = ["SKU", "SKU Mapping", "Legacy Mapping Product"]
 TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
 ALLOC_SHEET_NAME = "To be allocated"
@@ -393,40 +394,49 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str | None = None) -> 
             lookup[sku_key] = {
                 "Category": normalize_text(row[idx["category"]]),
                 "Brand": normalize_text(row[idx["brand"]]),
-                "Product TCL Report": normalize_text(row[idx["level2"]]),
-                "Family": normalize_text(row[idx["level3"]]),
+                "Family": normalize_text(row[idx["level2"]]),
+                "Size": normalize_text(row[idx["level3"]]),
                 "Model": normalize_text(row[idx["product model"]]),
                 "Connector": normalize_text(row[idx["connector"]]),
+                "CableLength": normalize_text(row[idx["cable length"]]) if "cable length" in idx else "",
                 "Bin": safe_float(row[idx["billable watts(w)"]]),
                 "MOQ": safe_float(row[idx["total pcs per 40hq container"]]),
+                "MappingSource": "SKU",
             }
 
     if legacy_name:
         ws = wb[legacy_name]
         idx = build_header_index([cell.value for cell in ws[1]])
-        required = ["sku no.", "anaplan pl6", "brand", "family", "product tcl report", "bins", "container loading"]
+        sku_key = idx.get("sku no.", idx.get("sku no"))
+        required = ["anaplan pl6", "brand", "family", "bins", "container loading"]
+        if sku_key is None:
+            required.insert(0, "sku no.")
         missing = [h for h in required if h not in idx]
         if missing:
             wb.close()
             raise ValueError(f"Legacy Mapping Product sheet missing columns: {missing}")
         legacy_rows: dict[str, tuple[Any, ...]] = {}
         for row in ws.iter_rows(min_row=2, values_only=True):
-            sku_key = normalize_sku_key(row[idx["sku no."]])
-            if sku_key and sku_key not in legacy_rows:
-                legacy_rows[sku_key] = row
-        for sku_key, row in legacy_rows.items():
-            fallback = lookup.get(sku_key, {})
+            row_sku_key = normalize_sku_key(row[sku_key])
+            if row_sku_key and row_sku_key not in legacy_rows:
+                legacy_rows[row_sku_key] = row
+        for row_sku_key, row in legacy_rows.items():
+            if row_sku_key in lookup:
+                continue
             family = normalize_text(row[idx["family"]])
+            size = normalize_text(row[idx["size"]]) if "size" in idx else ""
             brand = normalize_text(row[idx["brand"]])
-            lookup[sku_key] = {
-                "Category": infer_legacy_category(family, brand, fallback.get("Category")),
-                "Brand": brand or fallback.get("Brand", ""),
-                "Product TCL Report": normalize_text(row[idx["product tcl report"]]) or fallback.get("Product TCL Report", ""),
-                "Family": family or fallback.get("Family", ""),
-                "Model": normalize_text(row[idx["anaplan pl6"]]) or fallback.get("Model", ""),
-                "Connector": fallback.get("Connector", ""),
-                "Bin": safe_float(row[idx["bins"]]) or safe_float(fallback.get("Bin")),
-                "MOQ": safe_float(row[idx["container loading"]]) or safe_float(fallback.get("MOQ")),
+            lookup[row_sku_key] = {
+                "Category": infer_legacy_category(family, brand),
+                "Brand": brand,
+                "Family": family,
+                "Size": size,
+                "Model": normalize_text(row[idx["anaplan pl6"]]),
+                "Connector": "",
+                "CableLength": "",
+                "Bin": safe_float(row[idx["bins"]]),
+                "MOQ": safe_float(row[idx["container loading"]]),
+                "MappingSource": "Legacy Mapping Product",
             }
 
     wb.close()
@@ -1071,15 +1081,16 @@ def write_output_sheet(
         if "Virtual Warehouse" in output_headers:
             output_sheet.delete_cols(output_headers.index("Virtual Warehouse") + 1)
 
-    normal_style = wb._named_styles["Normal"]._style
+    normal_style = wb._named_styles["Normal"]._style if "Normal" in wb._named_styles else None
     for output_sheet in wb.worksheets:
         output_sheet.freeze_panes = None
         output_sheet.auto_filter.ref = None
         for table_name in list(output_sheet.tables):
             del output_sheet.tables[table_name]
-        for row in output_sheet.iter_rows():
-            for cell in row:
-                cell._style = copy(normal_style)
+        if normal_style is not None:
+            for row in output_sheet.iter_rows():
+                for cell in row:
+                    cell._style = copy(normal_style)
 
     wb.save(stock_wb_path)
     wb.close()
@@ -1088,6 +1099,362 @@ def write_output_sheet(
         "total_rows": total_rows,
         "marked_unmatched_sku_rows": len(dedup_marked),
         "marked_row_samples": dedup_marked[:20],
+    }
+
+
+def write_output_sheet_v2(
+    stock_wb_path: Path,
+    rows: list[dict[str, Any]],
+    sku_lookup: dict[str, dict[str, Any]],
+    transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
+    transit_category: dict[tuple[str, str], str] | None = None,
+    transit_source_tag: dict[tuple[str, str, str, str, str, str], str] | None = None,
+    daily_transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
+    odp_transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
+    domestic_qty: dict[str, float] | None = None,
+    domestic_details: list[dict[str, Any]] | None = None,
+    allocated_orders: list[dict[str, Any]] | None = None,
+    allocated_need: dict[tuple[str, str], float] | None = None,
+    start_date: date = None,
+    end_date: date = None,
+) -> dict[str, Any]:
+    """Write the current output contract.
+
+    ODP remains in the in-memory payload for visualization/source tracing, but
+    normal inventory sheets use only Inventory and Daily Supply Plan quantities.
+    """
+    if start_date is None:
+        start_date = _default_start()
+    if end_date is None:
+        end_date = _default_end()
+
+    transit_qty = transit_qty or {}
+    transit_source_tag = transit_source_tag or {}
+    daily_transit_qty = daily_transit_qty or {}
+    odp_transit_qty = odp_transit_qty or {}
+    domestic_qty = domestic_qty or {}
+    domestic_details = domestic_details or []
+    allocated_orders = allocated_orders or []
+    allocated_need = allocated_need or {}
+
+    wb = load_workbook(stock_wb_path)
+    old_names = {
+        "stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build",
+        *OUTPUT_SHEET_NAMES, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
+        ALLOC_SHEET_NAME, TRANSIT_SOURCE_SHEET_NAME, "Domestic Stock",
+        *DOMESTIC_DETAIL_SHEET_NAMES,
+    }
+    for name in list(wb.sheetnames):
+        if name in old_names:
+            wb.remove(wb[name])
+
+    def unmatched_mapping() -> dict[str, Any]:
+        return {
+            "Category": UNMATCHED_SKU_MARK,
+            "Brand": UNMATCHED_SKU_MARK,
+            "Family": UNMATCHED_SKU_MARK,
+            "Size": UNMATCHED_SKU_MARK,
+            "Model": UNMATCHED_SKU_MARK,
+            "Connector": UNMATCHED_SKU_MARK,
+            "CableLength": UNMATCHED_SKU_MARK,
+            "Bin": 0,
+            "MOQ": 0,
+        }
+
+    def resolve(sku: Any) -> tuple[dict[str, Any], bool]:
+        mapped = sku_lookup.get(normalize_sku_key(sku))
+        return (mapped, False) if mapped else (unmatched_mapping(), True)
+
+    def make_record(wh: str, sku: str, mapped: dict[str, Any], stock: float = 0.0,
+                    virtual_warehouse: str = "", category: str = "", model: str = "") -> dict[str, Any]:
+        return {
+            "WH": wh,
+            "VirtualWarehouse": virtual_warehouse,
+            "SKU": sku,
+            "Category": category or mapped.get("Category", ""),
+            "Brand": mapped.get("Brand", ""),
+            "Family": mapped.get("Family", ""),
+            "Size": mapped.get("Size", ""),
+            "Model": model or mapped.get("Model", ""),
+            "Connector": mapped.get("Connector", ""),
+            "CableLength": mapped.get("CableLength", ""),
+            "Bin": safe_float(mapped.get("Bin")),
+            "MOQ": safe_float(mapped.get("MOQ")),
+            "Stock": safe_float(stock),
+            "DomesticStock": 0.0,
+            "ToBeAllocated": 0.0,
+            "Transit": defaultdict(float),
+            "StockTransit": defaultdict(float),
+            "TransitSource": {},
+            "StatusQuantity": {"Inventory": safe_float(stock), "DailySupplyPlan": 0.0, "ODP": 0.0},
+        }
+
+    records: list[dict[str, Any]] = []
+    row_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    transit_rows: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    active_sku_keys: set[str] = set()
+    marked_rows: set[tuple[str, str]] = set()
+
+    for item in rows:
+        if safe_float(item.get("Stock")) != 0:
+            active_sku_keys.add(normalize_sku_key(item.get("SKU")))
+    for key, qty in transit_qty.items():
+        if safe_float(qty) != 0:
+            active_sku_keys.add(normalize_sku_key(key[0]))
+    for key, qty in allocated_need.items():
+        if safe_float(qty) != 0:
+            active_sku_keys.add(normalize_sku_key(key[0]))
+    for sku, qty in domestic_qty.items():
+        if safe_float(qty) != 0:
+            active_sku_keys.add(normalize_sku_key(sku))
+
+    def add_record(record: dict[str, Any]) -> dict[str, Any]:
+        records.append(record)
+        if not record["VirtualWarehouse"]:
+            row_by_key.setdefault((record["SKU"], record["WH"]), record)
+        return record
+
+    for item in rows:
+        if normalize_sku_key(item.get("SKU")) not in active_sku_keys:
+            continue
+        mapped, unmatched = resolve(item.get("SKU"))
+        if unmatched:
+            marked_rows.add((normalize_text(item.get("SKU")), normalize_text(item.get("WH"))))
+        add_record(make_record(
+            normalize_text(item.get("WH")), normalize_text(item.get("SKU")), mapped,
+            stock=safe_float(item.get("Stock")),
+            virtual_warehouse=normalize_text(item.get("VirtualWarehouse")),
+            category=normalize_text(item.get("Category")),
+            model=normalize_text(item.get("ProductModel")),
+        ))
+
+    for (sku, wh), qty in sorted(allocated_need.items()):
+        if not sku or not wh or safe_float(qty) == 0 or (sku, wh) in row_by_key:
+            continue
+        mapped, unmatched = resolve(sku)
+        if unmatched:
+            marked_rows.add((normalize_text(sku), normalize_text(wh)))
+        add_record(make_record(normalize_text(wh), normalize_text(sku), mapped))
+
+    for sku, qty in sorted(domestic_qty.items()):
+        if not sku or safe_float(qty) == 0:
+            continue
+        key = (normalize_text(sku), DOMESTIC_WH)
+        record = row_by_key.get(key)
+        if record is None:
+            mapped, unmatched = resolve(sku)
+            if unmatched:
+                marked_rows.add((normalize_text(sku), DOMESTIC_WH))
+            record = add_record(make_record(DOMESTIC_WH, normalize_text(sku), mapped))
+            row_by_key[key] = record
+        record["DomesticStock"] += safe_float(qty)
+        record["StatusQuantity"]["ODP"] += safe_float(qty)
+
+    for key, qty in sorted(transit_qty.items()):
+        if safe_float(qty) == 0 or normalize_sku_key(key[0]) not in active_sku_keys:
+            continue
+        sku, wh, virtual_warehouse, source_category, source_model, d_header = key
+        mapped, unmatched = resolve(sku)
+        category = normalize_text(source_category) or normalize_text(mapped.get("Category"))
+        model = normalize_text(source_model) or normalize_text(mapped.get("Model"))
+        transit_key = (normalize_text(sku), normalize_text(wh), normalize_text(virtual_warehouse), category, model)
+        record = transit_rows.get(transit_key)
+        if record is None:
+            if unmatched:
+                marked_rows.add((normalize_text(sku), normalize_text(wh)))
+            record = make_record(normalize_text(wh), normalize_text(sku), mapped, virtual_warehouse=normalize_text(virtual_warehouse), category=category, model=model)
+            records.append(record)
+            transit_rows[transit_key] = record
+        record["Transit"][d_header] += safe_float(qty)
+        daily_qty = safe_float(daily_transit_qty.get(key))
+        record["StockTransit"][d_header] += daily_qty
+        record["StatusQuantity"]["DailySupplyPlan"] += daily_qty
+        record["StatusQuantity"]["ODP"] += safe_float(odp_transit_qty.get(key))
+        record["TransitSource"][d_header] = normalize_source_tag(transit_source_tag.get(key, SOURCE_INV_DSP))
+
+    for record in records:
+        if not record["VirtualWarehouse"]:
+            record["ToBeAllocated"] = safe_float(allocated_need.get((record["SKU"], record["WH"]), 0))
+
+    def is_unmatched(record: dict[str, Any]) -> bool:
+        marker = UNMATCHED_SKU_MARK.lower()
+        return any(normalize_lower(record.get(field)) == marker for field in ("Category", "Brand", "Family", "Size", "Model"))
+
+    def aggregate_pv(source_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for source in source_records:
+            sku_key = normalize_sku_key(source.get("SKU"))
+            if not sku_key:
+                continue
+            if sku_key not in grouped:
+                target = dict(source)
+                target["Stock"] = safe_float(source.get("Stock"))
+                target["StockTransit"] = defaultdict(float, source.get("StockTransit", {}))
+                grouped[sku_key] = target
+                continue
+            target = grouped[sku_key]
+            target["Stock"] += safe_float(source.get("Stock"))
+            for d_header, qty in source.get("StockTransit", {}).items():
+                target["StockTransit"][d_header] += safe_float(qty)
+        return list(grouped.values())
+
+    transit_dates = iter_dates(start_date, end_date)
+    transit_headers = [date_header(d) for d in transit_dates]
+    base_headers = ["WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock"]
+    headers = base_headers + transit_headers
+
+    def write_stock_sheet(name: str, source_records: list[dict[str, Any]]) -> None:
+        ws = wb.create_sheet(name)
+        ws.append(headers)
+        for record in source_records:
+            stock_transit = record.get("StockTransit", {})
+            transit_total = sum(safe_float(stock_transit.get(d_header)) for d_header in transit_headers)
+            available_qty = safe_float(record.get("Stock")) + transit_total
+            if available_qty == 0:
+                continue
+            is_pv = normalize_upper_category(record.get("Category")).startswith("PV")
+            total_mw = (available_qty * safe_float(record.get("Bin"))) / 1_000_000 if is_pv else None
+            ws.append([
+                record.get("WH"), record.get("Brand"), record.get("Family"), record.get("Bin"), record.get("Model"),
+                record.get("SKU"), record.get("Connector"), record.get("CableLength"), record.get("MOQ"),
+                round(available_qty, 3), round(total_mw, 3) if total_mw is not None else None, record.get("Stock"),
+                *[stock_transit.get(d_header) or None for d_header in transit_headers],
+            ])
+
+    matched = [record for record in records if not is_unmatched(record)]
+    unmatched = [record for record in records if is_unmatched(record)]
+    for country in PV_STOCK_COUNTRIES:
+        write_stock_sheet(f"{country}_PV", aggregate_pv([
+            record for record in matched
+            if normalize_upper_category(record.get("Category")).startswith("PV")
+            and normalize_text(record.get("WH")).upper() == country
+        ]))
+    write_stock_sheet("ESS+HP Stock", [
+        record for record in matched
+        if not normalize_upper_category(record.get("Category")).startswith("PV")
+        and normalize_text(record.get("WH")).upper() != DOMESTIC_WH
+    ])
+    write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched)
+
+    ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
+    ws_alloc.append(["SKU", "Connector", "Cable Length", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
+    for order in allocated_orders:
+        if safe_float(order.get("Ordered Qty")) == 0:
+            continue
+        mapped, _ = resolve(order.get("SKU", ""))
+        ws_alloc.append([
+            order.get("SKU"), mapped.get("Connector"), mapped.get("CableLength"), order.get("Ordered Qty"), order.get("CRD"),
+            order.get("Customer Name"), order.get("SO No."), order.get("SO Line"), order.get("Model"), order.get("Factory"), order.get("WH"),
+        ])
+
+    ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
+    ws_source.append(["SKU", "WH", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
+    source_keys = set(transit_source_tag) | set(daily_transit_qty) | set(odp_transit_qty)
+    for key in sorted(source_keys):
+        sku, wh, _virtual_warehouse, category, model, d_header = key
+        mapped, _ = resolve(sku)
+        ws_source.append([
+            sku, wh, category or mapped.get("Category", ""), model or mapped.get("Model", ""), d_header,
+            normalize_source_tag(transit_source_tag.get(key, SOURCE_INV_DSP)),
+            round(safe_float(daily_transit_qty.get(key)), 3), round(safe_float(odp_transit_qty.get(key)), 3),
+        ])
+
+    for sheet_name in DOMESTIC_DETAIL_SHEET_NAMES:
+        ws_domestic = wb.create_sheet(sheet_name)
+        ws_domestic.append(["SKU", "Model", "Factory", "Quantity", "MW"])
+
+    for name in list(wb.sheetnames):
+        if name.lower() in {"legacy mapping product", "sku", "sku mapping"}:
+            wb.remove(wb[name])
+
+    normal_style = wb._named_styles["Normal"]._style if "Normal" in wb._named_styles else None
+    for output_sheet in wb.worksheets:
+        output_sheet.freeze_panes = None
+        output_sheet.auto_filter.ref = None
+        for table_name in list(output_sheet.tables):
+            del output_sheet.tables[table_name]
+        if normal_style is not None:
+            for row in output_sheet.iter_rows():
+                for cell in row:
+                    cell._style = copy(normal_style)
+
+    wb.save(stock_wb_path)
+    wb.close()
+
+    visualization_rows = []
+    date_source_tags: dict[str, str] = {}
+    key_meta = {}
+    for record in records:
+        if is_unmatched(record):
+            continue
+        accessory = " + ".join(normalize_text(record.get(field)) for field in ("Connector", "CableLength") if normalize_text(record.get(field)))
+        product_label = " | ".join(value for value in (normalize_text(record.get("Model")), accessory) if value) or normalize_text(record.get("SKU"))
+        transit = {}
+        transit_source = {}
+        for d_header in transit_headers:
+            qty = safe_float(record.get("Transit", {}).get(d_header))
+            if qty == 0:
+                continue
+            source = normalize_source_tag(record.get("TransitSource", {}).get(d_header, SOURCE_INV_DSP))
+            transit[d_header] = qty
+            transit_source[d_header] = source
+            date_source_tags[d_header] = merge_source_tag(date_source_tags.get(d_header, ""), source)
+        item = {
+            "WH": record.get("WH"),
+            "VirtualWarehouse": record.get("VirtualWarehouse", ""),
+            "Category": record.get("Category", ""),
+            "Brand": record.get("Brand", ""),
+            "Family": record.get("Family", ""),
+            "Size": record.get("Size", ""),
+            "SKU": record.get("SKU"),
+            "Model": record.get("Model", ""),
+            "Connector": record.get("Connector", ""),
+            "CableLength": record.get("CableLength", ""),
+            "ProductKey": f"{record.get('SKU')}||{record.get('Model', '')}",
+            "ProductKeyLabel": product_label,
+            "Bin": safe_float(record.get("Bin")),
+            "StockMW": (safe_float(record.get("Stock")) * safe_float(record.get("Bin")) / 1_000_000)
+                if normalize_upper_category(record.get("Category")).startswith("PV") else 0,
+            "Stock": safe_float(record.get("Stock")),
+            "DomesticStock": safe_float(record.get("DomesticStock")),
+            "ToBeAllocated": safe_float(record.get("ToBeAllocated")),
+            "StatusQuantity": {
+                "Inventory": safe_float(record.get("StatusQuantity", {}).get("Inventory")),
+                "DailySupplyPlan": safe_float(record.get("StatusQuantity", {}).get("DailySupplyPlan")),
+                "ODP": safe_float(record.get("StatusQuantity", {}).get("ODP")),
+            },
+            "Transit": transit,
+            "TransitSource": transit_source,
+        }
+        visualization_rows.append(item)
+        key_meta[f"{record.get('SKU')}||{record.get('WH')}"] = {
+            "WH": item["WH"], "Category": item["Category"], "Brand": item["Brand"],
+            "Family": item["Family"], "Size": item["Size"], "Connector": item["Connector"],
+            "CableLength": item["CableLength"], "ProductKey": item["ProductKey"],
+        }
+
+    visualization = {
+        "dateHeaders": transit_headers,
+        "rows": visualization_rows,
+        "allocations": [
+            {
+                "SKU": normalize_text(order.get("SKU")), "WH": normalize_text(order.get("WH")),
+                "Model": normalize_text(order.get("Model")), "OrderedQty": safe_float(order.get("Ordered Qty")),
+                "CRDDate": (parse_supply_date(order.get("CRD")).isoformat() if parse_supply_date(order.get("CRD")) else ""),
+            }
+            for order in allocated_orders
+            if normalize_text(order.get("SKU")) and normalize_text(order.get("WH")) and safe_float(order.get("Ordered Qty")) != 0
+        ],
+        "keyMeta": key_meta,
+        "dateSourceTags": date_source_tags,
+        "domesticDetails": domestic_details,
+        "stockMode": "total" if stock_wb_path.name.endswith("total_output.xlsx") else "available",
+    }
+    return {
+        "total_rows": len(records),
+        "marked_unmatched_sku_rows": len(marked_rows),
+        "marked_row_samples": [{"SKU": sku, "WH": wh, "Reason": UNMATCHED_SKU_MARK} for sku, wh in sorted(marked_rows)[:20]],
+        "visualization": visualization,
     }
 
 
@@ -1152,7 +1519,7 @@ def run(
     if order_file_path:
         allocated_orders, allocated_need = extract_to_be_allocated_orders(order_file_path)
 
-    run_summary = write_output_sheet(
+    run_summary = write_output_sheet_v2(
         stock_path,
         inventory_rows,
         sku_lookup,
@@ -1167,6 +1534,13 @@ def run(
         allocated_need=allocated_need,
         start_date=transit_start_date,
         end_date=transit_end_date,
+    )
+    visualization_path = stock_path.with_name(
+        "stock_vis_total.json" if normalized_stock_mode == "total" else "stock_vis_available.json"
+    )
+    visualization_path.write_text(
+        json.dumps(run_summary.get("visualization", {}), ensure_ascii=False),
+        encoding="utf-8",
     )
 
     print(f"Done: wrote {stock_path} -> sheets {', '.join(OUTPUT_SHEET_NAMES)}")

@@ -60,7 +60,7 @@ Webhook 优先于邮件。若服务端尚未配置，主页会提供发送到管
 仓库内附带：
 - 处理代码：`py/inventory_step1_to_stock.py`
 - 模板文件：`templates/stock_template.xlsx`
-- 生成的 `stock` sheet 会从 `SKU` sheet 回填 `Connector`，Product 检索标签显示 `Model | SKU | Connector`
+- 生成的库存 Sheet 会优先按 SKU 从 `SKU` sheet 匹配，Product 检索标签显示 `Model | Connector + Cable Length`；`Size` 仅用于网页筛选
 - Inventory、Daily Supply Plan、ODP、To be allocated 四个来源均无数量的 SKU，不进入生成的 `stock` 和页面展示
 - 取数、计算和呈现规则汇总：`logic/`；引擎、回退、过滤和验证记录见 `logic/说明.md`
 
