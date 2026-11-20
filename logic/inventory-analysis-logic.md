@@ -126,6 +126,8 @@ Inventory Stock + Daily Supply Plan Transit
 
 `Domestic Stock PV` 和 `Domestic Stock ESS` 保留表头，但不写入 ODP 明细，内容为空。
 
+`ESS+HP Stock` 不导出 Family 为 `AC Charger`、`Cells`、`Marketing` 的库存；这些数据仍可用于网页可视化。
+
 ## 6. To be allocated
 
 Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`。
@@ -154,6 +156,7 @@ UK_PV
 ES_PV
 IT_PV
 ESS+HP Stock
+MW
 Domestic Stock PV
 Domestic Stock ESS
 To be allocated
@@ -198,7 +201,24 @@ ESS/HP MW = 空白
 
 原来的独立现货 MW 列不再输出；网页可视化仍可单独计算 StockMW。To be allocated 不从 Excel 的 `Available QTY` 或 `MW` 中扣除。
 
-## 9. 网页可视化
+## 9. MW 汇总 Sheet
+
+`MW` Sheet 每个国家一行，只汇总 PV：
+
+```text
+WH | Stock MW | 有到货的 ISO 周 MW 列 | 有到货的月份 MW 列
+```
+
+计算规则：
+
+```text
+Stock MW = Inventory Stock × Bin ÷ 1,000,000
+到货 MW = DSP 到货数量 × Bin ÷ 1,000,000
+```
+
+每日 DSP 到货先按 ISO 周汇总，再按月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。没有到货的周和月份不生成列。
+
+## 10. 网页可视化
 
 网页数据同时保留 Inventory、DSP、ODP 三种状态：
 
@@ -220,6 +240,6 @@ Available Qty = In-stock + 日期范围内在途 - To be allocated
 
 总库存口径下仍不扣除待分配。支持 Daily、Weekly、Monthly 三种粒度，以及总计、按产品拆分、按仓库拆分三种曲线模式。ODP、MIXED 来源线继续保留。
 
-## 10. 双引擎
+## 11. 双引擎
 
 JavaScript 引擎负责默认处理并直接将内存数据交给网页；Python Legacy 引擎生成相同的库存 Sheet，并通过可视化旁路数据恢复 Size、ODP 和来源明细，避免把 Size 或 ODP 数量写入库存 Sheet。

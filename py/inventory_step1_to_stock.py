@@ -26,7 +26,9 @@ from openpyxl.styles import PatternFill
 
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
-OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"]
+OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock", "MW"]
+MW_SHEET_NAME = "MW"
+EXCLUDED_ESS_HP_FAMILIES = {"AC CHARGER", "CELLS", "MARKETING"}
 SKU_SHEET_CANDIDATES = ["SKU", "SKU Mapping", "Legacy Mapping Product"]
 TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
@@ -69,6 +71,10 @@ def normalize_lower(value: Any) -> str:
 
 def normalize_sku_key(value: Any) -> str:
     return normalize_text(value).upper()
+
+
+def is_excluded_ess_hp_family(value: Any) -> bool:
+    return normalize_text(value).upper() in EXCLUDED_ESS_HP_FAMILIES
 
 
 def safe_float(value: Any) -> float:
@@ -1140,7 +1146,7 @@ def write_output_sheet_v2(
     wb = load_workbook(stock_wb_path)
     old_names = {
         "stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build",
-        *OUTPUT_SHEET_NAMES, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
+        *OUTPUT_SHEET_NAMES, MW_SHEET_NAME, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
         ALLOC_SHEET_NAME, TRANSIT_SOURCE_SHEET_NAME, "Domestic Stock",
         *DOMESTIC_DETAIL_SHEET_NAMES,
     }
@@ -1333,7 +1339,55 @@ def write_output_sheet_v2(
         record for record in matched
         if not normalize_upper_category(record.get("Category")).startswith("PV")
         and normalize_text(record.get("WH")).upper() != DOMESTIC_WH
+        and not is_excluded_ess_hp_family(record.get("Family"))
     ])
+
+    mw_by_country = {
+        country: {"StockMW": 0.0, "Weekly": defaultdict(float), "Monthly": defaultdict(float)}
+        for country in PV_STOCK_COUNTRIES
+    }
+    week_order: list[str] = []
+    month_order: list[str] = []
+    seen_weeks: set[str] = set()
+    seen_months: set[str] = set()
+    for record in matched:
+        country = normalize_text(record.get("WH")).upper()
+        if country not in mw_by_country or not normalize_upper_category(record.get("Category")).startswith("PV"):
+            continue
+        summary = mw_by_country[country]
+        summary["StockMW"] += safe_float(record.get("Stock")) * safe_float(record.get("Bin")) / 1_000_000
+        for transit_date in transit_dates:
+            d_header = date_header(transit_date)
+            qty = safe_float(record.get("StockTransit", {}).get(d_header))
+            if qty == 0:
+                continue
+            arrival_mw = qty * safe_float(record.get("Bin")) / 1_000_000
+            iso = transit_date.isocalendar()
+            week = f"{iso.year % 100:02d}-W{iso.week:02d}"
+            month = f"{transit_date.year}-{transit_date.month:02d}"
+            summary["Weekly"][week] += arrival_mw
+            summary["Monthly"][month] += arrival_mw
+            if week not in seen_weeks:
+                seen_weeks.add(week)
+                week_order.append(week)
+            if month not in seen_months:
+                seen_months.add(month)
+                month_order.append(month)
+
+    week_order.sort()
+    month_order.sort()
+    ws_mw = wb.create_sheet(MW_SHEET_NAME)
+    mw_headers = ["WH", "Stock MW", *week_order, *month_order]
+    ws_mw.append(mw_headers)
+    for country in PV_STOCK_COUNTRIES:
+        summary = mw_by_country[country]
+        ws_mw.append([
+            country,
+            round(summary["StockMW"], 3),
+            *[round(summary["Weekly"].get(period, 0.0), 3) for period in week_order],
+            *[round(summary["Monthly"].get(period, 0.0), 3) for period in month_order],
+        ])
+
     write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)

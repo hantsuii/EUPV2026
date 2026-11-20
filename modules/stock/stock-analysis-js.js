@@ -9,6 +9,8 @@ const UNMATCHED_SHEET_NAME = "Unmatched SKU";
 const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
 const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `${country}_PV`), "ESS+HP Stock"];
 const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
+const MW_SHEET_NAME = "MW";
+const EXCLUDED_ESS_HP_FAMILIES = new Set(["AC CHARGER", "CELLS", "MARKETING"]);
 
 const CELL_FILL_BY_SOURCE = {
   [SOURCE_INV_DSP]: "FFDDEBFF",
@@ -47,6 +49,10 @@ function normalizeLower(value) {
 
 function isPvCategory(value) {
   return normalizeText(value).toUpperCase().startsWith("PV");
+}
+
+function isExcludedEssHpFamily(value) {
+  return EXCLUDED_ESS_HP_FAMILIES.has(normalizeText(value).toUpperCase());
 }
 
 function normalizeSkuKey(value) {
@@ -199,6 +205,22 @@ function parseDateKey(value) {
 function dateKeyToHeader(dateKey) {
   const parts = parseDateKey(dateKey);
   return parts ? `${parts.year}.${parts.month}.${parts.day}` : "";
+}
+
+function isoWeekLabel(dateKey) {
+  const parts = parseDateKey(dateKey);
+  if (!parts) return "";
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  return `${String(date.getUTCFullYear()).slice(-2)}-W${String(week).padStart(2, "0")}`;
+}
+
+function monthLabel(dateKey) {
+  const parts = parseDateKey(dateKey);
+  return parts ? `${parts.year}-${String(parts.month).padStart(2, "0")}` : "";
 }
 
 function compareDateParts(a, b) {
@@ -738,6 +760,56 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags)
   return ws;
 }
 
+function writeMwWorksheet(workbook, records, dateKeys) {
+  const old = workbook.getWorksheet(MW_SHEET_NAME);
+  if (old) workbook.removeWorksheet(old.id);
+
+  const countries = ["NL", "FR", "UK", "ES", "IT"];
+  const byCountry = new Map(countries.map((country) => [country, {
+    StockMW: 0,
+    Weekly: new Map(),
+    Monthly: new Map(),
+  }]));
+  const weekOrder = [];
+  const monthOrder = [];
+  const seenWeeks = new Set();
+  const seenMonths = new Set();
+
+  for (const record of records) {
+    const wh = normalizeText(record.WH).toUpperCase();
+    if (!byCountry.has(wh) || !isPvCategory(record.Category)) continue;
+    const summary = byCountry.get(wh);
+    summary.StockMW += (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000;
+    for (const dateKey of dateKeys) {
+      const qty = safeFloat(record.StockTransit?.[dateKey]);
+      if (qty === 0) continue;
+      const arrivalMw = (qty * safeFloat(record.Bin)) / 1000000;
+      const week = isoWeekLabel(dateKey);
+      const month = monthLabel(dateKey);
+      summary.Weekly.set(week, (summary.Weekly.get(week) || 0) + arrivalMw);
+      summary.Monthly.set(month, (summary.Monthly.get(month) || 0) + arrivalMw);
+      if (!seenWeeks.has(week)) { seenWeeks.add(week); weekOrder.push(week); }
+      if (!seenMonths.has(month)) { seenMonths.add(month); monthOrder.push(month); }
+    }
+  }
+
+  weekOrder.sort();
+  monthOrder.sort();
+  const ws = workbook.addWorksheet(MW_SHEET_NAME);
+  const headers = ["WH", "Stock MW", ...weekOrder, ...monthOrder];
+  ws.addRow(headers);
+  for (const country of countries) {
+    const summary = byCountry.get(country);
+    ws.addRow([
+      country,
+      Number(summary.StockMW.toFixed(3)),
+      ...weekOrder.map((period) => Number((summary.Weekly.get(period) || 0).toFixed(3))),
+      ...monthOrder.map((period) => Number((summary.Monthly.get(period) || 0).toFixed(3))),
+    ]);
+  }
+  return ws;
+}
+
 function writeAllocationWorksheet(workbook, orders, skuLookup) {
   const old = workbook.getWorksheet(ALLOC_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
@@ -943,7 +1015,7 @@ export async function buildStockOutputJs({
 
   for (const obsoleteName of [
     "stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES,
-    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`),
+    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), MW_SHEET_NAME,
   ]) {
     const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
@@ -957,10 +1029,13 @@ export async function buildStockOutputJs({
   writeStockWorksheet(
     templateWorkbook,
     "ESS+HP Stock",
-    matchedRecords.filter((record) => !isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH),
+    matchedRecords.filter((record) => !isPvCategory(record.Category)
+      && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH
+      && !isExcludedEssHpFamily(record.Family)),
     dateKeys,
     dateSourceTags,
   );
+  writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
   writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
