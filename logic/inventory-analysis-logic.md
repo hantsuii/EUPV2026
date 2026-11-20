@@ -182,6 +182,12 @@ MW
 Stock
 ```
 
+`ESS+HP Stock` 单独使用精简列，不导出 `Bin`、`Connector`、`Cable Length`、`MW`：
+
+```text
+WH | Brand | Family | Model | SKU | MOQ | Available QTY | Stock
+```
+
 后面追加生成日期范围内的每日 DSP 在途列，表头格式为 `YYYY.M.D`。
 
 其中：
@@ -203,10 +209,10 @@ ESS/HP MW = 空白
 
 ## 9. MW 汇总 Sheet
 
-`MW` Sheet 每个国家一行，只汇总 PV：
+`MW` Sheet 按 `WH + SKU` 汇总 PV，每个仓库、每个 SKU 一行，保留产品主数据字段，并同时保留每日、周、月到货 MW：
 
 ```text
-WH | Stock MW | 有到货的 ISO 周 MW 列 | 有到货的月份 MW 列
+WH | Brand | Family | Bin | Model | SKU | Connector | Cable Length | MOQ | Stock MW | 每日到货 MW | 每周到货 MW | 每月到货 MW
 ```
 
 计算规则：
@@ -216,7 +222,7 @@ Stock MW = Inventory Stock × Bin ÷ 1,000,000
 到货 MW = DSP 到货数量 × Bin ÷ 1,000,000
 ```
 
-每日 DSP 到货先按 ISO 周汇总，再按月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。没有到货的周和月份不生成列。
+每日 DSP 到货先保留日期列，再按 ISO 周和月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。周和月份没有到货时不生成对应汇总列。
 
 ## 10. 网页可视化
 

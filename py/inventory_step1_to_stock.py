@@ -77,6 +77,10 @@ def is_excluded_ess_hp_family(value: Any) -> bool:
     return normalize_text(value).upper() in EXCLUDED_ESS_HP_FAMILIES
 
 
+def is_excluded_inventory_family(value: Any) -> bool:
+    return normalize_text(value).upper() == "MARKETING"
+
+
 def safe_float(value: Any) -> float:
     if value in (None, ""):
         return 0.0
@@ -619,6 +623,8 @@ def extract_to_be_allocated_orders(
     for r in range(header_row + 1, max_row + 1):
         status = normalize_lower(ws.cell(r, idx["allocation status"] + 1).value)
         if status != "to be allocated":
+            continue
+        if "sub type" in idx and normalize_lower(ws.cell(r, idx["sub type"] + 1).value) == "offshore":
             continue
 
         sku = normalize_text(ws.cell(r, idx["material"] + 1).value)
@@ -1309,9 +1315,12 @@ def write_output_sheet_v2(
     base_headers = ["WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock"]
     headers = base_headers + transit_headers
 
-    def write_stock_sheet(name: str, source_records: list[dict[str, Any]]) -> None:
+    def write_stock_sheet(name: str, source_records: list[dict[str, Any]], include_technical_fields: bool = True) -> None:
         ws = wb.create_sheet(name)
-        ws.append(headers)
+        sheet_headers = headers if include_technical_fields else [
+            "WH", "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *transit_headers,
+        ]
+        ws.append(sheet_headers)
         for record in source_records:
             stock_transit = record.get("StockTransit", {})
             transit_total = sum(safe_float(stock_transit.get(d_header)) for d_header in transit_headers)
@@ -1320,12 +1329,15 @@ def write_output_sheet_v2(
                 continue
             is_pv = normalize_upper_category(record.get("Category")).startswith("PV")
             total_mw = (available_qty * safe_float(record.get("Bin"))) / 1_000_000 if is_pv else None
-            ws.append([
+            row = [
                 record.get("WH"), record.get("Brand"), record.get("Family"), record.get("Bin"), record.get("Model"),
                 record.get("SKU"), record.get("Connector"), record.get("CableLength"), record.get("MOQ"),
                 round(available_qty, 3), round(total_mw, 3) if total_mw is not None else None, record.get("Stock"),
-                *[stock_transit.get(d_header) or None for d_header in transit_headers],
-            ])
+            ] if include_technical_fields else [
+                record.get("WH"), record.get("Brand"), record.get("Family"), record.get("Model"), record.get("SKU"),
+                record.get("MOQ"), round(available_qty, 3), record.get("Stock"),
+            ]
+            ws.append([*row, *[stock_transit.get(d_header) or None for d_header in transit_headers]])
 
     matched = [record for record in records if not is_unmatched(record)]
     unmatched = [record for record in records if is_unmatched(record)]
@@ -1334,27 +1346,44 @@ def write_output_sheet_v2(
             record for record in matched
             if normalize_upper_category(record.get("Category")).startswith("PV")
             and normalize_text(record.get("WH")).upper() == country
+            and not is_excluded_inventory_family(record.get("Family"))
         ]))
     write_stock_sheet("ESS+HP Stock", [
         record for record in matched
         if not normalize_upper_category(record.get("Category")).startswith("PV")
         and normalize_text(record.get("WH")).upper() != DOMESTIC_WH
         and not is_excluded_ess_hp_family(record.get("Family"))
-    ])
+    ], include_technical_fields=False)
 
-    mw_by_country = {
-        country: {"StockMW": 0.0, "Weekly": defaultdict(float), "Monthly": defaultdict(float)}
-        for country in PV_STOCK_COUNTRIES
-    }
+    mw_groups: dict[tuple[str, str], dict[str, Any]] = {}
     week_order: list[str] = []
     month_order: list[str] = []
     seen_weeks: set[str] = set()
     seen_months: set[str] = set()
     for record in matched:
         country = normalize_text(record.get("WH")).upper()
-        if country not in mw_by_country or not normalize_upper_category(record.get("Category")).startswith("PV"):
+        if not country or not normalize_upper_category(record.get("Category")).startswith("PV"):
             continue
-        summary = mw_by_country[country]
+        if is_excluded_inventory_family(record.get("Family")):
+            continue
+        key = (country, normalize_sku_key(record.get("SKU")))
+        if key not in mw_groups:
+            mw_groups[key] = {
+                "WH": country,
+                "Brand": record.get("Brand"),
+                "Family": record.get("Family"),
+                "Bin": safe_float(record.get("Bin")),
+                "Model": record.get("Model"),
+                "SKU": record.get("SKU"),
+                "Connector": record.get("Connector"),
+                "CableLength": record.get("CableLength"),
+                "MOQ": safe_float(record.get("MOQ")),
+                "StockMW": 0.0,
+                "Daily": defaultdict(float),
+                "Weekly": defaultdict(float),
+                "Monthly": defaultdict(float),
+            }
+        summary = mw_groups[key]
         summary["StockMW"] += safe_float(record.get("Stock")) * safe_float(record.get("Bin")) / 1_000_000
         for transit_date in transit_dates:
             d_header = date_header(transit_date)
@@ -1365,6 +1394,7 @@ def write_output_sheet_v2(
             iso = transit_date.isocalendar()
             week = f"{iso.year % 100:02d}-W{iso.week:02d}"
             month = f"{transit_date.year}-{transit_date.month:02d}"
+            summary["Daily"][d_header] += arrival_mw
             summary["Weekly"][week] += arrival_mw
             summary["Monthly"][month] += arrival_mw
             if week not in seen_weeks:
@@ -1377,13 +1407,17 @@ def write_output_sheet_v2(
     week_order.sort()
     month_order.sort()
     ws_mw = wb.create_sheet(MW_SHEET_NAME)
-    mw_headers = ["WH", "Stock MW", *week_order, *month_order]
+    mw_headers = [
+        "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Stock MW",
+        *transit_headers, *week_order, *month_order,
+    ]
     ws_mw.append(mw_headers)
-    for country in PV_STOCK_COUNTRIES:
-        summary = mw_by_country[country]
+    for summary in sorted(mw_groups.values(), key=lambda item: (item["WH"], normalize_sku_key(item["SKU"]))):
         ws_mw.append([
-            country,
+            summary["WH"], summary["Brand"], summary["Family"], summary["Bin"], summary["Model"], summary["SKU"],
+            summary["Connector"], summary["CableLength"], summary["MOQ"],
             round(summary["StockMW"], 3),
+            *[round(summary["Daily"].get(d_header, 0.0), 3) for d_header in transit_headers],
             *[round(summary["Weekly"].get(period, 0.0), 3) for period in week_order],
             *[round(summary["Monthly"].get(period, 0.0), 3) for period in month_order],
         ])

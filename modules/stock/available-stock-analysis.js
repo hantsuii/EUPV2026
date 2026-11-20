@@ -1602,6 +1602,8 @@ header_to_idx = {str(h).strip(): i for i, h in enumerate(headers) if h is not No
 
 source_map = {}
 status_qty_map = {}
+source_simple_map = {}
+status_simple_map = {}
 if '_Transit Source Map' in wb.sheetnames:
     ws_src = wb['_Transit Source Map']
     src_headers = [cell.value for cell in ws_src[1]]
@@ -1618,6 +1620,7 @@ if '_Transit Source Map' in wb.sheetnames:
             source = _text(src_row[src_idx["Source"]])
             if sku and wh and d_header and source:
                 source_map[f"{sku}||{wh}||{virtual_warehouse}||{source_category}||{source_model}||{d_header}"] = source
+                source_simple_map[f"{sku}||{wh}||{d_header}"] = _merge_tag(source_simple_map.get(f"{sku}||{wh}||{d_header}"), source)
                 status_key = f"{sku}||{wh}||{virtual_warehouse}||{source_category}||{source_model}"
                 if status_key not in status_qty_map:
                     status_qty_map[status_key] = {"DailySupplyPlan": 0.0, "ODP": 0.0}
@@ -1625,35 +1628,76 @@ if '_Transit Source Map' in wb.sheetnames:
                     status_qty_map[status_key]["DailySupplyPlan"] += _num(src_row[src_idx["Daily Supply Plan Qty"]])
                 if "ODP Qty" in src_idx:
                     status_qty_map[status_key]["ODP"] += _num(src_row[src_idx["ODP Qty"]])
-
-required = ["WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Stock", "To be allocated"]
-for col in required:
-    if col not in header_to_idx:
-        raise ValueError(f"Missing expected column in stock sheet: {col}")
-
-base_set = set(required + ["Virtual Warehouse", "Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW", "Domestic Stock"])
-
-date_headers = []
-for h in headers:
-    if h is None:
-        continue
-    hs = str(h).strip()
-    if hs in base_set:
-        continue
-    parts = hs.split('.')
-    if len(parts) == 3 and all(p.isdigit() for p in parts):
-        date_headers.append(hs)
+                simple_status_key = f"{sku}||{wh}"
+                if simple_status_key not in status_simple_map:
+                    status_simple_map[simple_status_key] = {"DailySupplyPlan": 0.0, "ODP": 0.0}
+                if "Daily Supply Plan Qty" in src_idx:
+                    status_simple_map[simple_status_key]["DailySupplyPlan"] += _num(src_row[src_idx["Daily Supply Plan Qty"]])
+                if "ODP Qty" in src_idx:
+                    status_simple_map[simple_status_key]["ODP"] += _num(src_row[src_idx["ODP Qty"]])
 
 rows = []
 key_meta = {}
 date_source_tags = {}
 stock_rows = []
-for stock_sheet_name in stock_sheet_names:
-    stock_ws = wb[stock_sheet_name]
-    stock_headers = [cell.value for cell in stock_ws[1]]
-    if stock_headers != headers:
-        raise ValueError(f'Stock sheet columns do not match: {stock_sheet_name}')
-    stock_rows.extend(stock_ws.iter_rows(min_row=2, values_only=True))
+is_new_contract = "Product TCL Report" not in header_to_idx
+if is_new_contract:
+    date_headers = []
+    actual_headers = {}
+    for stock_sheet_name in stock_sheet_names:
+        stock_ws = wb[stock_sheet_name]
+        stock_headers = [cell.value for cell in stock_ws[1]]
+        actual_headers[stock_sheet_name] = stock_headers
+        for h in stock_headers:
+            hs = _text(h)
+            parts = hs.split('.')
+            if len(parts) == 3 and all(p.isdigit() for p in parts) and hs not in date_headers:
+                date_headers.append(hs)
+    headers = ["WH", "Category", "Brand", "Product TCL Report", "Family", "Size", "SKU", "Model", "Connector", "Cable Length", "Bin", "MOQ", "Available QTY", "Stock", "To be allocated", "MW", "Domestic Stock", *date_headers]
+    header_to_idx = {h: i for i, h in enumerate(headers)}
+    for stock_sheet_name in stock_sheet_names:
+        stock_ws = wb[stock_sheet_name]
+        stock_headers = actual_headers[stock_sheet_name]
+        stock_idx = {str(h).strip(): i for i, h in enumerate(stock_headers) if h is not None}
+        inferred_category = "PV" if stock_sheet_name.upper().endswith("_PV") or stock_sheet_name.upper().startswith("PV STOCK") else "ESS"
+        for raw_row in stock_ws.iter_rows(min_row=2, values_only=True):
+            row = [None] * len(headers)
+            row[header_to_idx["WH"]] = raw_row[stock_idx["WH"]] if "WH" in stock_idx else ""
+            row[header_to_idx["Category"]] = inferred_category
+            row[header_to_idx["Brand"]] = raw_row[stock_idx["Brand"]] if "Brand" in stock_idx else ""
+            family_value = raw_row[stock_idx["Family"]] if "Family" in stock_idx else ""
+            row[header_to_idx["Product TCL Report"]] = family_value
+            row[header_to_idx["Family"]] = family_value
+            row[header_to_idx["Size"]] = ""
+            for field in ("SKU", "Model", "Connector", "Cable Length", "Bin", "MOQ", "Available QTY", "Stock", "MW"):
+                if field in stock_idx:
+                    row[header_to_idx[field]] = raw_row[stock_idx[field]]
+            for d_header in date_headers:
+                if d_header in stock_idx:
+                    row[header_to_idx[d_header]] = raw_row[stock_idx[d_header]]
+            stock_rows.append(tuple(row))
+else:
+    required = ["WH", "Category", "Brand", "Product TCL Report", "Family", "SKU", "Model", "Connector", "Stock", "To be allocated"]
+    for col in required:
+        if col not in header_to_idx:
+            raise ValueError(f"Missing expected column in stock sheet: {col}")
+    base_set = set(required + ["Virtual Warehouse", "Bin", "MOQ", "To be allocated", "Total QTY", "Total MW", "MW", "Domestic Stock"])
+    date_headers = []
+    for h in headers:
+        if h is None:
+            continue
+        hs = str(h).strip()
+        if hs in base_set:
+            continue
+        parts = hs.split('.')
+        if len(parts) == 3 and all(p.isdigit() for p in parts):
+            date_headers.append(hs)
+    for stock_sheet_name in stock_sheet_names:
+        stock_ws = wb[stock_sheet_name]
+        stock_headers = [cell.value for cell in stock_ws[1]]
+        if stock_headers != headers:
+            raise ValueError(f'Stock sheet columns do not match: {stock_sheet_name}')
+        stock_rows.extend(stock_ws.iter_rows(min_row=2, values_only=True))
 domestic_details = []
 domestic_sheet_names = [name for name in ('Domestic Stock PV', 'Domestic Stock ESS') if name in wb.sheetnames]
 if not domestic_sheet_names and 'Domestic Stock' in wb.sheetnames:
@@ -1713,15 +1757,19 @@ for row in stock_rows:
         qty = _num(row[header_to_idx[d]])
         if qty != 0:
             transit[d] = qty
-            src = source_map.get(f"{sku}||{wh}||{virtual_warehouse}||{category}||{model}||{d}", "INV_DSP")
+            src = source_map.get(f"{sku}||{wh}||{virtual_warehouse}||{category}||{model}||{d}", source_simple_map.get(f"{sku}||{wh}||{d}", "INV_DSP"))
             transit_source[d] = src
             date_source_tags[d] = _merge_tag(date_source_tags.get(d), src)
 
     product_key = f"{sku}||{model}" if model else f"{sku}||"
-    product_parts = [part for part in (model, sku, connector) if part]
-    product_label = " | ".join(product_parts) if product_parts else sku
+    cable_length = _text(row[header_to_idx["Cable Length"]]) if "Cable Length" in header_to_idx else ""
+    size = _text(row[header_to_idx["Size"]]) if "Size" in header_to_idx else ""
+    accessory = " + ".join(part for part in (connector, cable_length) if part)
+    product_label = " | ".join(part for part in (model, accessory) if part) or sku
     status_key = f"{sku}||{wh}||{virtual_warehouse}||{category}||{model}"
     transit_status = status_qty_map.get(status_key, {}) if status_key not in status_assigned_keys else {}
+    if not transit_status:
+        transit_status = status_simple_map.get(f"{sku}||{wh}", {})
     status_assigned_keys.add(status_key)
     bin_value = _num(row[header_to_idx['Bin']]) if 'Bin' in header_to_idx else 0
     stock_value = _num(row[header_to_idx['Stock']])
@@ -1734,9 +1782,11 @@ for row in stock_rows:
         "Brand": brand,
         "ProductTCLReport": product_report,
         "Family": family,
+        "Size": size,
         "SKU": sku,
         "Model": model,
         "Connector": connector,
+        "CableLength": cable_length,
         "ProductKey": product_key,
         "ProductKeyLabel": product_label,
         "Bin": bin_value,
@@ -1759,7 +1809,9 @@ for row in stock_rows:
         "Brand": item["Brand"],
         "ProductTCLReport": item["ProductTCLReport"],
         "Family": item["Family"],
+        "Size": item["Size"],
         "Connector": item["Connector"],
+        "CableLength": item["CableLength"],
         "ProductKey": item["ProductKey"],
     }
 

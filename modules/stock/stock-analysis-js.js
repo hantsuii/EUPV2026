@@ -55,6 +55,10 @@ function isExcludedEssHpFamily(value) {
   return EXCLUDED_ESS_HP_FAMILIES.has(normalizeText(value).toUpperCase());
 }
 
+function isExcludedInventoryFamily(value) {
+  return normalizeText(value).toUpperCase() === "MARKETING";
+}
+
 function normalizeSkuKey(value) {
   return normalizeText(value).toUpperCase();
 }
@@ -503,8 +507,10 @@ function extractAllocatedOrders(workbook) {
 
   const orders = [];
   const need = new Map();
+  const subTypeIndex = index["sub type"];
   for (const row of rows) {
     if (normalizeLower(row[index["allocation status"]]) !== "to be allocated") continue;
+    if (subTypeIndex != null && normalizeLower(row[subTypeIndex]) === "offshore") continue;
     const sku = normalizeText(row[index.material]);
     const qty = safeFloat(row[index["ordered qty"]]);
     const crd = row[index.crd];
@@ -729,11 +735,13 @@ function isUnmatchedRecord(record) {
     .some((value) => normalizeLower(value) === marker);
 }
 
-function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags) {
+function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags, options = {}) {
   const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(sheetName);
-  const baseHeaders = [
+  const baseHeaders = options.includeTechnicalFields === false ? [
+    "WH", "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
+  ] : [
     "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
     "Available QTY", "MW", "Stock",
   ];
@@ -751,11 +759,11 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags)
     record.MW = totalMw == null ? null : Number(totalMw.toFixed(3));
     if (record.AvailableQTY === 0) continue;
 
-    ws.addRow([
-      record.WH, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
-      record.MOQ, record.AvailableQTY, record.MW, record.Stock,
-      ...dateKeys.map((dateKey) => (stockTransit[dateKey] ? stockTransit[dateKey] : null)),
-    ]);
+    const row = options.includeTechnicalFields === false
+      ? [record.WH, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
+      : [record.WH, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
+        record.MOQ, record.AvailableQTY, record.MW, record.Stock];
+    ws.addRow([...row, ...dateKeys.map((dateKey) => (stockTransit[dateKey] ? stockTransit[dateKey] : null))]);
   }
   return ws;
 }
@@ -764,12 +772,7 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   const old = workbook.getWorksheet(MW_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
 
-  const countries = ["NL", "FR", "UK", "ES", "IT"];
-  const byCountry = new Map(countries.map((country) => [country, {
-    StockMW: 0,
-    Weekly: new Map(),
-    Monthly: new Map(),
-  }]));
+  const grouped = new Map();
   const weekOrder = [];
   const monthOrder = [];
   const seenWeeks = new Set();
@@ -777,15 +780,35 @@ function writeMwWorksheet(workbook, records, dateKeys) {
 
   for (const record of records) {
     const wh = normalizeText(record.WH).toUpperCase();
-    if (!byCountry.has(wh) || !isPvCategory(record.Category)) continue;
-    const summary = byCountry.get(wh);
+    if (!wh || !isPvCategory(record.Category) || isExcludedInventoryFamily(record.Family)) continue;
+    const key = `${wh}||${normalizeSkuKey(record.SKU)}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        WH: wh,
+        Brand: record.Brand,
+        Family: record.Family,
+        Bin: safeFloat(record.Bin),
+        Model: record.Model,
+        SKU: record.SKU,
+        Connector: record.Connector,
+        CableLength: record.CableLength,
+        MOQ: safeFloat(record.MOQ),
+        StockMW: 0,
+        Daily: new Map(),
+        Weekly: new Map(),
+        Monthly: new Map(),
+      });
+    }
+    const summary = grouped.get(key);
     summary.StockMW += (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000;
     for (const dateKey of dateKeys) {
       const qty = safeFloat(record.StockTransit?.[dateKey]);
       if (qty === 0) continue;
       const arrivalMw = (qty * safeFloat(record.Bin)) / 1000000;
+      const dateHeader = dateKeyToHeader(dateKey);
       const week = isoWeekLabel(dateKey);
       const month = monthLabel(dateKey);
+      summary.Daily.set(dateHeader, (summary.Daily.get(dateHeader) || 0) + arrivalMw);
       summary.Weekly.set(week, (summary.Weekly.get(week) || 0) + arrivalMw);
       summary.Monthly.set(month, (summary.Monthly.get(month) || 0) + arrivalMw);
       if (!seenWeeks.has(week)) { seenWeeks.add(week); weekOrder.push(week); }
@@ -796,13 +819,18 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   weekOrder.sort();
   monthOrder.sort();
   const ws = workbook.addWorksheet(MW_SHEET_NAME);
-  const headers = ["WH", "Stock MW", ...weekOrder, ...monthOrder];
+  const headers = [
+    "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Stock MW",
+    ...dateKeys.map(dateKeyToHeader),
+    ...weekOrder,
+    ...monthOrder,
+  ];
   ws.addRow(headers);
-  for (const country of countries) {
-    const summary = byCountry.get(country);
+  for (const summary of [...grouped.values()].sort((a, b) => `${a.WH}||${a.SKU}`.localeCompare(`${b.WH}||${b.SKU}`))) {
     ws.addRow([
-      country,
+      summary.WH, summary.Brand, summary.Family, summary.Bin, summary.Model, summary.SKU, summary.Connector, summary.CableLength, summary.MOQ,
       Number(summary.StockMW.toFixed(3)),
+      ...dateKeys.map((dateKey) => Number((summary.Daily.get(dateKeyToHeader(dateKey)) || 0).toFixed(3))),
       ...weekOrder.map((period) => Number((summary.Weekly.get(period) || 0).toFixed(3))),
       ...monthOrder.map((period) => Number((summary.Monthly.get(period) || 0).toFixed(3))),
     ]);
@@ -1023,7 +1051,9 @@ export async function buildStockOutputJs({
   const matchedRecords = records.filter((record) => !isUnmatchedRecord(record));
   const unmatchedRecords = records.filter(isUnmatchedRecord);
   for (const country of PV_STOCK_COUNTRIES) {
-    const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category) && normalizeText(record.WH).toUpperCase() === country);
+    const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category)
+      && normalizeText(record.WH).toUpperCase() === country
+      && !isExcludedInventoryFamily(record.Family));
     writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
   }
   writeStockWorksheet(
@@ -1034,6 +1064,7 @@ export async function buildStockOutputJs({
       && !isExcludedEssHpFamily(record.Family)),
     dateKeys,
     dateSourceTags,
+    { includeTechnicalFields: false },
   );
   writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
