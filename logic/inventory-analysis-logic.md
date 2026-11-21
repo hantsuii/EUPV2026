@@ -132,7 +132,7 @@ Family 为 `AC Charger`、`Cells`、`Marketing` 的数据既不导出到库存�
 
 Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`，并排除 `Sub Type = Offshore`。
 
-`To be allocated` Sheet 原样复制符合条件订单的全部表头和整行数据。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；遇到未配置的新仓库名称时停止生成并报告该名称。内部仍按 `SKU + WH` 汇总 `Ordered Qty`，数量为 0 的订单不输出。
+`To be allocated` Sheet 只输出：`Category`、`Month`、`SO Create Date`、`CRD`、`Customer Level 6 Name`、`Sub Type`、`SO No.`、`SO Line`、`Brand`、`Material`、`Model`、`Ordered Qty`、`Total KW`、`Warehouse Name`。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；遇到未配置的新仓库名称时停止生成并报告该名称。内部仍按 `SKU + WH` 汇总 `Ordered Qty`，数量为 0 的订单不输出。
 
 ## 7. 活动 SKU 过滤
 
@@ -169,6 +169,7 @@ Unmatched SKU
 
 ```text
 WH
+Location
 Brand
 Family
 Bin
@@ -185,10 +186,12 @@ Stock
 `ESS+HP Stock` 单独使用精简列，不导出 `Bin`、`Connector`、`Cable Length`、`MW`：
 
 ```text
-WH | Brand | Family | Model | SKU | MOQ | Available QTY | Stock
+WH | Location | Brand | Family | Model | SKU | MOQ | Available QTY | Stock
 ```
 
 后面追加生成日期范围内的每日 DSP 在途列，表头格式为 `YYYY.M.D`。
+
+`Location` 规则：Inventory 数量使用 Inventory 文件的 `Virtual warehouse name` 原值；DSP 数量使用 `In-transit Warehouse(Code)` 归一化后的 Arrival Plan 名称，例如 `Arrival Plan-SPUK(PVLFR027)` 输出为 `Arrival Plan-SPUK`。同一 `WH + SKU` 有多个 Location 时使用 ` / ` 合并；仅有 ODP 或待分配活动的 Location 不进入库存结果 Sheet。
 
 其中：
 
@@ -212,7 +215,7 @@ ESS/HP MW = 空白
 `MW` Sheet 按 `WH + SKU` 汇总 PV，每个仓库、每个 SKU 一行，保留产品主数据字段，并同时保留每日、周、月到货 MW：
 
 ```text
-WH | Brand | Family | Bin | Model | SKU | Connector | Cable Length | MOQ | Total MW | Stock MW | 每日到货 MW | 每周到货 MW | 每月到货 MW
+WH | Location | Brand | Family | Bin | Model | SKU | Connector | Cable Length | MOQ | Total MW | Stock MW | 每日到货 MW | 每周到货 MW | 每月到货 MW
 ```
 
 计算规则：

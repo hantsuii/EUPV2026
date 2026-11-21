@@ -29,6 +29,10 @@ PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
 OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock", "MW"]
 MW_SHEET_NAME = "MW"
 EXCLUDED_ESS_HP_FAMILIES = {"AC CHARGER", "CELLS", "MARKETING"}
+ALLOCATION_EXPORT_COLUMNS = [
+    "Category", "Month", "SO Create Date", "CRD", "Customer Level 6 Name", "Sub Type", "SO No.", "SO Line",
+    "Brand", "Material", "Model", "Ordered Qty", "Total KW", "Warehouse Name",
+]
 SKU_SHEET_CANDIDATES = ["SKU", "SKU Mapping", "Legacy Mapping Product"]
 TRANSIT_START_DATE = None  # resolved dynamically via _default_start()
 TRANSIT_END_DATE = None    # resolved dynamically via _default_end()
@@ -350,7 +354,7 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
         category = normalize_text(row[idx["category"]])
         product_model = normalize_text(row[idx["product model"]])
         sales_org = normalize_text(sales_org_name)
-        virtual_warehouse = normalize_output_virtual_warehouse(virtual_warehouse_name)
+        virtual_warehouse = normalize_text(virtual_warehouse_name)
         if not sku:
             continue
 
@@ -620,14 +624,7 @@ def extract_to_be_allocated_orders(
     headers = [ws.cell(header_row, c).value for c in range(1, ws.max_column + 1)]
     idx = build_header_index(headers)
 
-    required = [
-        "allocation status",
-        "material",
-        "ordered qty",
-        "crd",
-        "model",
-        "warehouse name",
-    ]
+    required = ["allocation status", *[normalize_lower(column) for column in ALLOCATION_EXPORT_COLUMNS]]
     missing = [h for h in required if h not in idx]
     if missing:
         wb.close()
@@ -653,7 +650,7 @@ def extract_to_be_allocated_orders(
         if sku and qty != 0 and not wh:
             wb.close()
             raise ValueError(f"Unknown Warehouse Name in To be allocated: {normalize_text(warehouse_name) or '(blank)'}")
-        raw_row = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
+        raw_row = [ws.cell(r, idx[normalize_lower(column)] + 1).value for column in ALLOCATION_EXPORT_COLUMNS]
 
         orders.append(
             {
@@ -671,7 +668,7 @@ def extract_to_be_allocated_orders(
             agg_by_sku_wh[(sku, wh)] += qty
 
     wb.close()
-    return headers, orders, agg_by_sku_wh
+    return ALLOCATION_EXPORT_COLUMNS, orders, agg_by_sku_wh
 
 
 def write_output_sheet(
@@ -1308,24 +1305,34 @@ def write_output_sheet_v2(
                 target = dict(source)
                 target["Stock"] = safe_float(source.get("Stock"))
                 target["StockTransit"] = defaultdict(float, source.get("StockTransit", {}))
+                target["Locations"] = set()
                 grouped[sku_key] = target
-                continue
-            target = grouped[sku_key]
-            target["Stock"] += safe_float(source.get("Stock"))
-            for d_header, qty in source.get("StockTransit", {}).items():
-                target["StockTransit"][d_header] += safe_float(qty)
+            else:
+                target = grouped[sku_key]
+                target["Stock"] += safe_float(source.get("Stock"))
+                for d_header, qty in source.get("StockTransit", {}).items():
+                    target["StockTransit"][d_header] += safe_float(qty)
+            has_inventory_or_dsp = safe_float(source.get("Stock")) != 0 or any(
+                safe_float(qty) != 0 for qty in source.get("StockTransit", {}).values()
+            )
+            if has_inventory_or_dsp:
+                for location in normalize_text(source.get("VirtualWarehouse")).split(" / "):
+                    if location.strip():
+                        target["Locations"].add(location.strip())
+        for target in grouped.values():
+            target["VirtualWarehouse"] = " / ".join(sorted(target["Locations"]))
         return list(grouped.values())
 
     transit_dates = iter_dates(start_date, end_date)
     transit_headers = [date_header(d) for d in transit_dates]
-    base_headers = ["WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock"]
+    base_headers = ["WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock"]
     headers = base_headers + transit_headers
 
-    def write_stock_sheet(name: str, source_records: list[dict[str, Any]], include_technical_fields: bool = True) -> None:
+    def write_stock_sheet(name: str, source_records: list[dict[str, Any]], include_technical_fields: bool = True, include_location: bool = True) -> None:
         ws = wb.create_sheet(name)
-        sheet_headers = headers if include_technical_fields else [
-            "WH", "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *transit_headers,
-        ]
+        location_headers = ["Location"] if include_location else []
+        sheet_headers = (["WH", *location_headers, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock", *transit_headers]
+                         if include_technical_fields else ["WH", *location_headers, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *transit_headers])
         ws.append(sheet_headers)
         for record in source_records:
             stock_transit = record.get("StockTransit", {})
@@ -1335,12 +1342,13 @@ def write_output_sheet_v2(
                 continue
             is_pv = normalize_upper_category(record.get("Category")).startswith("PV")
             total_mw = (available_qty * safe_float(record.get("Bin"))) / 1_000_000 if is_pv else None
+            location_values = [record.get("VirtualWarehouse", "")] if include_location else []
             row = [
-                record.get("WH"), record.get("Brand"), record.get("Family"), record.get("Bin"), record.get("Model"),
+                record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Bin"), record.get("Model"),
                 record.get("SKU"), record.get("Connector"), record.get("CableLength"), record.get("MOQ"),
                 round(available_qty, 3), round(total_mw, 3) if total_mw is not None else None, record.get("Stock"),
             ] if include_technical_fields else [
-                record.get("WH"), record.get("Brand"), record.get("Family"), record.get("Model"), record.get("SKU"),
+                record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Model"), record.get("SKU"),
                 record.get("MOQ"), round(available_qty, 3), record.get("Stock"),
             ]
             ws.append([*row, *[stock_transit.get(d_header) or None for d_header in transit_headers]])
@@ -1384,12 +1392,20 @@ def write_output_sheet_v2(
                 "Connector": record.get("Connector"),
                 "CableLength": record.get("CableLength"),
                 "MOQ": safe_float(record.get("MOQ")),
+                "Locations": set(),
                 "StockMW": 0.0,
                 "Daily": defaultdict(float),
                 "Weekly": defaultdict(float),
                 "Monthly": defaultdict(float),
             }
         summary = mw_groups[key]
+        has_inventory_or_dsp = safe_float(record.get("Stock")) != 0 or any(
+            safe_float(qty) != 0 for qty in record.get("StockTransit", {}).values()
+        )
+        if has_inventory_or_dsp:
+            for location in normalize_text(record.get("VirtualWarehouse")).split(" / "):
+                if location.strip():
+                    summary["Locations"].add(location.strip())
         summary["StockMW"] += safe_float(record.get("Stock")) * safe_float(record.get("Bin")) / 1_000_000
         for transit_date in transit_dates:
             d_header = date_header(transit_date)
@@ -1414,7 +1430,7 @@ def write_output_sheet_v2(
     month_order.sort()
     ws_mw = wb.create_sheet(MW_SHEET_NAME)
     mw_headers = [
-        "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
+        "WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
         *transit_headers, *week_order, *month_order,
     ]
     ws_mw.append(mw_headers)
@@ -1425,7 +1441,7 @@ def write_output_sheet_v2(
         if displayed_total_mw == 0:
             continue
         ws_mw.append([
-            summary["WH"], summary["Brand"], summary["Family"], summary["Bin"], summary["Model"], summary["SKU"],
+            summary["WH"], " / ".join(sorted(summary["Locations"])), summary["Brand"], summary["Family"], summary["Bin"], summary["Model"], summary["SKU"],
             summary["Connector"], summary["CableLength"], summary["MOQ"],
             displayed_total_mw,
             round(summary["StockMW"], 3),
@@ -1434,7 +1450,7 @@ def write_output_sheet_v2(
             *[round(summary["Monthly"].get(period, 0.0), 3) for period in month_order],
         ])
 
-    write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched)
+    write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched, include_location=False)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
     ws_alloc.append(allocated_headers or ["No order source"])

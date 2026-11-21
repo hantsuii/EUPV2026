@@ -11,6 +11,10 @@ const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `${country}_PV
 const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
 const MW_SHEET_NAME = "MW";
 const EXCLUDED_ESS_HP_FAMILIES = new Set(["AC CHARGER", "CELLS", "MARKETING"]);
+const ALLOCATION_EXPORT_COLUMNS = [
+  "Category", "Month", "SO Create Date", "CRD", "Customer Level 6 Name", "Sub Type", "SO No.", "SO Line",
+  "Brand", "Material", "Model", "Ordered Qty", "Total KW", "Warehouse Name",
+];
 
 const CELL_FILL_BY_SOURCE = {
   [SOURCE_INV_DSP]: "FFDDEBFF",
@@ -398,7 +402,7 @@ function extractInventoryRows(workbook, stockMode = "available") {
     const category = normalizeText(row[index.category]);
     const productModel = normalizeText(row[index["product model"]]);
     const salesOrg = normalizeText(salesOrgName);
-    const virtualWarehouse = normalizeOutputVirtualWarehouse(virtualWarehouseName);
+    const virtualWarehouse = normalizeText(virtualWarehouseName);
     const key = `${salesOrg}\u0000${virtualWarehouse}\u0000${category}\u0000${sku}\u0000${productModel}`;
     grouped.set(key, (grouped.get(key) || 0) + safeFloat(row[index[stockColumn]]));
   }
@@ -511,14 +515,7 @@ function extractOdpTransitData(workbook, startValue, endValue) {
 
 function extractAllocatedOrders(workbook) {
   const { headers, rows, index } = readSheetRows(getFirstWorksheet(workbook), 2);
-  const required = [
-    "allocation status",
-    "material",
-    "ordered qty",
-    "crd",
-    "model",
-    "warehouse name",
-  ];
+  const required = ["allocation status", ...ALLOCATION_EXPORT_COLUMNS.map(normalizeLower)];
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "Order file", columns: missing.join(", ") });
 
@@ -543,11 +540,11 @@ function extractAllocatedOrders(workbook) {
       Model: row[index.model],
       WarehouseName: warehouseName,
       WH: wh,
-      RawRow: row,
+      RawRow: ALLOCATION_EXPORT_COLUMNS.map((column) => row[index[normalizeLower(column)]]),
     });
     if (sku && wh) addMapNumber(need, `${sku}||${wh}`, qty);
   }
-  return { headers, orders, need };
+  return { headers: ALLOCATION_EXPORT_COLUMNS, orders, need };
 }
 
 function makeUnmatchedMapping() {
@@ -738,8 +735,12 @@ function aggregateRecordsBySku(records) {
         target.StockTransit[dateKey] = safeFloat(target.StockTransit[dateKey]) + safeFloat(qty);
       }
     }
-    const sourceNames = normalizeText(source.VirtualWarehouse).split(" / ").map((value) => value.trim()).filter(Boolean);
-    for (const sourceName of sourceNames) virtualWarehouses.get(key).add(sourceName);
+    const hasInventoryOrDsp = safeFloat(source.Stock) !== 0
+      || Object.values(source.StockTransit || {}).some((qty) => safeFloat(qty) !== 0);
+    if (hasInventoryOrDsp) {
+      const sourceNames = normalizeText(source.VirtualWarehouse).split(" / ").map((value) => value.trim()).filter(Boolean);
+      for (const sourceName of sourceNames) virtualWarehouses.get(key).add(sourceName);
+    }
   }
   for (const [key, record] of grouped) {
     record.VirtualWarehouse = [...virtualWarehouses.get(key)].sort((a, b) => a.localeCompare(b)).join(" / ");
@@ -757,10 +758,11 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
   const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(sheetName);
+  const locationHeaders = options.includeLocation === false ? [] : ["Location"];
   const baseHeaders = options.includeTechnicalFields === false ? [
-    "WH", "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
+    "WH", ...locationHeaders, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
   ] : [
-    "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
+    "WH", ...locationHeaders, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
     "Available QTY", "MW", "Stock",
   ];
   const dateHeaders = dateKeys.map(dateKeyToHeader);
@@ -777,9 +779,10 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
     record.MW = totalMw == null ? null : Number(totalMw.toFixed(3));
     if (record.AvailableQTY === 0) continue;
 
+    const locationValues = options.includeLocation === false ? [] : [record.VirtualWarehouse || ""];
     const row = options.includeTechnicalFields === false
-      ? [record.WH, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
-      : [record.WH, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
+      ? [record.WH, ...locationValues, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
+      : [record.WH, ...locationValues, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
         record.MOQ, record.AvailableQTY, record.MW, record.Stock];
     ws.addRow([...row, ...dateKeys.map((dateKey) => (stockTransit[dateKey] ? stockTransit[dateKey] : null))]);
   }
@@ -811,6 +814,7 @@ function writeMwWorksheet(workbook, records, dateKeys) {
         Connector: record.Connector,
         CableLength: record.CableLength,
         MOQ: safeFloat(record.MOQ),
+        Locations: new Set(),
         StockMW: 0,
         Daily: new Map(),
         Weekly: new Map(),
@@ -818,6 +822,13 @@ function writeMwWorksheet(workbook, records, dateKeys) {
       });
     }
     const summary = grouped.get(key);
+    const hasInventoryOrDsp = safeFloat(record.Stock) !== 0
+      || Object.values(record.StockTransit || {}).some((qty) => safeFloat(qty) !== 0);
+    if (hasInventoryOrDsp) {
+      for (const location of normalizeText(record.VirtualWarehouse).split(" / ").map((value) => value.trim()).filter(Boolean)) {
+        summary.Locations.add(location);
+      }
+    }
     summary.StockMW += (safeFloat(record.Stock) * safeFloat(record.Bin)) / 1000000;
     for (const dateKey of dateKeys) {
       const qty = safeFloat(record.StockTransit?.[dateKey]);
@@ -838,7 +849,7 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   monthOrder.sort();
   const ws = workbook.addWorksheet(MW_SHEET_NAME);
   const headers = [
-    "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
+    "WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
     ...dateKeys.map(dateKeyToHeader),
     ...weekOrder,
     ...monthOrder,
@@ -850,7 +861,7 @@ function writeMwWorksheet(workbook, records, dateKeys) {
     const displayedTotalMw = Number(totalMw.toFixed(3));
     if (displayedTotalMw === 0) continue;
     ws.addRow([
-      summary.WH, summary.Brand, summary.Family, summary.Bin, summary.Model, summary.SKU, summary.Connector, summary.CableLength, summary.MOQ,
+      summary.WH, [...summary.Locations].sort((a, b) => a.localeCompare(b)).join(" / "), summary.Brand, summary.Family, summary.Bin, summary.Model, summary.SKU, summary.Connector, summary.CableLength, summary.MOQ,
       displayedTotalMw,
       Number(summary.StockMW.toFixed(3)),
       ...dateKeys.map((dateKey) => Number((summary.Daily.get(dateKeyToHeader(dateKey)) || 0).toFixed(3))),
@@ -1086,7 +1097,7 @@ export async function buildStockOutputJs({
     { includeTechnicalFields: false },
   );
   writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
-  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
+  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, { includeLocation: false });
   writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
   const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");
