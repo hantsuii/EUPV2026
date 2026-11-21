@@ -1843,12 +1843,19 @@ if 'To be allocated' in wb.sheetnames:
     alloc_headers = [cell.value for cell in ws_alloc[1]]
     idx_alloc = {str(h).strip(): i for i, h in enumerate(alloc_headers) if h is not None}
 
-    required_alloc = ["SKU", "Ordered Qty", "CRD", "WH"]
-    has_alloc = all(c in idx_alloc for c in required_alloc)
+    order_wh_map = {
+        "store-fr(w74)": "FR", "store-fr(w40)": "FR", "store-fr(w75)": "FR", "gca store": "FR", "fos port direct delivery wh": "FR",
+        "fru-nl(w72)": "NL", "store-vdh-bot": "NL", "store w72 nl battery": "NL",
+        "store-it(w81)-haihang": "IT", "store-it(w82)-haihang": "IT",
+        "store-uk(w80)-worldex": "UK", "felixstowe port direct delivery wh": "UK",
+        "valencia port direct delivery wh": "ES",
+    }
+    sku_col = "SKU" if "SKU" in idx_alloc else "Material"
+    has_alloc = sku_col in idx_alloc and all(c in idx_alloc for c in ("Ordered Qty", "CRD")) and ("WH" in idx_alloc or "Warehouse Name" in idx_alloc)
     if has_alloc:
         for row in ws_alloc.iter_rows(min_row=2, values_only=True):
-            sku = _text(row[idx_alloc["SKU"]])
-            wh = _text(row[idx_alloc["WH"]])
+            sku = _text(row[idx_alloc[sku_col]])
+            wh = _text(row[idx_alloc["WH"]]) if "WH" in idx_alloc else order_wh_map.get(_text(row[idx_alloc["Warehouse Name"]]).lower(), "")
             if not sku or not wh:
                 continue
             allocations.append({

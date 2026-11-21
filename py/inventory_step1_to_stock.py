@@ -58,6 +58,22 @@ WH_CODE_MAP = {
     "SPES": "ES",
 }
 
+ORDER_WAREHOUSE_NAME_MAP = {
+    "store-fr(w74)": "FR",
+    "store-fr(w40)": "FR",
+    "store-fr(w75)": "FR",
+    "gca store": "FR",
+    "fos port direct delivery wh": "FR",
+    "fru-nl(w72)": "NL",
+    "store-vdh-bot": "NL",
+    "store w72 nl battery": "NL",
+    "store-it(w81)-haihang": "IT",
+    "store-it(w82)-haihang": "IT",
+    "store-uk(w80)-worldex": "UK",
+    "felixstowe port direct delivery wh": "UK",
+    "valencia port direct delivery wh": "ES",
+}
+
 
 def normalize_text(value: Any) -> str:
     if value is None:
@@ -71,6 +87,10 @@ def normalize_lower(value: Any) -> str:
 
 def normalize_sku_key(value: Any) -> str:
     return normalize_text(value).upper()
+
+
+def map_order_warehouse_name(value: Any) -> str | None:
+    return ORDER_WAREHOUSE_NAME_MAP.get(normalize_lower(value))
 
 
 def is_excluded_ess_hp_family(value: Any) -> bool:
@@ -592,7 +612,7 @@ def extract_odp_transit_data(
 
 def extract_to_be_allocated_orders(
     order_file_path: Path,
-) -> tuple[list[dict[str, Any]], dict[tuple[str, str], float]]:
+) -> tuple[list[Any], list[dict[str, Any]], dict[tuple[str, str], float]]:
     wb = load_workbook(order_file_path, data_only=True, read_only=False)
     ws = wb[wb.sheetnames[0]]
 
@@ -605,11 +625,8 @@ def extract_to_be_allocated_orders(
         "material",
         "ordered qty",
         "crd",
-        "customer level 6 name",
-        "so no.",
-        "so line",
         "model",
-        "factory",
+        "warehouse name",
     ]
     missing = [h for h in required if h not in idx]
     if missing:
@@ -630,24 +647,23 @@ def extract_to_be_allocated_orders(
         sku = normalize_text(ws.cell(r, idx["material"] + 1).value)
         qty = safe_float(ws.cell(r, idx["ordered qty"] + 1).value)
         crd = ws.cell(r, idx["crd"] + 1).value
-        customer_name = ws.cell(r, idx["customer level 6 name"] + 1).value
-        so_no = ws.cell(r, idx["so no."] + 1).value
-        so_line = ws.cell(r, idx["so line"] + 1).value
         model = ws.cell(r, idx["model"] + 1).value
-        factory = ws.cell(r, idx["factory"] + 1).value
-        wh = map_transit_wh_code(factory) or ""
+        warehouse_name = ws.cell(r, idx["warehouse name"] + 1).value
+        wh = map_order_warehouse_name(warehouse_name) or ""
+        if sku and qty != 0 and not wh:
+            wb.close()
+            raise ValueError(f"Unknown Warehouse Name in To be allocated: {normalize_text(warehouse_name) or '(blank)'}")
+        raw_row = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
 
         orders.append(
             {
                 "SKU": sku,
                 "Ordered Qty": round(qty, 3),
                 "CRD": crd,
-                "Customer Name": customer_name,
-                "SO No.": so_no,
-                "SO Line": so_line,
                 "Model": model,
-                "Factory": factory,
+                "Warehouse Name": warehouse_name,
                 "WH": wh,
+                "Raw Row": raw_row,
             }
         )
 
@@ -655,7 +671,7 @@ def extract_to_be_allocated_orders(
             agg_by_sku_wh[(sku, wh)] += qty
 
     wb.close()
-    return orders, agg_by_sku_wh
+    return headers, orders, agg_by_sku_wh
 
 
 def write_output_sheet(
@@ -669,6 +685,7 @@ def write_output_sheet(
     odp_transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
     domestic_qty: dict[str, float] | None = None,
     domestic_details: list[dict[str, Any]] | None = None,
+    allocated_headers: list[Any] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = None,
@@ -776,6 +793,7 @@ def write_output_sheet(
     odp_transit_qty = odp_transit_qty or {}
     domestic_qty = domestic_qty or {}
     domestic_details = domestic_details or []
+    allocated_headers = allocated_headers or []
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
 
@@ -939,25 +957,11 @@ def write_output_sheet(
         dedup_marked.append(item)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
-    ws_alloc.append(["SKU", "Connector", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
+    ws_alloc.append(allocated_headers or ["No order source"])
     for order in allocated_orders:
         if safe_float(order.get("Ordered Qty")) == 0:
             continue
-        mapped, _ = resolve_sku_mapping(order.get("SKU", ""))
-        ws_alloc.append(
-            [
-                order.get("SKU"),
-                mapped.get("Connector"),
-                order.get("Ordered Qty"),
-                order.get("CRD"),
-                order.get("Customer Name"),
-                order.get("SO No."),
-                order.get("SO Line"),
-                order.get("Model"),
-                order.get("Factory"),
-                order.get("WH"),
-            ]
-        )
+        ws_alloc.append(order.get("Raw Row", []))
 
     ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
     ws_source.append(["SKU", "WH", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
@@ -1125,6 +1129,7 @@ def write_output_sheet_v2(
     odp_transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
     domestic_qty: dict[str, float] | None = None,
     domestic_details: list[dict[str, Any]] | None = None,
+    allocated_headers: list[Any] | None = None,
     allocated_orders: list[dict[str, Any]] | None = None,
     allocated_need: dict[tuple[str, str], float] | None = None,
     start_date: date = None,
@@ -1146,6 +1151,7 @@ def write_output_sheet_v2(
     odp_transit_qty = odp_transit_qty or {}
     domestic_qty = domestic_qty or {}
     domestic_details = domestic_details or []
+    allocated_headers = allocated_headers or []
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
 
@@ -1408,14 +1414,20 @@ def write_output_sheet_v2(
     month_order.sort()
     ws_mw = wb.create_sheet(MW_SHEET_NAME)
     mw_headers = [
-        "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Stock MW",
+        "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
         *transit_headers, *week_order, *month_order,
     ]
     ws_mw.append(mw_headers)
     for summary in sorted(mw_groups.values(), key=lambda item: (item["WH"], normalize_sku_key(item["SKU"]))):
+        transit_mw = sum(safe_float(value) for value in summary["Daily"].values())
+        total_mw = summary["StockMW"] + transit_mw
+        displayed_total_mw = round(total_mw, 3)
+        if displayed_total_mw == 0:
+            continue
         ws_mw.append([
             summary["WH"], summary["Brand"], summary["Family"], summary["Bin"], summary["Model"], summary["SKU"],
             summary["Connector"], summary["CableLength"], summary["MOQ"],
+            displayed_total_mw,
             round(summary["StockMW"], 3),
             *[round(summary["Daily"].get(d_header, 0.0), 3) for d_header in transit_headers],
             *[round(summary["Weekly"].get(period, 0.0), 3) for period in week_order],
@@ -1425,15 +1437,11 @@ def write_output_sheet_v2(
     write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
-    ws_alloc.append(["SKU", "Connector", "Cable Length", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"])
+    ws_alloc.append(allocated_headers or ["No order source"])
     for order in allocated_orders:
         if safe_float(order.get("Ordered Qty")) == 0:
             continue
-        mapped, _ = resolve(order.get("SKU", ""))
-        ws_alloc.append([
-            order.get("SKU"), mapped.get("Connector"), mapped.get("CableLength"), order.get("Ordered Qty"), order.get("CRD"),
-            order.get("Customer Name"), order.get("SO No."), order.get("SO Line"), order.get("Model"), order.get("Factory"), order.get("WH"),
-        ])
+        ws_alloc.append(order.get("Raw Row", []))
 
     ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
     ws_source.append(["SKU", "WH", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
@@ -1602,10 +1610,11 @@ def run(
         for key in o_qty:
             transit_source_tag[key] = merge_source_tag(transit_source_tag.get(key, ""), SOURCE_ODP)
 
+    allocated_headers: list[Any] = []
     allocated_orders: list[dict[str, Any]] = []
     allocated_need: dict[tuple[str, str], float] = defaultdict(float)
     if order_file_path:
-        allocated_orders, allocated_need = extract_to_be_allocated_orders(order_file_path)
+        allocated_headers, allocated_orders, allocated_need = extract_to_be_allocated_orders(order_file_path)
 
     run_summary = write_output_sheet_v2(
         stock_path,
@@ -1618,6 +1627,7 @@ def run(
         odp_transit_qty=odp_transit_qty,
         domestic_qty=domestic_qty,
         domestic_details=domestic_details,
+        allocated_headers=allocated_headers,
         allocated_orders=allocated_orders,
         allocated_need=allocated_need,
         start_date=transit_start_date,

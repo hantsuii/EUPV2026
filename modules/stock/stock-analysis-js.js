@@ -27,6 +27,22 @@ const WH_CODE_MAP = {
   SPES: "ES",
 };
 
+const ORDER_WAREHOUSE_NAME_MAP = {
+  "store-fr(w74)": "FR",
+  "store-fr(w40)": "FR",
+  "store-fr(w75)": "FR",
+  "gca store": "FR",
+  "fos port direct delivery wh": "FR",
+  "fru-nl(w72)": "NL",
+  "store-vdh-bot": "NL",
+  "store w72 nl battery": "NL",
+  "store-it(w81)-haihang": "IT",
+  "store-it(w82)-haihang": "IT",
+  "store-uk(w80)-worldex": "UK",
+  "felixstowe port direct delivery wh": "UK",
+  "valencia port direct delivery wh": "ES",
+};
+
 function unwrapValue(value) {
   if (value == null) return value;
   if (value instanceof Date) return value;
@@ -142,6 +158,10 @@ function mapTransitWhCode(value) {
     if (text.includes(code)) return wh;
   }
   return null;
+}
+
+function mapOrderWarehouseName(value) {
+  return ORDER_WAREHOUSE_NAME_MAP[normalizeLower(value)] || null;
 }
 
 function mapTransitVirtualWarehouse(value) {
@@ -490,17 +510,14 @@ function extractOdpTransitData(workbook, startValue, endValue) {
 }
 
 function extractAllocatedOrders(workbook) {
-  const { rows, index } = readSheetRows(getFirstWorksheet(workbook), 2);
+  const { headers, rows, index } = readSheetRows(getFirstWorksheet(workbook), 2);
   const required = [
     "allocation status",
     "material",
     "ordered qty",
     "crd",
-    "customer level 6 name",
-    "so no.",
-    "so line",
     "model",
-    "factory",
+    "warehouse name",
   ];
   const missing = required.filter((key) => index[key] == null);
   if (missing.length) throw localizedError("missingColumns", { sheet: "Order file", columns: missing.join(", ") });
@@ -514,22 +531,23 @@ function extractAllocatedOrders(workbook) {
     const sku = normalizeText(row[index.material]);
     const qty = safeFloat(row[index["ordered qty"]]);
     const crd = row[index.crd];
-    const factory = row[index.factory];
-    const wh = mapTransitWhCode(factory) || "";
+    const warehouseName = row[index["warehouse name"]];
+    const wh = mapOrderWarehouseName(warehouseName) || "";
+    if (sku && qty !== 0 && !wh) {
+      throw new Error(`Unknown Warehouse Name in To be allocated: ${normalizeText(warehouseName) || "(blank)"}`);
+    }
     orders.push({
       SKU: sku,
       "Ordered Qty": Number(qty.toFixed(3)),
       CRD: crd,
-      "Customer Name": row[index["customer level 6 name"]],
-      "SO No.": row[index["so no."]],
-      "SO Line": row[index["so line"]],
       Model: row[index.model],
-      Factory: factory,
+      WarehouseName: warehouseName,
       WH: wh,
+      RawRow: row,
     });
     if (sku && wh) addMapNumber(need, `${sku}||${wh}`, qty);
   }
-  return { orders, need };
+  return { headers, orders, need };
 }
 
 function makeUnmatchedMapping() {
@@ -820,15 +838,20 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   monthOrder.sort();
   const ws = workbook.addWorksheet(MW_SHEET_NAME);
   const headers = [
-    "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Stock MW",
+    "WH", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
     ...dateKeys.map(dateKeyToHeader),
     ...weekOrder,
     ...monthOrder,
   ];
   ws.addRow(headers);
   for (const summary of [...grouped.values()].sort((a, b) => `${a.WH}||${a.SKU}`.localeCompare(`${b.WH}||${b.SKU}`))) {
+    const transitMw = [...summary.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
+    const totalMw = summary.StockMW + transitMw;
+    const displayedTotalMw = Number(totalMw.toFixed(3));
+    if (displayedTotalMw === 0) continue;
     ws.addRow([
       summary.WH, summary.Brand, summary.Family, summary.Bin, summary.Model, summary.SKU, summary.Connector, summary.CableLength, summary.MOQ,
+      displayedTotalMw,
       Number(summary.StockMW.toFixed(3)),
       ...dateKeys.map((dateKey) => Number((summary.Daily.get(dateKeyToHeader(dateKey)) || 0).toFixed(3))),
       ...weekOrder.map((period) => Number((summary.Weekly.get(period) || 0).toFixed(3))),
@@ -838,18 +861,14 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   return ws;
 }
 
-function writeAllocationWorksheet(workbook, orders, skuLookup) {
+function writeAllocationWorksheet(workbook, headers, orders) {
   const old = workbook.getWorksheet(ALLOC_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(ALLOC_SHEET_NAME);
-  ws.addRow(["SKU", "Connector", "Cable Length", "Ordered Qty", "CRD", "Customer Name", "SO No.", "SO Line", "Model", "Factory", "WH"]);
+  ws.addRow(headers?.length ? headers : ["No order source"]);
   for (const order of orders) {
     if (safeFloat(order["Ordered Qty"]) === 0) continue;
-    const mapped = skuLookup.get(normalizeSkuKey(order.SKU)) || makeUnmatchedMapping();
-    ws.addRow([
-      order.SKU, mapped.Connector, mapped.CableLength, order["Ordered Qty"], order.CRD, order["Customer Name"], order["SO No."],
-      order["SO Line"], order.Model, order.Factory, order.WH,
-    ]);
+    ws.addRow(order.RawRow || []);
   }
   return ws;
 }
@@ -951,7 +970,7 @@ export async function buildStockOutputJs({
     mergeMapValues(domesticQty, odp.domesticQty);
     domesticDetails = odp.domesticDetails;
   }
-  const allocationData = orderWorkbook ? extractAllocatedOrders(orderWorkbook) : { orders: [], need: new Map() };
+  const allocationData = orderWorkbook ? extractAllocatedOrders(orderWorkbook) : { headers: [], orders: [], need: new Map() };
 
   const activeSkuKeys = new Set();
   for (const row of inventoryRows) if (safeFloat(row.Stock) !== 0) activeSkuKeys.add(normalizeSkuKey(row.SKU));
@@ -1068,7 +1087,7 @@ export async function buildStockOutputJs({
   );
   writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags);
-  writeAllocationWorksheet(templateWorkbook, allocationData.orders, skuLookup);
+  writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
   const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");
   if (obsoleteDomestic) templateWorkbook.removeWorksheet(obsoleteDomestic.id);

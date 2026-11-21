@@ -130,9 +130,9 @@ Family 为 `AC Charger`、`Cells`、`Marketing` 的数据既不导出到库存�
 
 ## 6. To be allocated
 
-Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`。
+Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`，并排除 `Sub Type = Offshore`。
 
-按 `SKU + WH` 汇总 `Ordered Qty`，订单明细写入 `To be allocated` Sheet，并增加 Connector、Cable Length。Legacy SKU 的这两个字段为空。数量为 0 的订单不输出。
+`To be allocated` Sheet 原样复制符合条件订单的全部表头和整行数据。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；遇到未配置的新仓库名称时停止生成并报告该名称。内部仍按 `SKU + WH` 汇总 `Ordered Qty`，数量为 0 的订单不输出。
 
 ## 7. 活动 SKU 过滤
 
@@ -212,7 +212,7 @@ ESS/HP MW = 空白
 `MW` Sheet 按 `WH + SKU` 汇总 PV，每个仓库、每个 SKU 一行，保留产品主数据字段，并同时保留每日、周、月到货 MW：
 
 ```text
-WH | Brand | Family | Bin | Model | SKU | Connector | Cable Length | MOQ | Stock MW | 每日到货 MW | 每周到货 MW | 每月到货 MW
+WH | Brand | Family | Bin | Model | SKU | Connector | Cable Length | MOQ | Total MW | Stock MW | 每日到货 MW | 每周到货 MW | 每月到货 MW
 ```
 
 计算规则：
@@ -220,9 +220,10 @@ WH | Brand | Family | Bin | Model | SKU | Connector | Cable Length | MOQ | Stock
 ```text
 Stock MW = Inventory Stock × Bin ÷ 1,000,000
 到货 MW = DSP 到货数量 × Bin ÷ 1,000,000
+Total MW = Stock MW + 全部 DSP 到货 MW
 ```
 
-每日 DSP 到货先保留日期列，再按 ISO 周和月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。周和月份没有到货时不生成对应汇总列。
+每日 DSP 到货先保留日期列，再按 ISO 周和月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。`Total MW` 按输出精度保留三位小数后为 0 的 `WH + SKU` 行不输出；此前这类行可能因仅有待分配或 ODP 活动而被建立，但库存 Excel 的 MW 口径只使用 Inventory 和 DSP。
 
 ## 10. 网页可视化
 
