@@ -197,7 +197,7 @@
     }
     .overview-filters {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+      grid-template-columns: repeat(3, minmax(200px, 1fr)) auto;
       gap: 12px;
       align-items: end;
       margin-bottom: 12px;
@@ -533,6 +533,11 @@
         </div>
         <div class="overview-filters">
           <div>
+            <label for="inventoryCategoryFilter" class="label-with-icon"><span class="icon">C</span><span data-i18n="inventoryCategory">类别</span></label>
+            <select id="inventoryCategoryFilter" multiple></select>
+            <div id="inventoryCategorySummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
+          </div>
+          <div>
             <label for="inventoryBrandFilter" class="label-with-icon"><span class="icon">B</span><span data-i18n="inventoryBrand">品牌</span></label>
             <select id="inventoryBrandFilter" multiple></select>
             <div id="inventoryBrandSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
@@ -543,7 +548,7 @@
             <div id="inventorySeriesSummary" class="selection-summary is-empty" data-i18n="noSelection">未选择条件</div>
           </div>
           <div class="overview-filter-action">
-            <button id="clearInventoryOverviewFilters" class="btn-secondary" type="button" data-i18n="clearOverviewFilters">清除品牌/系列筛选</button>
+            <button id="clearInventoryOverviewFilters" class="btn-secondary" type="button" data-i18n="clearOverviewFilters">清除类别/品牌/系列筛选</button>
           </div>
         </div>
         <div class="overview-kpis">

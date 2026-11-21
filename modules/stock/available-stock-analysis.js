@@ -50,8 +50,10 @@ const pvStatusChartEl = document.getElementById("pvStatusChart");
 const essStatusChartEl = document.getElementById("essStatusChart");
 const hpStatusChartEl = document.getElementById("hpStatusChart");
 const inventoryStatusTableEl = document.getElementById("inventoryStatusTable");
+const inventoryCategoryFilterEl = document.getElementById("inventoryCategoryFilter");
 const inventoryBrandFilterEl = document.getElementById("inventoryBrandFilter");
 const inventorySeriesFilterEl = document.getElementById("inventorySeriesFilter");
+const inventoryCategorySummaryEl = document.getElementById("inventoryCategorySummary");
 const inventoryBrandSummaryEl = document.getElementById("inventoryBrandSummary");
 const inventorySeriesSummaryEl = document.getElementById("inventorySeriesSummary");
 const clearInventoryOverviewFiltersEl = document.getElementById("clearInventoryOverviewFilters");
@@ -89,6 +91,12 @@ const vizState = {
   modeDownloads: {},
   stockMode: "available",
 };
+
+const WEB_EXCLUDED_FAMILIES = new Set(["AC CHARGER", "MARKETING", "CELLS"]);
+
+function isWebExcludedRow(row) {
+  return WEB_EXCLUDED_FAMILIES.has(String(row?.Family || "").trim().toUpperCase());
+}
 
 function resultQuantityLabel() {
   return t(vizState.stockMode === "total" ? "totalQty" : "availableQty");
@@ -772,28 +780,39 @@ function buildOverviewFilterOptions(rows, key) {
 }
 
 function refreshOverviewFilterOptions(baseRows) {
-  const eligibleRows = baseRows.filter((row) => ["PV", "ESS"].includes(inventoryCategoryGroup(row.Category)) && rowOverviewQuantity(row) !== 0);
+  const eligibleRows = baseRows.filter((row) => ["PV", "ESS", "HP"].includes(inventoryCategoryGroup(row.Category)) && rowOverviewQuantity(row) !== 0);
+  const currentCategories = selectedSet(inventoryCategoryFilterEl);
+  setSelectOptions(inventoryCategoryFilterEl, buildOverviewFilterOptions(eligibleRows, "Category"), currentCategories, false);
+
+  const selectedCategories = selectedSet(inventoryCategoryFilterEl);
+  const brandRows = selectedCategories.size
+    ? eligibleRows.filter((row) => selectedCategories.has(String(row.Category || "")))
+    : eligibleRows;
   const currentBrands = selectedSet(inventoryBrandFilterEl);
-  setSelectOptions(inventoryBrandFilterEl, buildOverviewFilterOptions(eligibleRows, "Brand"), currentBrands, false);
+  setSelectOptions(inventoryBrandFilterEl, buildOverviewFilterOptions(brandRows, "Brand"), currentBrands, false);
 
   const selectedBrands = selectedSet(inventoryBrandFilterEl);
   const seriesRows = selectedBrands.size
-    ? eligibleRows.filter((row) => selectedBrands.has(String(row.Brand || "")))
-    : eligibleRows;
+    ? brandRows.filter((row) => selectedBrands.has(String(row.Brand || "")))
+    : brandRows;
   const currentSeries = selectedSet(inventorySeriesFilterEl);
   setSelectOptions(inventorySeriesFilterEl, buildOverviewFilterOptions(seriesRows, "Family"), currentSeries, false);
 
+  applySelectVisualState(inventoryCategoryFilterEl);
   applySelectVisualState(inventoryBrandFilterEl);
   applySelectVisualState(inventorySeriesFilterEl);
+  updateSelectionSummary(inventoryCategoryFilterEl, inventoryCategorySummaryEl);
   updateSelectionSummary(inventoryBrandFilterEl, inventoryBrandSummaryEl);
   updateSelectionSummary(inventorySeriesFilterEl, inventorySeriesSummaryEl);
 }
 
 function matchOverviewFilters(row) {
+  const categories = selectedSet(inventoryCategoryFilterEl);
   const brands = selectedSet(inventoryBrandFilterEl);
   const series = selectedSet(inventorySeriesFilterEl);
+  if (categories.size && !categories.has(String(row.Category || ""))) return false;
   if (brands.size && !brands.has(String(row.Brand || ""))) return false;
-  if (series.size && !series.has(String(row.Size || ""))) return false;
+  if (series.size && !series.has(String(row.Family || ""))) return false;
   return true;
 }
 
@@ -839,10 +858,10 @@ function renderStatusChart(chartInstance, values, unit, useMw) {
   }, true);
 }
 
-function renderInventoryOverview(filteredRows) {
+function renderInventoryOverview(baseRows) {
   ensureInventoryOverviewCharts();
-  refreshOverviewFilterOptions(filteredRows);
-  const overviewRows = filteredRows.filter(matchOverviewFilters);
+  refreshOverviewFilterOptions(baseRows);
+  const overviewRows = baseRows.filter(matchOverviewFilters);
   const totals = {
     PV: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
     ESS: { Inventory: 0, DailySupplyPlan: 0, ODP: 0 },
@@ -1080,7 +1099,7 @@ function renderChartAndTable() {
 
   const matchedRows = vizState.rows.filter((row) => matchByFilters(row, filters));
   ensureChart();
-  renderInventoryOverview(matchedRows);
+  renderInventoryOverview(vizState.rows);
   renderDomesticStockSummary();
   renderHighStockTable(filters, start, end);
 
@@ -1495,12 +1514,15 @@ function renderDetailTable(filteredRows, inRangeHeaders, startDate, endDate) {
 }
 
 function applyVisualizationPayload(payload) {
+  const sourceRows = payload?.rows || [];
+  const visibleRows = sourceRows.filter((row) => !isWebExcludedRow(row));
+  const visibleSkuKeys = new Set(visibleRows.map((row) => String(row.SKU || "").trim().toUpperCase()).filter(Boolean));
   vizState.dateHeaders = payload?.dateHeaders || [];
-  vizState.rows = payload?.rows || [];
+  vizState.rows = visibleRows;
   vizState.allocations = payload?.allocations || [];
   vizState.keyMeta = new Map(Object.entries(payload?.keyMeta || {}));
   vizState.dateSourceTags = payload?.dateSourceTags || {};
-  vizState.domesticDetails = payload?.domesticDetails || [];
+  vizState.domesticDetails = (payload?.domesticDetails || []).filter((item) => visibleSkuKeys.has(String(item.SKU || "").trim().toUpperCase()));
   vizState.stockMode = payload?.stockMode === "total" ? "total" : "available";
   formulaTipEl.textContent = t(vizState.stockMode === "total" ? "totalFormulaTip" : "formulaTip");
 }
@@ -2056,10 +2078,11 @@ function clearAllFilterSelections() {
 }
 
 function clearOverviewFilterSelections() {
-  for (const selectEl of [inventoryBrandFilterEl, inventorySeriesFilterEl]) {
+  for (const selectEl of [inventoryCategoryFilterEl, inventoryBrandFilterEl, inventorySeriesFilterEl]) {
     for (const option of selectEl.options) option.selected = false;
     applySelectVisualState(selectEl);
   }
+  updateSelectionSummary(inventoryCategoryFilterEl, inventoryCategorySummaryEl);
   updateSelectionSummary(inventoryBrandFilterEl, inventoryBrandSummaryEl);
   updateSelectionSummary(inventorySeriesFilterEl, inventorySeriesSummaryEl);
 }
@@ -2094,6 +2117,7 @@ function resetForm() {
   vizState.modePayloads = {};
   vizState.modeDownloads = {};
   vizState.stockMode = "available";
+  inventoryCategoryFilterEl.innerHTML = "";
   inventoryBrandFilterEl.innerHTML = "";
   inventorySeriesFilterEl.innerHTML = "";
   clearOverviewFilterSelections();
@@ -2116,12 +2140,12 @@ for (let i = 0; i < levelDefs.length; i += 1) {
   });
 }
 
-for (const selectEl of [inventoryBrandFilterEl, inventorySeriesFilterEl]) {
+for (const selectEl of [inventoryCategoryFilterEl, inventoryBrandFilterEl, inventorySeriesFilterEl]) {
   enableClickToggleMultiSelect(selectEl);
   selectEl.addEventListener("change", () => {
     if (vizPanelEl.style.display === "none") return;
     try {
-      renderChartAndTable();
+      renderInventoryOverview(vizState.rows);
     } catch (err) {
       setStatus("visualizationFailed", { message: err?.message || err });
     }
@@ -2131,7 +2155,7 @@ for (const selectEl of [inventoryBrandFilterEl, inventorySeriesFilterEl]) {
 clearInventoryOverviewFiltersEl.addEventListener("click", () => {
   try {
     clearOverviewFilterSelections();
-    renderChartAndTable();
+    renderInventoryOverview(vizState.rows);
   } catch (err) {
     setStatus("visualizationFailed", { message: err?.message || err });
   }

@@ -126,7 +126,7 @@ Inventory Stock + Daily Supply Plan Transit
 
 `Domestic Stock PV` 和 `Domestic Stock ESS` 保留表头，但不写入 ODP 明细，内容为空。
 
-`ESS+HP Stock` 不导出 Family 为 `AC Charger`、`Cells`、`Marketing` 的库存；这些数据仍可用于网页可视化。
+Family 为 `AC Charger`、`Cells`、`Marketing` 的数据既不导出到库存结果 Sheet，也不进入网页可视化、网页筛选项或总库存概览。
 
 ## 6. To be allocated
 
@@ -231,6 +231,8 @@ Stock MW = Inventory Stock × Bin ÷ 1,000,000
 - Inventory：Inventory 现货。
 - Daily Supply Plan：DSP 在途。
 - ODP：ODP 到货在途和 Domestic Stock。
+
+总库存概览使用独立于下方趋势图的 `Category → Brand → Family` 筛选条件；任一侧的筛选不会改变另一侧的选择或结果。网页载入数据时统一排除 Family 为 `AC Charger`、`Cells`、`Marketing` 的记录。
 
 网页曲线期初库存仍为：
 
