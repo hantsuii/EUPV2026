@@ -1446,8 +1446,12 @@ def write_output_sheet_v2(
     base_headers = ["WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock"]
     headers = base_headers + transit_headers
 
+    stock_output_sheets: list[Any] = []
+
     def write_stock_sheet(name: str, source_records: list[dict[str, Any]], include_technical_fields: bool = True, include_location: bool = True) -> None:
         ws = wb.create_sheet(name)
+        if name in {*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"}:
+            stock_output_sheets.append(ws)
         location_headers = ["Location"] if include_location else []
         sheet_headers = (["WH", *location_headers, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock", *transit_headers]
                          if include_technical_fields else ["WH", *location_headers, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *transit_headers])
@@ -1592,7 +1596,7 @@ def write_output_sheet_v2(
                 target["Monthly"][month] += safe_float(source["Monthly"].get(month))
         return sorted(grouped_summary.values(), key=lambda item: tuple(normalize_text(item.get(field)) for field in key_fields))
 
-    mw_summary_layouts: list[tuple[Any, list[int]]] = []
+    mw_summary_layouts: list[tuple[Any, list[int], int]] = []
     for brand_name, sheet_name in (("SunPower", SUNPOWER_MW_SHEET_NAME), ("TCL", TCL_MW_SHEET_NAME)):
         ws_brand = wb.create_sheet(sheet_name)
         ws_brand.append([f"{brand_name} MW Detail"])
@@ -1605,6 +1609,9 @@ def write_output_sheet_v2(
             by_warehouse.items(),
             key=lambda pair: (-sum(safe_float(item.get("TotalMW")) for item in pair[1]), pair[0]),
         )
+        grand_stock = 0.0
+        grand_total = 0.0
+        grand_monthly: dict[str, float] = defaultdict(float)
         for warehouse, items in sorted_warehouses:
             subtotal_stock = 0.0
             subtotal_total = 0.0
@@ -1623,7 +1630,15 @@ def write_output_sheet_v2(
                 *[round(subtotal_monthly.get(month, 0.0), 3) for month in month_order], round(subtotal_total, 3),
             ])
             subtotal_rows.append(ws_brand.max_row)
-        mw_summary_layouts.append((ws_brand, subtotal_rows))
+            grand_stock += round(subtotal_stock, 3)
+            grand_total += round(subtotal_total, 3)
+            for month in month_order:
+                grand_monthly[month] += round(subtotal_monthly.get(month, 0.0), 3)
+        ws_brand.append([
+            "All WH Total", "", "", "", round(grand_stock, 3),
+            *[round(grand_monthly.get(month, 0.0), 3) for month in month_order], round(grand_total, 3),
+        ])
+        mw_summary_layouts.append((ws_brand, subtotal_rows, ws_brand.max_row))
 
     write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched, include_location=False)
 
@@ -1677,8 +1692,34 @@ def write_output_sheet_v2(
 
     header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
     subtotal_fill = PatternFill(fill_type="solid", fgColor="EAF2F8")
+    grand_total_fill = PatternFill(fill_type="solid", fgColor="B4C7E7")
+    stock_band_fill = PatternFill(fill_type="solid", fgColor="F5FAFD")
     blue_line = Side(style="thin", color="5B9BD5")
-    for ws_brand, subtotal_rows in mw_summary_layouts:
+    strong_blue_line = Side(style="medium", color="4472C4")
+
+    for ws_stock in stock_output_sheets:
+        for cell in ws_stock[1]:
+            cell.fill = header_fill
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(bottom=blue_line)
+        for row_number in range(2, ws_stock.max_row + 1, 2):
+            for cell in ws_stock[row_number]:
+                cell.fill = stock_band_fill
+        ws_stock.auto_filter.ref = f"A1:{ws_stock.cell(row=ws_stock.max_row, column=ws_stock.max_column).coordinate}"
+        ws_stock.freeze_panes = "A2"
+        widths_by_header = {
+            "WH": 10, "Location": 26, "Model": 30, "SKU": 20,
+            "Connector": 18, "Cable Length": 18,
+        }
+        for column_number in range(1, ws_stock.max_column + 1):
+            header = normalize_text(ws_stock.cell(row=1, column=column_number).value)
+            column_letter = ws_stock.cell(row=1, column=column_number).column_letter
+            ws_stock.column_dimensions[column_letter].width = widths_by_header.get(
+                header, 12 if header in transit_headers else 14,
+            )
+
+    for ws_brand, subtotal_rows, grand_total_row in mw_summary_layouts:
         for cell in ws_brand[2]:
             cell.fill = header_fill
             cell.font = Font(bold=True)
@@ -1690,6 +1731,10 @@ def write_output_sheet_v2(
                 cell.fill = subtotal_fill
                 cell.font = Font(bold=True)
                 cell.border = Border(top=blue_line)
+        for cell in ws_brand[grand_total_row]:
+            cell.fill = grand_total_fill
+            cell.font = Font(bold=True, color="1F1F1F")
+            cell.border = Border(top=strong_blue_line)
         for row_number in range(3, ws_brand.max_row + 1):
             for column_number in range(5, ws_brand.max_column + 1):
                 ws_brand.cell(row=row_number, column=column_number).number_format = "0.000"

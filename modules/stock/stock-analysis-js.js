@@ -933,6 +933,32 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
         record.MOQ, record.AvailableQTY, record.MW, record.Stock];
     ws.addRow([...row, ...dateKeys.map((dateKey) => (stockTransit[dateKey] ? stockTransit[dateKey] : null))]);
   }
+  if (options.applyTableStyle !== false) {
+    ws.getRow(1).eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+      cell.font = { bold: true, color: { argb: "FF000000" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = { bottom: { style: "thin", color: { argb: "FF5B9BD5" } } };
+    });
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      if (rowNumber % 2 !== 0) continue;
+      ws.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5FAFD" } };
+      });
+    }
+    ws.autoFilter = `A1:${ws.getCell(Math.max(1, ws.rowCount), headers.length).address}`;
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+    ws.columns.forEach((column, index) => {
+      const header = headers[index];
+      if (header === "WH") column.width = 10;
+      else if (header === "Location") column.width = 26;
+      else if (header === "Model") column.width = 30;
+      else if (header === "SKU") column.width = 20;
+      else if (header === "Connector" || header === "Cable Length") column.width = 18;
+      else if (dateHeaders.includes(header)) column.width = 12;
+      else column.width = 14;
+    });
+  }
   return ws;
 }
 
@@ -1080,6 +1106,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
     const totalB = b[1].reduce((sum, item) => sum + safeFloat(item.TotalMW), 0);
     return totalB - totalA || a[0].localeCompare(b[0]);
   });
+  const grandTotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
   for (const [wh, items] of sortedWarehouses) {
     const subtotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
     for (const item of items) {
@@ -1091,7 +1118,13 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       }
     }
     subtotalRows.push(ws.addRow([`${wh} Total`, "", "", "", ...numericValues(subtotal)]));
+    grandTotal.StockMW += Number(subtotal.StockMW.toFixed(3));
+    grandTotal.TotalMW += Number(subtotal.TotalMW.toFixed(3));
+    for (const month of monthOrder) {
+      grandTotal.Monthly.set(month, (grandTotal.Monthly.get(month) || 0) + Number(safeFloat(subtotal.Monthly.get(month)).toFixed(3)));
+    }
   }
+  const grandTotalRow = ws.addRow(["All WH Total", "", "", "", ...numericValues(grandTotal)]);
 
   const styleHeader = (row) => {
     row.eachCell((cell) => {
@@ -1110,6 +1143,11 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       cell.border = { top: { style: "thin", color: { argb: "FF5B9BD5" } } };
     });
   }
+  grandTotalRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FF1F1F1F" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB4C7E7" } };
+    cell.border = { top: { style: "medium", color: { argb: "FF4472C4" } } };
+  });
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
     const row = ws.getRow(rowNumber);
     for (let column = 5; column <= row.cellCount; column += 1) {
@@ -1350,7 +1388,10 @@ export async function buildStockOutputJs({
   const mwResult = writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
   writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "SunPower", SUNPOWER_MW_SHEET_NAME);
   writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "TCL", TCL_MW_SHEET_NAME);
-  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, { includeLocation: false });
+  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, {
+    includeLocation: false,
+    applyTableStyle: false,
+  });
   writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
   writeAllocationDeductionWorksheet(templateWorkbook, allocationDeductions);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
