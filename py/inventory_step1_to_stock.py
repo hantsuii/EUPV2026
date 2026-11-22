@@ -22,12 +22,14 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
-OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock", "MW"]
 MW_SHEET_NAME = "MW"
+MW_SUMMARY_SHEET_NAME = "MW Summary"
+OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock", MW_SHEET_NAME]
+CURRENT_OUTPUT_SHEET_NAMES = [*OUTPUT_SHEET_NAMES, MW_SUMMARY_SHEET_NAME]
 EXCLUDED_ESS_HP_FAMILIES = {"AC CHARGER", "CELLS", "MARKETING"}
 ALLOCATION_EXPORT_COLUMNS = [
     "Category", "Month", "SO Create Date", "CRD", "Customer Level 6 Name", "Sub Type", "SO No.", "SO Line",
@@ -695,7 +697,7 @@ def write_output_sheet(
     wb = load_workbook(stock_wb_path)
 
     legacy_output_names = [f"PV Stock {country}" for country in PV_STOCK_COUNTRIES]
-    for old_name in ["stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *legacy_output_names, *OUTPUT_SHEET_NAMES]:
+    for old_name in ["stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *legacy_output_names, *OUTPUT_SHEET_NAMES, MW_SUMMARY_SHEET_NAME]:
         if old_name in wb.sheetnames:
             wb.remove(wb[old_name])
     if ALLOC_SHEET_NAME in wb.sheetnames:
@@ -1155,7 +1157,7 @@ def write_output_sheet_v2(
     wb = load_workbook(stock_wb_path)
     old_names = {
         "stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build",
-        *OUTPUT_SHEET_NAMES, MW_SHEET_NAME, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
+        *OUTPUT_SHEET_NAMES, MW_SHEET_NAME, MW_SUMMARY_SHEET_NAME, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
         ALLOC_SHEET_NAME, TRANSIT_SOURCE_SHEET_NAME, "Domestic Stock",
         *DOMESTIC_DETAIL_SHEET_NAMES,
     }
@@ -1450,6 +1452,67 @@ def write_output_sheet_v2(
             *[round(summary["Monthly"].get(period, 0.0), 3) for period in month_order],
         ])
 
+    def aggregate_mw_summary(key_fields: tuple[str, ...]) -> list[dict[str, Any]]:
+        grouped_summary: dict[tuple[str, ...], dict[str, Any]] = {}
+        for source in mw_groups.values():
+            if normalize_text(source.get("Brand")).upper() != "TCL":
+                continue
+            total_mw = safe_float(source.get("StockMW")) + sum(safe_float(value) for value in source["Daily"].values())
+            if round(total_mw, 3) == 0:
+                continue
+            key = tuple(normalize_text(source.get(field)) for field in key_fields)
+            if key not in grouped_summary:
+                grouped_summary[key] = {
+                    **{field: source.get(field, "") for field in key_fields},
+                    "StockMW": 0.0,
+                    "TotalMW": 0.0,
+                    "Monthly": defaultdict(float),
+                }
+            target = grouped_summary[key]
+            target["StockMW"] += safe_float(source.get("StockMW"))
+            target["TotalMW"] += total_mw
+            for month in month_order:
+                target["Monthly"][month] += safe_float(source["Monthly"].get(month))
+        return sorted(grouped_summary.values(), key=lambda item: tuple(normalize_text(item.get(field)) for field in key_fields))
+
+    detail_summary = aggregate_mw_summary(("WH", "Model", "Connector", "CableLength"))
+    simple_summary = aggregate_mw_summary(("WH", "Model"))
+    ws_mw_summary = wb.create_sheet(MW_SUMMARY_SHEET_NAME)
+    ws_mw_summary.append(["TCL MW Detail"])
+    ws_mw_summary.append(["WH", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
+    for item in detail_summary:
+        ws_mw_summary.append([
+            item["WH"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
+            *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
+        ])
+
+    ws_mw_summary.append([])
+    ws_mw_summary.append(["TCL MW by Warehouse and Model"])
+    simple_header_row = ws_mw_summary.max_row + 1
+    ws_mw_summary.append(["WH", "Model", "Stock MW", *month_order, "Total MW"])
+    subtotal_rows: list[int] = []
+    by_warehouse: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in simple_summary:
+        by_warehouse[normalize_text(item["WH"])].append(item)
+    for warehouse, items in by_warehouse.items():
+        subtotal_stock = 0.0
+        subtotal_total = 0.0
+        subtotal_monthly: dict[str, float] = defaultdict(float)
+        for item in items:
+            ws_mw_summary.append([
+                item["WH"], item["Model"], round(item["StockMW"], 3),
+                *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
+            ])
+            subtotal_stock += item["StockMW"]
+            subtotal_total += item["TotalMW"]
+            for month in month_order:
+                subtotal_monthly[month] += safe_float(item["Monthly"].get(month))
+        ws_mw_summary.append([
+            f"{warehouse} Total", "", round(subtotal_stock, 3),
+            *[round(subtotal_monthly.get(month, 0.0), 3) for month in month_order], round(subtotal_total, 3),
+        ])
+        subtotal_rows.append(ws_mw_summary.max_row)
+
     write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched, include_location=False)
 
     ws_alloc = wb.create_sheet(ALLOC_SHEET_NAME)
@@ -1489,6 +1552,34 @@ def write_output_sheet_v2(
             for row in output_sheet.iter_rows():
                 for cell in row:
                     cell._style = copy(normal_style)
+
+    header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
+    subtotal_fill = PatternFill(fill_type="solid", fgColor="EAF2F8")
+    blue_line = Side(style="thin", color="5B9BD5")
+    for row_number in (2, simple_header_row):
+        for cell in ws_mw_summary[row_number]:
+            cell.fill = header_fill
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(bottom=blue_line)
+    for row_number in (1, simple_header_row - 1):
+        ws_mw_summary.cell(row=row_number, column=1).font = Font(bold=True, size=13, color="1F4E78")
+    for row_number in subtotal_rows:
+        for cell in ws_mw_summary[row_number]:
+            cell.fill = subtotal_fill
+            cell.font = Font(bold=True)
+            cell.border = Border(top=blue_line)
+    for row_number in range(3, ws_mw_summary.max_row + 1):
+        if row_number in {simple_header_row - 1, simple_header_row}:
+            continue
+        start_column = 5 if row_number < simple_header_row else 3
+        for column_number in range(start_column, ws_mw_summary.max_column + 1):
+            ws_mw_summary.cell(row=row_number, column=column_number).number_format = "0.000"
+    for column_letter, width in {"A": 14, "B": 30, "C": 18, "D": 18}.items():
+        ws_mw_summary.column_dimensions[column_letter].width = width
+    for column_number in range(5, ws_mw_summary.max_column + 1):
+        column_letter = ws_mw_summary.cell(row=2, column=column_number).column_letter
+        ws_mw_summary.column_dimensions[column_letter].width = 13
 
     wb.save(stock_wb_path)
     wb.close()
@@ -1657,7 +1748,7 @@ def run(
         encoding="utf-8",
     )
 
-    print(f"Done: wrote {stock_path} -> sheets {', '.join(OUTPUT_SHEET_NAMES)}")
+    print(f"Done: wrote {stock_path} -> sheets {', '.join(CURRENT_OUTPUT_SHEET_NAMES)}")
     print(f"Inventory grouped rows: {len(inventory_rows)}")
     print(f"SKU mapping sheet: {resolved_sku_sheet}")
     if daily_supply_plan_path:
@@ -1677,7 +1768,7 @@ def run(
     log_lines: list[str] = [
         f"Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"Output workbook: {stock_path}",
-        f"Output sheets: {', '.join(OUTPUT_SHEET_NAMES)}",
+        f"Output sheets: {', '.join(CURRENT_OUTPUT_SHEET_NAMES)}",
         f"Inventory grouped rows: {len(inventory_rows)}",
         f"SKU mapping sheet: {resolved_sku_sheet}",
         f"Rows in stock sheet: {run_summary['total_rows']}",

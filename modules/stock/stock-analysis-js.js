@@ -10,6 +10,7 @@ const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
 const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `${country}_PV`), "ESS+HP Stock"];
 const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
 const MW_SHEET_NAME = "MW";
+const MW_SUMMARY_SHEET_NAME = "MW Summary";
 const EXCLUDED_ESS_HP_FAMILIES = new Set(["AC CHARGER", "CELLS", "MARKETING"]);
 const ALLOCATION_EXPORT_COLUMNS = [
   "Category", "Month", "SO Create Date", "CRD", "Customer Level 6 Name", "Sub Type", "SO No.", "SO Line",
@@ -869,6 +870,130 @@ function writeMwWorksheet(workbook, records, dateKeys) {
       ...monthOrder.map((period) => Number((summary.Monthly.get(period) || 0).toFixed(3))),
     ]);
   }
+  writeMwSummaryWorksheet(workbook, grouped, monthOrder);
+  return ws;
+}
+
+function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
+  const old = workbook.getWorksheet(MW_SUMMARY_SHEET_NAME);
+  if (old) workbook.removeWorksheet(old.id);
+
+  const detailGroups = new Map();
+  const simpleGroups = new Map();
+  const addSummary = (target, key, fields, source) => {
+    if (!target.has(key)) {
+      target.set(key, { ...fields, StockMW: 0, TotalMW: 0, Monthly: new Map() });
+    }
+    const item = target.get(key);
+    item.StockMW += safeFloat(source.StockMW);
+    item.TotalMW += safeFloat(source.StockMW)
+      + [...source.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
+    for (const month of monthOrder) {
+      item.Monthly.set(month, (item.Monthly.get(month) || 0) + safeFloat(source.Monthly.get(month)));
+    }
+  };
+
+  for (const summary of mwGroups.values()) {
+    if (normalizeText(summary.Brand).toUpperCase() !== "TCL") continue;
+    const totalMw = safeFloat(summary.StockMW)
+      + [...summary.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
+    if (Number(totalMw.toFixed(3)) === 0) continue;
+    const detailFields = {
+      WH: summary.WH,
+      Model: summary.Model,
+      Connector: summary.Connector,
+      CableLength: summary.CableLength,
+    };
+    addSummary(
+      detailGroups,
+      [detailFields.WH, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
+      detailFields,
+      summary,
+    );
+    const simpleFields = { WH: summary.WH, Model: summary.Model };
+    addSummary(
+      simpleGroups,
+      [simpleFields.WH, simpleFields.Model].map(normalizeText).join("\u0000"),
+      simpleFields,
+      summary,
+    );
+  }
+
+  const ws = workbook.addWorksheet(MW_SUMMARY_SHEET_NAME);
+  const detailHeaders = ["WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
+  const simpleHeaders = ["WH", "Model", "Stock MW", ...monthOrder, "Total MW"];
+  const sortByFields = (fields) => (a, b) => fields
+    .map((field) => normalizeText(a[field]).localeCompare(normalizeText(b[field])))
+    .find((value) => value !== 0) || 0;
+  const numericValues = (item) => [
+    Number(item.StockMW.toFixed(3)),
+    ...monthOrder.map((month) => Number((item.Monthly.get(month) || 0).toFixed(3))),
+    Number(item.TotalMW.toFixed(3)),
+  ];
+
+  ws.addRow(["TCL MW Detail"]);
+  const detailHeaderRow = ws.addRow(detailHeaders);
+  for (const item of [...detailGroups.values()].sort(sortByFields(["WH", "Model", "Connector", "CableLength"]))) {
+    ws.addRow([item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
+  }
+
+  ws.addRow([]);
+  ws.addRow(["TCL MW by Warehouse and Model"]);
+  const simpleHeaderRow = ws.addRow(simpleHeaders);
+  const subtotalRows = [];
+  const byWarehouse = new Map();
+  for (const item of [...simpleGroups.values()].sort(sortByFields(["WH", "Model"]))) {
+    if (!byWarehouse.has(item.WH)) byWarehouse.set(item.WH, []);
+    byWarehouse.get(item.WH).push(item);
+  }
+  for (const [wh, items] of byWarehouse) {
+    const subtotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
+    for (const item of items) {
+      ws.addRow([item.WH, item.Model, ...numericValues(item)]);
+      subtotal.StockMW += item.StockMW;
+      subtotal.TotalMW += item.TotalMW;
+      for (const month of monthOrder) {
+        subtotal.Monthly.set(month, (subtotal.Monthly.get(month) || 0) + safeFloat(item.Monthly.get(month)));
+      }
+    }
+    subtotalRows.push(ws.addRow([`${wh} Total`, "", ...numericValues(subtotal)]));
+  }
+
+  const styleHeader = (row) => {
+    row.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+      cell.font = { bold: true, color: { argb: "FF000000" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = { bottom: { style: "thin", color: { argb: "FF5B9BD5" } } };
+    });
+  };
+  styleHeader(detailHeaderRow);
+  styleHeader(simpleHeaderRow);
+  for (const rowNumber of [1, simpleHeaderRow.number - 1]) {
+    const cell = ws.getCell(rowNumber, 1);
+    cell.font = { bold: true, size: 13, color: { argb: "FF1F4E78" } };
+  }
+  for (const row of subtotalRows) {
+    row.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF2F8" } };
+      cell.border = { top: { style: "thin", color: { argb: "FF5B9BD5" } } };
+    });
+  }
+  for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
+    if (rowNumber === simpleHeaderRow.number || rowNumber === simpleHeaderRow.number - 1) continue;
+    const row = ws.getRow(rowNumber);
+    const startColumn = rowNumber < simpleHeaderRow.number ? 5 : 3;
+    for (let column = startColumn; column <= row.cellCount; column += 1) {
+      row.getCell(column).numFmt = "0.000";
+    }
+  }
+  ws.columns.forEach((column, index) => {
+    if (index === 0) column.width = 14;
+    else if (index === 1) column.width = 30;
+    else if (index === 2 || index === 3) column.width = 18;
+    else column.width = 13;
+  });
   return ws;
 }
 
@@ -1073,7 +1198,7 @@ export async function buildStockOutputJs({
 
   for (const obsoleteName of [
     "stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES,
-    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), MW_SHEET_NAME,
+    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), MW_SHEET_NAME, MW_SUMMARY_SHEET_NAME,
   ]) {
     const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);

@@ -1,0 +1,27 @@
+Run time: 2026-11-21 13:57:04
+Output workbook: outputs\mw-summary-20261121\stock_with_mw_summary.xlsx
+Output sheets: NL_PV, FR_PV, UK_PV, ES_PV, IT_PV, ESS+HP Stock, MW, MW Summary
+Inventory grouped rows: 714
+SKU mapping sheet: SKU
+Rows in stock sheet: 656
+Rows marked (SKU unmatched): 15
+Transit source (DailySupplyPlan): templates\daily_supply_plan.xlsx
+Transit source (ODP PV/ESS SUPPLY DATA): templates\odp.xlsx
+Order source (To be allocated): templates\orderfile_base.xlsx
+Transit date columns: 2026.11.21 ~ 2027.5.21
+Marked row samples (max 20):
+  1. SKU=GF0700000118, WH=FR, Reason=SKU not matched
+  2. SKU=GF0700000920, WH=FR, Reason=SKU not matched
+  3. SKU=GF0700000931, WH=FR, Reason=SKU not matched
+  4. SKU=GF0700000941, WH=FR, Reason=SKU not matched
+  5. SKU=GF0700000944, WH=FR, Reason=SKU not matched
+  6. SKU=GF0700001604, WH=FR, Reason=SKU not matched
+  7. SKU=GF0700001611, WH=FR, Reason=SKU not matched
+  8. SKU=GF0700001726, WH=FR, Reason=SKU not matched
+  9. SKU=GF0700001732, WH=FR, Reason=SKU not matched
+  10. SKU=GF0700002426, WH=CN, Reason=SKU not matched
+  11. SKU=GF0700002427, WH=CN, Reason=SKU not matched
+  12. SKU=GF0700002428, WH=CN, Reason=SKU not matched
+  13. SKU=GF0700002429, WH=CN, Reason=SKU not matched
+  14. SKU=GF0700002432, WH=CN, Reason=SKU not matched
+  15. SKU=GF0700002433, WH=CN, Reason=SKU not matched

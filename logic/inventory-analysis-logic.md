@@ -228,7 +228,23 @@ Total MW = Stock MW + 全部 DSP 到货 MW
 
 每日 DSP 到货先保留日期列，再按 ISO 周和月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。`Total MW` 按输出精度保留三位小数后为 0 的 `WH + SKU` 行不输出；此前这类行可能因仅有待分配或 ODP 活动而被建立，但库存 Excel 的 MW 口径只使用 Inventory 和 DSP。
 
-## 10. 网页可视化
+## 10. MW Summary 汇总 Sheet
+
+`MW Summary` 基于 `MW` Sheet 的同一组汇总数据生成，仅保留 `Brand = TCL`，且月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。上半部分按 `WH + Model + Connector + Cable Length` 汇总：
+
+```text
+WH | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
+```
+
+下半部分按 `WH + Model` 汇总：
+
+```text
+WH | Model | Stock MW | 每月到货 MW | Total MW
+```
+
+简表在每个仓库明细后追加一行仓库小计。两张表中的 `Total MW` 均等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
+
+## 11. 网页可视化
 
 网页数据同时保留 Inventory、DSP、ODP 三种状态：
 
@@ -252,6 +268,6 @@ Available Qty = In-stock + 日期范围内在途 - To be allocated
 
 总库存口径下仍不扣除待分配。支持 Daily、Weekly、Monthly 三种粒度，以及总计、按产品拆分、按仓库拆分三种曲线模式。ODP、MIXED 来源线继续保留。
 
-## 11. 双引擎
+## 12. 双引擎
 
 JavaScript 引擎负责默认处理并直接将内存数据交给网页；Python Legacy 引擎生成相同的库存 Sheet，并通过可视化旁路数据恢复 Size、ODP 和来源明细，避免把 Size 或 ODP 数量写入库存 Sheet。
