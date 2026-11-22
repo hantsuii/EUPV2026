@@ -46,7 +46,9 @@ Legacy Mapping Product 字段映射：
 | Bin | Bins |
 | MOQ | Container Loading |
 
-如果使用 Legacy Mapping Product 匹配，Connector 和 Cable Length 均为空。如果两个主数据表都匹配不到，记录进入 `Unmatched SKU`，不进入正常库存 Sheet 和网页可视化。
+如果使用 Legacy Mapping Product 匹配，Connector 和 Cable Length 均为空。如果两个主数据表都匹配不到，记录进入 `Unmatched SKU`，不进入正常库存 Sheet 和网页可视化。模板 `Remove-list` 中的 SKU 同样进入 `Unmatched SKU`，字段标记为 `Remove-list`，并从国家库存、ESS/HP、MW、品牌 MW 和网页数据中排除。
+
+Brand 不区分大小写；`SunPower`、`SUNPOWER` 等写法统一输出为 `SunPower`。
 
 网页 Product 显示名称为：
 
@@ -132,7 +134,11 @@ Family 为 `AC Charger`、`Cells`、`Marketing` 的数据既不导出到库存�
 
 Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`，并排除 `Sub Type = Offshore`。
 
-`To be allocated` Sheet 只输出：`Category`、`Month`、`SO Create Date`、`CRD`、`Customer Level 6 Name`、`Sub Type`、`SO No.`、`SO Line`、`Brand`、`Material`、`Model`、`Ordered Qty`、`Total KW`、`Warehouse Name`。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；遇到未配置的新仓库名称时停止生成并报告该名称。内部仍按 `SKU + WH` 汇总 `Ordered Qty`，数量为 0 的订单不输出。
+`To be allocated` Sheet 只输出：`Category`、`Month`、`SO Create Date`、`CRD`、`Customer Level 6 Name`、`Sub Type`、`SO No.`、`SO Line`、`Brand`、`Material`、`Model`、`Ordered Qty`、`Total KW`、`Warehouse Name`。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；遇到未配置的新仓库名称时停止生成并报告该名称。数量为 0 的订单不输出。
+
+库存扣减只处理 `CRD <= 今天 + 3 个自然月` 的订单，包括 CRD 已逾期但仍为 To be allocated 的订单。只有相同 `SKU + WH` 的 `Inventory Stock + DSP Available` 大于 0，并且该 SKU 会进入对应国家 PV 或 ESS+HP Sheet 时才参与扣减。扣减按订单 CRD 从早到晚执行：先减 Inventory Stock，不足部分再按 DSP 到货日期从近到远扣减；最多扣到可用数量为 0，不产生负库存。
+
+`Allocation Deduction` Sheet 保留原订单字段，并增加 `WH`、`Stock Deducted`、`Transit Deducted`、`Deducted Qty`、`Remaining Qty` 和 `Deduction Detail`。没有当前库存的 SKU 不进入该 Sheet；有当前库存但库存和 DSP 合计不足时，未扣完数量写入 `Remaining Qty`。
 
 ## 7. 活动 SKU 过滤
 
@@ -141,9 +147,8 @@ SKU 满足以下任一条件即保留：
 - Inventory Stock 非零。
 - DSP 或 ODP 在途非零。
 - ODP Domestic Stock 非零。
-- To be allocated 非零。
 
-四类来源完全没有数量的 SKU，不进入网页和结果文件。过滤是 SKU 级别，不是单行级别。
+三类库存来源完全没有数量的 SKU，不进入网页和结果文件。To be allocated 本身不再创建库存 SKU 行。过滤是 SKU 级别，不是单行级别。
 
 ## 8. Excel 库存结果
 
@@ -157,9 +162,12 @@ ES_PV
 IT_PV
 ESS+HP Stock
 MW
+SunPower MW
+TCL MW
 Domestic Stock PV
 Domestic Stock ESS
 To be allocated
+Allocation Deduction
 Unmatched SKU
 ```
 
@@ -208,7 +216,7 @@ PV MW = Available QTY × Bin ÷ 1,000,000
 ESS/HP MW = 空白
 ```
 
-原来的独立现货 MW 列不再输出；网页可视化仍可单独计算 StockMW。To be allocated 不从 Excel 的 `Available QTY` 或 `MW` 中扣除。
+原来的独立现货 MW 列不再输出；网页可视化仍可单独计算 StockMW。符合第 6 节条件的 To be allocated 数量会从 Excel 的 Stock、DSP 日期列、Available QTY 和 MW 中同步扣除。
 
 ## 9. MW 汇总 Sheet
 
@@ -228,21 +236,15 @@ Total MW = Stock MW + 全部 DSP 到货 MW
 
 每日 DSP 到货先保留日期列，再按 ISO 周和月份汇总。例如 2026-11-24、2026-11-25、2026-11-26 的到货，会合计到 `26-W48`，同时合计到 `2026-11`。ODP 不进入该 Sheet。`Total MW` 按输出精度保留三位小数后为 0 的 `WH + SKU` 行不输出；此前这类行可能因仅有待分配或 ODP 活动而被建立，但库存 Excel 的 MW 口径只使用 Inventory 和 DSP。
 
-## 10. MW Summary 汇总 Sheet
+## 10. 品牌 MW 汇总 Sheet
 
-`MW Summary` 基于 `MW` Sheet 的同一组汇总数据生成，仅保留 `Brand = TCL`，且月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。上半部分按 `WH + Model + Connector + Cable Length` 汇总：
+分别生成 `SunPower MW` 和 `TCL MW`，基于扣减后的 `MW` 数据生成。每个 Sheet 仅保留对应品牌，并按 `WH + Model + Connector + Cable Length` 汇总：
 
 ```text
 WH | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
 ```
 
-下半部分按 `WH + Model` 汇总：
-
-```text
-WH | Model | Stock MW | 每月到货 MW | Total MW
-```
-
-简表在每个仓库明细后追加一行仓库小计。两张表中的 `Total MW` 均等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
+月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。仓库区块按照各仓库 `Total MW` 合计从高到低排列，每个仓库明细后追加一行仓库小计。`Total MW` 等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
 
 ## 11. 网页可视化
 

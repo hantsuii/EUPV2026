@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from calendar import monthrange
 from collections import defaultdict
-from copy import copy
+from copy import copy, deepcopy
 from datetime import date, datetime, timedelta
 
 # Default: start = today, end = today + 6 months (used only if no explicit dates passed)
@@ -27,9 +28,11 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"]
 MW_SHEET_NAME = "MW"
-MW_SUMMARY_SHEET_NAME = "MW Summary"
+SUNPOWER_MW_SHEET_NAME = "SunPower MW"
+TCL_MW_SHEET_NAME = "TCL MW"
+ALLOCATION_DEDUCTION_SHEET_NAME = "Allocation Deduction"
 OUTPUT_SHEET_NAMES = [*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock", MW_SHEET_NAME]
-CURRENT_OUTPUT_SHEET_NAMES = [*OUTPUT_SHEET_NAMES, MW_SUMMARY_SHEET_NAME]
+CURRENT_OUTPUT_SHEET_NAMES = [*OUTPUT_SHEET_NAMES, SUNPOWER_MW_SHEET_NAME, TCL_MW_SHEET_NAME, ALLOCATION_DEDUCTION_SHEET_NAME]
 EXCLUDED_ESS_HP_FAMILIES = {"AC CHARGER", "CELLS", "MARKETING"}
 ALLOCATION_EXPORT_COLUMNS = [
     "Category", "Month", "SO Create Date", "CRD", "Customer Level 6 Name", "Sub Type", "SO No.", "SO Line",
@@ -47,6 +50,7 @@ SOURCE_INV_DSP = "INV_DSP"
 SOURCE_ODP = "ODP"
 SOURCE_MIXED = "MIXED"
 UNMATCHED_SKU_MARK = "SKU not matched"
+REMOVED_SKU_MARK = "Remove-list"
 DOMESTIC_WH = "CN"
 
 CELL_FILL_BY_SOURCE = {
@@ -89,6 +93,18 @@ def normalize_text(value: Any) -> str:
 
 def normalize_lower(value: Any) -> str:
     return normalize_text(value).lower()
+
+
+def canonical_brand(value: Any) -> str:
+    brand = normalize_text(value)
+    return "SunPower" if brand.upper() == "SUNPOWER" else brand
+
+
+def add_calendar_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    return date(year, month, min(value.day, monthrange(year, month)[1]))
 
 
 def normalize_sku_key(value: Any) -> str:
@@ -429,7 +445,7 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str | None = None) -> 
                 continue
             lookup[sku_key] = {
                 "Category": normalize_text(row[idx["category"]]),
-                "Brand": normalize_text(row[idx["brand"]]),
+                "Brand": canonical_brand(row[idx["brand"]]),
                 "Family": normalize_text(row[idx["level2"]]),
                 "Size": normalize_text(row[idx["level3"]]),
                 "Model": normalize_text(row[idx["product model"]]),
@@ -461,7 +477,7 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str | None = None) -> 
                 continue
             family = normalize_text(row[idx["family"]])
             size = normalize_text(row[idx["size"]]) if "size" in idx else ""
-            brand = normalize_text(row[idx["brand"]])
+            brand = canonical_brand(row[idx["brand"]])
             lookup[row_sku_key] = {
                 "Category": infer_legacy_category(family, brand),
                 "Brand": brand,
@@ -477,6 +493,20 @@ def build_sku_lookup(stock_wb_path: Path, sku_sheet_name: str | None = None) -> 
 
     wb.close()
     return lookup
+
+
+def load_removed_skus(stock_wb_path: Path) -> set[str]:
+    wb = load_workbook(stock_wb_path, data_only=True, read_only=True)
+    remove_name = next((name for name in wb.sheetnames if name.lower() == "remove-list"), None)
+    removed: set[str] = set()
+    if remove_name:
+        ws = wb[remove_name]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            key = normalize_sku_key(row[0] if row else None)
+            if key:
+                removed.add(key)
+    wb.close()
+    return removed
 
 
 def extract_transit_data(
@@ -634,6 +664,7 @@ def extract_to_be_allocated_orders(
 
     orders: list[dict[str, Any]] = []
     agg_by_sku_wh: dict[tuple[str, str], float] = defaultdict(float)
+    deduction_cutoff = add_calendar_months(date.today(), 3)
 
     max_row = ws.max_row
     for r in range(header_row + 1, max_row + 1):
@@ -649,6 +680,8 @@ def extract_to_be_allocated_orders(
         model = ws.cell(r, idx["model"] + 1).value
         warehouse_name = ws.cell(r, idx["warehouse name"] + 1).value
         wh = map_order_warehouse_name(warehouse_name) or ""
+        crd_date = parse_supply_date(crd)
+        eligible_for_deduction = crd_date is not None and crd_date <= deduction_cutoff
         if sku and qty != 0 and not wh:
             wb.close()
             raise ValueError(f"Unknown Warehouse Name in To be allocated: {normalize_text(warehouse_name) or '(blank)'}")
@@ -662,11 +695,13 @@ def extract_to_be_allocated_orders(
                 "Model": model,
                 "Warehouse Name": warehouse_name,
                 "WH": wh,
+                "Order Index": r,
+                "Eligible For Deduction": eligible_for_deduction,
                 "Raw Row": raw_row,
             }
         )
 
-        if sku and wh:
+        if sku and wh and eligible_for_deduction:
             agg_by_sku_wh[(sku, wh)] += qty
 
     wb.close()
@@ -697,7 +732,10 @@ def write_output_sheet(
     wb = load_workbook(stock_wb_path)
 
     legacy_output_names = [f"PV Stock {country}" for country in PV_STOCK_COUNTRIES]
-    for old_name in ["stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *legacy_output_names, *OUTPUT_SHEET_NAMES, MW_SUMMARY_SHEET_NAME]:
+    for old_name in [
+        "stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build", *legacy_output_names, *OUTPUT_SHEET_NAMES,
+        "MW Summary", SUNPOWER_MW_SHEET_NAME, TCL_MW_SHEET_NAME, ALLOCATION_DEDUCTION_SHEET_NAME,
+    ]:
         if old_name in wb.sheetnames:
             wb.remove(wb[old_name])
     if ALLOC_SHEET_NAME in wb.sheetnames:
@@ -1121,6 +1159,7 @@ def write_output_sheet_v2(
     stock_wb_path: Path,
     rows: list[dict[str, Any]],
     sku_lookup: dict[str, dict[str, Any]],
+    removed_skus: set[str] | None = None,
     transit_qty: dict[tuple[str, str, str, str, str, str], float] | None = None,
     transit_category: dict[tuple[str, str], str] | None = None,
     transit_source_tag: dict[tuple[str, str, str, str, str, str], str] | None = None,
@@ -1153,11 +1192,13 @@ def write_output_sheet_v2(
     allocated_headers = allocated_headers or []
     allocated_orders = allocated_orders or []
     allocated_need = allocated_need or {}
+    removed_skus = removed_skus or set()
 
     wb = load_workbook(stock_wb_path)
     old_names = {
         "stock", "PV Stock", UNMATCHED_SHEET_NAME, "_stock_build",
-        *OUTPUT_SHEET_NAMES, MW_SHEET_NAME, MW_SUMMARY_SHEET_NAME, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
+        *OUTPUT_SHEET_NAMES, MW_SHEET_NAME, "MW Summary", SUNPOWER_MW_SHEET_NAME, TCL_MW_SHEET_NAME,
+        ALLOCATION_DEDUCTION_SHEET_NAME, *[f"PV Stock {country}" for country in PV_STOCK_COUNTRIES],
         ALLOC_SHEET_NAME, TRANSIT_SOURCE_SHEET_NAME, "Domestic Stock",
         *DOMESTIC_DETAIL_SHEET_NAMES,
     }
@@ -1165,22 +1206,25 @@ def write_output_sheet_v2(
         if name in old_names:
             wb.remove(wb[name])
 
-    def unmatched_mapping() -> dict[str, Any]:
+    def unmatched_mapping(reason: str = UNMATCHED_SKU_MARK) -> dict[str, Any]:
         return {
-            "Category": UNMATCHED_SKU_MARK,
-            "Brand": UNMATCHED_SKU_MARK,
-            "Family": UNMATCHED_SKU_MARK,
-            "Size": UNMATCHED_SKU_MARK,
-            "Model": UNMATCHED_SKU_MARK,
-            "Connector": UNMATCHED_SKU_MARK,
-            "CableLength": UNMATCHED_SKU_MARK,
+            "Category": reason,
+            "Brand": reason,
+            "Family": reason,
+            "Size": reason,
+            "Model": reason,
+            "Connector": reason,
+            "CableLength": reason,
             "Bin": 0,
             "MOQ": 0,
         }
 
-    def resolve(sku: Any) -> tuple[dict[str, Any], bool]:
-        mapped = sku_lookup.get(normalize_sku_key(sku))
-        return (mapped, False) if mapped else (unmatched_mapping(), True)
+    def resolve(sku: Any) -> tuple[dict[str, Any], bool, str]:
+        sku_key = normalize_sku_key(sku)
+        if sku_key in removed_skus:
+            return unmatched_mapping(REMOVED_SKU_MARK), True, REMOVED_SKU_MARK
+        mapped = sku_lookup.get(sku_key)
+        return (mapped, False, "") if mapped else (unmatched_mapping(), True, UNMATCHED_SKU_MARK)
 
     def make_record(wh: str, sku: str, mapped: dict[str, Any], stock: float = 0.0,
                     virtual_warehouse: str = "", category: str = "", model: str = "") -> dict[str, Any]:
@@ -1210,15 +1254,12 @@ def write_output_sheet_v2(
     row_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     transit_rows: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     active_sku_keys: set[str] = set()
-    marked_rows: set[tuple[str, str]] = set()
+    marked_rows: set[tuple[str, str, str]] = set()
 
     for item in rows:
         if safe_float(item.get("Stock")) != 0:
             active_sku_keys.add(normalize_sku_key(item.get("SKU")))
     for key, qty in transit_qty.items():
-        if safe_float(qty) != 0:
-            active_sku_keys.add(normalize_sku_key(key[0]))
-    for key, qty in allocated_need.items():
         if safe_float(qty) != 0:
             active_sku_keys.add(normalize_sku_key(key[0]))
     for sku, qty in domestic_qty.items():
@@ -1234,9 +1275,9 @@ def write_output_sheet_v2(
     for item in rows:
         if normalize_sku_key(item.get("SKU")) not in active_sku_keys:
             continue
-        mapped, unmatched = resolve(item.get("SKU"))
+        mapped, unmatched, reason = resolve(item.get("SKU"))
         if unmatched:
-            marked_rows.add((normalize_text(item.get("SKU")), normalize_text(item.get("WH"))))
+            marked_rows.add((normalize_text(item.get("SKU")), normalize_text(item.get("WH")), reason))
         add_record(make_record(
             normalize_text(item.get("WH")), normalize_text(item.get("SKU")), mapped,
             stock=safe_float(item.get("Stock")),
@@ -1245,23 +1286,15 @@ def write_output_sheet_v2(
             model=normalize_text(item.get("ProductModel")),
         ))
 
-    for (sku, wh), qty in sorted(allocated_need.items()):
-        if not sku or not wh or safe_float(qty) == 0 or (sku, wh) in row_by_key:
-            continue
-        mapped, unmatched = resolve(sku)
-        if unmatched:
-            marked_rows.add((normalize_text(sku), normalize_text(wh)))
-        add_record(make_record(normalize_text(wh), normalize_text(sku), mapped))
-
     for sku, qty in sorted(domestic_qty.items()):
         if not sku or safe_float(qty) == 0:
             continue
         key = (normalize_text(sku), DOMESTIC_WH)
         record = row_by_key.get(key)
         if record is None:
-            mapped, unmatched = resolve(sku)
+            mapped, unmatched, reason = resolve(sku)
             if unmatched:
-                marked_rows.add((normalize_text(sku), DOMESTIC_WH))
+                marked_rows.add((normalize_text(sku), DOMESTIC_WH, reason))
             record = add_record(make_record(DOMESTIC_WH, normalize_text(sku), mapped))
             row_by_key[key] = record
         record["DomesticStock"] += safe_float(qty)
@@ -1271,14 +1304,14 @@ def write_output_sheet_v2(
         if safe_float(qty) == 0 or normalize_sku_key(key[0]) not in active_sku_keys:
             continue
         sku, wh, virtual_warehouse, source_category, source_model, d_header = key
-        mapped, unmatched = resolve(sku)
+        mapped, unmatched, reason = resolve(sku)
         category = normalize_text(source_category) or normalize_text(mapped.get("Category"))
         model = normalize_text(source_model) or normalize_text(mapped.get("Model"))
         transit_key = (normalize_text(sku), normalize_text(wh), normalize_text(virtual_warehouse), category, model)
         record = transit_rows.get(transit_key)
         if record is None:
             if unmatched:
-                marked_rows.add((normalize_text(sku), normalize_text(wh)))
+                marked_rows.add((normalize_text(sku), normalize_text(wh), reason))
             record = make_record(normalize_text(wh), normalize_text(sku), mapped, virtual_warehouse=normalize_text(virtual_warehouse), category=category, model=model)
             records.append(record)
             transit_rows[transit_key] = record
@@ -1294,8 +1327,8 @@ def write_output_sheet_v2(
             record["ToBeAllocated"] = safe_float(allocated_need.get((record["SKU"], record["WH"]), 0))
 
     def is_unmatched(record: dict[str, Any]) -> bool:
-        marker = UNMATCHED_SKU_MARK.lower()
-        return any(normalize_lower(record.get(field)) == marker for field in ("Category", "Brand", "Family", "Size", "Model"))
+        markers = {UNMATCHED_SKU_MARK.lower(), REMOVED_SKU_MARK.lower()}
+        return any(normalize_lower(record.get(field)) in markers for field in ("Category", "Brand", "Family", "Size", "Model"))
 
     def aggregate_pv(source_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = {}
@@ -1325,8 +1358,91 @@ def write_output_sheet_v2(
             target["VirtualWarehouse"] = " / ".join(sorted(target["Locations"]))
         return list(grouped.values())
 
+    visualization_records = deepcopy(records)
     transit_dates = iter_dates(start_date, end_date)
     transit_headers = [date_header(d) for d in transit_dates]
+
+    def is_export_inventory_record(record: dict[str, Any]) -> bool:
+        if is_unmatched(record) or is_excluded_inventory_family(record.get("Family")):
+            return False
+        wh = normalize_text(record.get("WH")).upper()
+        if normalize_upper_category(record.get("Category")).startswith("PV"):
+            return wh in PV_STOCK_COUNTRIES
+        return wh != DOMESTIC_WH and not is_excluded_ess_hp_family(record.get("Family"))
+
+    records_by_key: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    initial_available_by_key: dict[tuple[str, str], float] = defaultdict(float)
+    for record in records:
+        if not is_export_inventory_record(record):
+            continue
+        key = (normalize_sku_key(record.get("SKU")), normalize_text(record.get("WH")).upper())
+        records_by_key[key].append(record)
+        initial_available_by_key[key] += safe_float(record.get("Stock")) + sum(
+            safe_float(record.get("StockTransit", {}).get(d_header)) for d_header in transit_headers
+        )
+
+    eligible_orders = sorted(
+        [order for order in allocated_orders if order.get("Eligible For Deduction") and safe_float(order.get("Ordered Qty")) > 0],
+        key=lambda order: (
+            parse_supply_date(order.get("CRD")) or date.max,
+            int(safe_float(order.get("Order Index"))),
+        ),
+    )
+    allocation_deductions: list[dict[str, Any]] = []
+    for order in eligible_orders:
+        key = (normalize_sku_key(order.get("SKU")), normalize_text(order.get("WH")).upper())
+        if initial_available_by_key.get(key, 0.0) <= 0:
+            continue
+        candidates = records_by_key.get(key, [])
+        remaining = safe_float(order.get("Ordered Qty"))
+        stock_deducted = 0.0
+        transit_deducted = 0.0
+        deduction_detail: list[str] = []
+
+        for record in candidates:
+            if remaining <= 0:
+                break
+            available = max(0.0, safe_float(record.get("Stock")))
+            deducted = min(available, remaining)
+            if deducted <= 0:
+                continue
+            record["Stock"] = safe_float(record.get("Stock")) - deducted
+            record["StatusQuantity"]["Inventory"] = max(0.0, safe_float(record["StatusQuantity"].get("Inventory")) - deducted)
+            stock_deducted += deducted
+            remaining -= deducted
+        if stock_deducted > 0:
+            deduction_detail.append(f"Stock: {round(stock_deducted, 3)}")
+
+        for d_header in transit_headers:
+            if remaining <= 0:
+                break
+            date_deducted = 0.0
+            for record in candidates:
+                if remaining <= 0:
+                    break
+                available = max(0.0, safe_float(record.get("StockTransit", {}).get(d_header)))
+                deducted = min(available, remaining)
+                if deducted <= 0:
+                    continue
+                record["StockTransit"][d_header] = safe_float(record["StockTransit"].get(d_header)) - deducted
+                record["StatusQuantity"]["DailySupplyPlan"] = max(
+                    0.0, safe_float(record["StatusQuantity"].get("DailySupplyPlan")) - deducted
+                )
+                date_deducted += deducted
+                transit_deducted += deducted
+                remaining -= deducted
+            if date_deducted > 0:
+                deduction_detail.append(f"{d_header}: {round(date_deducted, 3)}")
+
+        allocation_deductions.append({
+            **order,
+            "Stock Deducted": round(stock_deducted, 3),
+            "Transit Deducted": round(transit_deducted, 3),
+            "Deducted Qty": round(stock_deducted + transit_deducted, 3),
+            "Remaining Qty": round(max(0.0, remaining), 3),
+            "Deduction Detail": " / ".join(deduction_detail),
+        })
+
     base_headers = ["WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock"]
     headers = base_headers + transit_headers
 
@@ -1452,14 +1568,15 @@ def write_output_sheet_v2(
             *[round(summary["Monthly"].get(period, 0.0), 3) for period in month_order],
         ])
 
-    def aggregate_mw_summary(key_fields: tuple[str, ...]) -> list[dict[str, Any]]:
+    def aggregate_mw_summary(brand_name: str) -> list[dict[str, Any]]:
         grouped_summary: dict[tuple[str, ...], dict[str, Any]] = {}
         for source in mw_groups.values():
-            if normalize_text(source.get("Brand")).upper() != "TCL":
+            if normalize_text(source.get("Brand")).upper() != brand_name.upper():
                 continue
             total_mw = safe_float(source.get("StockMW")) + sum(safe_float(value) for value in source["Daily"].values())
             if round(total_mw, 3) == 0:
                 continue
+            key_fields = ("WH", "Model", "Connector", "CableLength")
             key = tuple(normalize_text(source.get(field)) for field in key_fields)
             if key not in grouped_summary:
                 grouped_summary[key] = {
@@ -1475,43 +1592,38 @@ def write_output_sheet_v2(
                 target["Monthly"][month] += safe_float(source["Monthly"].get(month))
         return sorted(grouped_summary.values(), key=lambda item: tuple(normalize_text(item.get(field)) for field in key_fields))
 
-    detail_summary = aggregate_mw_summary(("WH", "Model", "Connector", "CableLength"))
-    simple_summary = aggregate_mw_summary(("WH", "Model"))
-    ws_mw_summary = wb.create_sheet(MW_SUMMARY_SHEET_NAME)
-    ws_mw_summary.append(["TCL MW Detail"])
-    ws_mw_summary.append(["WH", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
-    for item in detail_summary:
-        ws_mw_summary.append([
-            item["WH"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
-            *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
-        ])
-
-    ws_mw_summary.append([])
-    ws_mw_summary.append(["TCL MW by Warehouse and Model"])
-    simple_header_row = ws_mw_summary.max_row + 1
-    ws_mw_summary.append(["WH", "Model", "Stock MW", *month_order, "Total MW"])
-    subtotal_rows: list[int] = []
-    by_warehouse: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for item in simple_summary:
-        by_warehouse[normalize_text(item["WH"])].append(item)
-    for warehouse, items in by_warehouse.items():
-        subtotal_stock = 0.0
-        subtotal_total = 0.0
-        subtotal_monthly: dict[str, float] = defaultdict(float)
-        for item in items:
-            ws_mw_summary.append([
-                item["WH"], item["Model"], round(item["StockMW"], 3),
-                *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
+    mw_summary_layouts: list[tuple[Any, list[int]]] = []
+    for brand_name, sheet_name in (("SunPower", SUNPOWER_MW_SHEET_NAME), ("TCL", TCL_MW_SHEET_NAME)):
+        ws_brand = wb.create_sheet(sheet_name)
+        ws_brand.append([f"{brand_name} MW Detail"])
+        ws_brand.append(["WH", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
+        subtotal_rows: list[int] = []
+        by_warehouse: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in aggregate_mw_summary(brand_name):
+            by_warehouse[normalize_text(item["WH"])].append(item)
+        sorted_warehouses = sorted(
+            by_warehouse.items(),
+            key=lambda pair: (-sum(safe_float(item.get("TotalMW")) for item in pair[1]), pair[0]),
+        )
+        for warehouse, items in sorted_warehouses:
+            subtotal_stock = 0.0
+            subtotal_total = 0.0
+            subtotal_monthly: dict[str, float] = defaultdict(float)
+            for item in items:
+                ws_brand.append([
+                    item["WH"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
+                    *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
+                ])
+                subtotal_stock += round(item["StockMW"], 3)
+                subtotal_total += round(item["TotalMW"], 3)
+                for month in month_order:
+                    subtotal_monthly[month] += round(safe_float(item["Monthly"].get(month)), 3)
+            ws_brand.append([
+                f"{warehouse} Total", "", "", "", round(subtotal_stock, 3),
+                *[round(subtotal_monthly.get(month, 0.0), 3) for month in month_order], round(subtotal_total, 3),
             ])
-            subtotal_stock += item["StockMW"]
-            subtotal_total += item["TotalMW"]
-            for month in month_order:
-                subtotal_monthly[month] += safe_float(item["Monthly"].get(month))
-        ws_mw_summary.append([
-            f"{warehouse} Total", "", round(subtotal_stock, 3),
-            *[round(subtotal_monthly.get(month, 0.0), 3) for month in month_order], round(subtotal_total, 3),
-        ])
-        subtotal_rows.append(ws_mw_summary.max_row)
+            subtotal_rows.append(ws_brand.max_row)
+        mw_summary_layouts.append((ws_brand, subtotal_rows))
 
     write_stock_sheet(UNMATCHED_SHEET_NAME, unmatched, include_location=False)
 
@@ -1522,12 +1634,22 @@ def write_output_sheet_v2(
             continue
         ws_alloc.append(order.get("Raw Row", []))
 
+    ws_deduction = wb.create_sheet(ALLOCATION_DEDUCTION_SHEET_NAME)
+    ws_deduction.append([
+        *ALLOCATION_EXPORT_COLUMNS, "WH", "Stock Deducted", "Transit Deducted", "Deducted Qty", "Remaining Qty", "Deduction Detail",
+    ])
+    for item in allocation_deductions:
+        ws_deduction.append([
+            *item.get("Raw Row", []), item.get("WH"), item.get("Stock Deducted"), item.get("Transit Deducted"),
+            item.get("Deducted Qty"), item.get("Remaining Qty"), item.get("Deduction Detail"),
+        ])
+
     ws_source = wb.create_sheet(TRANSIT_SOURCE_SHEET_NAME)
     ws_source.append(["SKU", "WH", "Category", "Model", "Date", "Source", "Daily Supply Plan Qty", "ODP Qty"])
     source_keys = set(transit_source_tag) | set(daily_transit_qty) | set(odp_transit_qty)
     for key in sorted(source_keys):
         sku, wh, _virtual_warehouse, category, model, d_header = key
-        mapped, _ = resolve(sku)
+        mapped, _, _ = resolve(sku)
         ws_source.append([
             sku, wh, category or mapped.get("Category", ""), model or mapped.get("Model", ""), d_header,
             normalize_source_tag(transit_source_tag.get(key, SOURCE_INV_DSP)),
@@ -1539,7 +1661,7 @@ def write_output_sheet_v2(
         ws_domestic.append(["SKU", "Model", "Factory", "Quantity", "MW"])
 
     for name in list(wb.sheetnames):
-        if name.lower() in {"legacy mapping product", "sku", "sku mapping"}:
+        if name.lower() in {"legacy mapping product", "sku", "sku mapping", "remove-list"}:
             wb.remove(wb[name])
 
     normal_style = wb._named_styles["Normal"]._style if "Normal" in wb._named_styles else None
@@ -1556,30 +1678,38 @@ def write_output_sheet_v2(
     header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
     subtotal_fill = PatternFill(fill_type="solid", fgColor="EAF2F8")
     blue_line = Side(style="thin", color="5B9BD5")
-    for row_number in (2, simple_header_row):
-        for cell in ws_mw_summary[row_number]:
+    for ws_brand, subtotal_rows in mw_summary_layouts:
+        for cell in ws_brand[2]:
             cell.fill = header_fill
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.border = Border(bottom=blue_line)
-    for row_number in (1, simple_header_row - 1):
-        ws_mw_summary.cell(row=row_number, column=1).font = Font(bold=True, size=13, color="1F4E78")
-    for row_number in subtotal_rows:
-        for cell in ws_mw_summary[row_number]:
-            cell.fill = subtotal_fill
-            cell.font = Font(bold=True)
-            cell.border = Border(top=blue_line)
-    for row_number in range(3, ws_mw_summary.max_row + 1):
-        if row_number in {simple_header_row - 1, simple_header_row}:
-            continue
-        start_column = 5 if row_number < simple_header_row else 3
-        for column_number in range(start_column, ws_mw_summary.max_column + 1):
-            ws_mw_summary.cell(row=row_number, column=column_number).number_format = "0.000"
-    for column_letter, width in {"A": 14, "B": 30, "C": 18, "D": 18}.items():
-        ws_mw_summary.column_dimensions[column_letter].width = width
-    for column_number in range(5, ws_mw_summary.max_column + 1):
-        column_letter = ws_mw_summary.cell(row=2, column=column_number).column_letter
-        ws_mw_summary.column_dimensions[column_letter].width = 13
+        ws_brand.cell(row=1, column=1).font = Font(bold=True, size=13, color="1F4E78")
+        for row_number in subtotal_rows:
+            for cell in ws_brand[row_number]:
+                cell.fill = subtotal_fill
+                cell.font = Font(bold=True)
+                cell.border = Border(top=blue_line)
+        for row_number in range(3, ws_brand.max_row + 1):
+            for column_number in range(5, ws_brand.max_column + 1):
+                ws_brand.cell(row=row_number, column=column_number).number_format = "0.000"
+        for column_letter, width in {"A": 14, "B": 30, "C": 18, "D": 18}.items():
+            ws_brand.column_dimensions[column_letter].width = width
+        for column_number in range(5, ws_brand.max_column + 1):
+            column_letter = ws_brand.cell(row=2, column=column_number).column_letter
+            ws_brand.column_dimensions[column_letter].width = 13
+        ws_brand.auto_filter.ref = f"A2:{ws_brand.cell(row=ws_brand.max_row, column=ws_brand.max_column).coordinate}"
+        ws_brand.freeze_panes = "A3"
+
+    for cell in ws_deduction[1]:
+        cell.fill = header_fill
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws_deduction.auto_filter.ref = f"A1:{ws_deduction.cell(row=ws_deduction.max_row, column=ws_deduction.max_column).coordinate}"
+    ws_deduction.freeze_panes = "A2"
+    for column_number in range(1, ws_deduction.max_column + 1):
+        column_letter = ws_deduction.cell(row=1, column=column_number).column_letter
+        ws_deduction.column_dimensions[column_letter].width = 36 if column_number == ws_deduction.max_column else 16
 
     wb.save(stock_wb_path)
     wb.close()
@@ -1587,7 +1717,7 @@ def write_output_sheet_v2(
     visualization_rows = []
     date_source_tags: dict[str, str] = {}
     key_meta = {}
-    for record in records:
+    for record in visualization_records:
         if is_unmatched(record):
             continue
         accessory = " + ".join(normalize_text(record.get(field)) for field in ("Connector", "CableLength") if normalize_text(record.get(field)))
@@ -1656,7 +1786,7 @@ def write_output_sheet_v2(
     return {
         "total_rows": len(records),
         "marked_unmatched_sku_rows": len(marked_rows),
-        "marked_row_samples": [{"SKU": sku, "WH": wh, "Reason": UNMATCHED_SKU_MARK} for sku, wh in sorted(marked_rows)[:20]],
+        "marked_row_samples": [{"SKU": sku, "WH": wh, "Reason": reason} for sku, wh, reason in sorted(marked_rows)[:20]],
         "visualization": visualization,
     }
 
@@ -1684,6 +1814,7 @@ def run(
     wb_probe.close()
 
     sku_lookup = build_sku_lookup(stock_path, resolved_sku_sheet)
+    removed_skus = load_removed_skus(stock_path)
 
     transit_qty: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     transit_category: dict[tuple[str, str], str] = {}
@@ -1727,6 +1858,7 @@ def run(
         stock_path,
         inventory_rows,
         sku_lookup,
+        removed_skus=removed_skus,
         transit_qty=transit_qty,
         transit_category=transit_category,
         transit_source_tag=transit_source_tag,

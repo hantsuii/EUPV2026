@@ -2,15 +2,18 @@ const SOURCE_INV_DSP = "INV_DSP";
 const SOURCE_ODP = "ODP";
 const SOURCE_MIXED = "MIXED";
 const UNMATCHED_SKU_MARK = "SKU not matched";
+const REMOVED_SKU_MARK = "Remove-list";
 const DOMESTIC_WH = "CN";
 const ALLOC_SHEET_NAME = "To be allocated";
+const ALLOCATION_DEDUCTION_SHEET_NAME = "Allocation Deduction";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
 const UNMATCHED_SHEET_NAME = "Unmatched SKU";
 const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
 const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `${country}_PV`), "ESS+HP Stock"];
 const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
 const MW_SHEET_NAME = "MW";
-const MW_SUMMARY_SHEET_NAME = "MW Summary";
+const SUNPOWER_MW_SHEET_NAME = "SunPower MW";
+const TCL_MW_SHEET_NAME = "TCL MW";
 const EXCLUDED_ESS_HP_FAMILIES = new Set(["AC CHARGER", "CELLS", "MARKETING"]);
 const ALLOCATION_EXPORT_COLUMNS = [
   "Category", "Month", "SO Create Date", "CRD", "Customer Level 6 Name", "Sub Type", "SO No.", "SO Line",
@@ -258,6 +261,21 @@ function compareDateParts(a, b) {
   );
 }
 
+function addCalendarMonths(parts, months) {
+  const first = new Date(parts.year, parts.month - 1 + months, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return {
+    year: first.getFullYear(),
+    month: first.getMonth() + 1,
+    day: Math.min(parts.day, lastDay),
+  };
+}
+
+function canonicalBrand(value) {
+  const brand = normalizeText(value);
+  return brand.toUpperCase() === "SUNPOWER" ? "SunPower" : brand;
+}
+
 function iterDateKeys(startValue, endValue) {
   const start = parseDateParts(startValue);
   const end = parseDateParts(endValue);
@@ -312,6 +330,16 @@ function buildSkuLookup(workbook) {
   const legacyWorksheet = getWorksheetByNameInsensitive(workbook, "Legacy Mapping Product");
   if (!skuWorksheet && !legacyWorksheet) throw localizedError("skuSheetMissing", { name: "Legacy Mapping Product / SKU" });
   const sheetName = [skuWorksheet?.name, legacyWorksheet?.name].filter(Boolean).join(", ");
+  const removedSkus = new Set();
+  const removeWorksheet = getWorksheetByNameInsensitive(workbook, "Remove-list");
+  if (removeWorksheet) {
+    const { rows, index } = readSheetRows(removeWorksheet);
+    const skuIndex = index.sku == null ? 0 : index.sku;
+    for (const row of rows) {
+      const key = normalizeSkuKey(row[skuIndex]);
+      if (key) removedSkus.add(key);
+    }
+  }
 
   const lookup = new Map();
   if (skuWorksheet) {
@@ -327,7 +355,7 @@ function buildSkuLookup(workbook) {
       if (!key || lookup.has(key)) continue;
       lookup.set(key, {
         Category: normalizeText(row[index.category]),
-        Brand: normalizeText(row[index.brand]),
+        Brand: canonicalBrand(row[index.brand]),
         Family: normalizeText(row[index.level2]),
         Size: normalizeText(row[index.level3]),
         Model: normalizeText(row[index["product model"]]),
@@ -359,7 +387,7 @@ function buildSkuLookup(workbook) {
       if (lookup.has(key)) continue;
       const family = normalizeText(row[familyKey]);
       const size = sizeKey == null ? "" : normalizeText(row[sizeKey]);
-      const brand = normalizeText(row[index.brand]);
+      const brand = canonicalBrand(row[index.brand]);
       lookup.set(key, {
         Category: inferLegacyCategory(family, brand),
         Brand: brand,
@@ -374,7 +402,7 @@ function buildSkuLookup(workbook) {
       });
     }
   }
-  return { lookup, sheetName };
+  return { lookup, sheetName, removedSkus };
 }
 
 function extractInventoryRows(workbook, stockMode = "available") {
@@ -523,7 +551,10 @@ function extractAllocatedOrders(workbook) {
   const orders = [];
   const need = new Map();
   const subTypeIndex = index["sub type"];
-  for (const row of rows) {
+  const today = new Date();
+  const todayParts = { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() };
+  const cutoff = addCalendarMonths(todayParts, 3);
+  for (const [orderIndex, row] of rows.entries()) {
     if (normalizeLower(row[index["allocation status"]]) !== "to be allocated") continue;
     if (subTypeIndex != null && normalizeLower(row[subTypeIndex]) === "offshore") continue;
     const sku = normalizeText(row[index.material]);
@@ -531,6 +562,8 @@ function extractAllocatedOrders(workbook) {
     const crd = row[index.crd];
     const warehouseName = row[index["warehouse name"]];
     const wh = mapOrderWarehouseName(warehouseName) || "";
+    const crdParts = parseDateParts(crd);
+    const eligibleForDeduction = Boolean(crdParts && compareDateParts(crdParts, cutoff) <= 0);
     if (sku && qty !== 0 && !wh) {
       throw new Error(`Unknown Warehouse Name in To be allocated: ${normalizeText(warehouseName) || "(blank)"}`);
     }
@@ -541,22 +574,24 @@ function extractAllocatedOrders(workbook) {
       Model: row[index.model],
       WarehouseName: warehouseName,
       WH: wh,
+      OrderIndex: orderIndex,
+      EligibleForDeduction: eligibleForDeduction,
       RawRow: ALLOCATION_EXPORT_COLUMNS.map((column) => row[index[normalizeLower(column)]]),
     });
-    if (sku && wh) addMapNumber(need, `${sku}||${wh}`, qty);
+    if (sku && wh && eligibleForDeduction) addMapNumber(need, `${sku}||${wh}`, qty);
   }
   return { headers: ALLOCATION_EXPORT_COLUMNS, orders, need };
 }
 
-function makeUnmatchedMapping() {
+function makeUnmatchedMapping(reason = UNMATCHED_SKU_MARK) {
   return {
-    Category: UNMATCHED_SKU_MARK,
-    Brand: UNMATCHED_SKU_MARK,
-    Family: UNMATCHED_SKU_MARK,
-    Size: UNMATCHED_SKU_MARK,
-    Model: UNMATCHED_SKU_MARK,
-    Connector: UNMATCHED_SKU_MARK,
-    CableLength: UNMATCHED_SKU_MARK,
+    Category: reason,
+    Brand: reason,
+    Family: reason,
+    Size: reason,
+    Model: reason,
+    Connector: reason,
+    CableLength: reason,
     Bin: 0,
     MOQ: 0,
   };
@@ -619,8 +654,7 @@ function columnName(number) {
 }
 
 function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, keyMeta) {
-  const marker = UNMATCHED_SKU_MARK.toLowerCase();
-  if ([record.Category, record.Brand, record.Family, record.Size, record.Model].some((value) => normalizeLower(value) === marker)) return null;
+  if (isUnmatchedRecord(record)) return null;
   const productKey = `${record.SKU}||${record.Model || ""}`;
   const accessory = [record.Connector, record.CableLength].map(normalizeText).filter(Boolean).join(" + ");
   const productLabel = [record.Model, accessory].map(normalizeText).filter(Boolean).join(" | ") || record.SKU;
@@ -750,9 +784,121 @@ function aggregateRecordsBySku(records) {
 }
 
 function isUnmatchedRecord(record) {
-  const marker = UNMATCHED_SKU_MARK.toLowerCase();
+  const markers = new Set([UNMATCHED_SKU_MARK.toLowerCase(), REMOVED_SKU_MARK.toLowerCase()]);
   return [record.Category, record.Brand, record.Family, record.Size, record.Model]
-    .some((value) => normalizeLower(value) === marker);
+    .some((value) => markers.has(normalizeLower(value)));
+}
+
+function cloneStockRecords(records) {
+  return records.map((record) => ({
+    ...record,
+    Transit: { ...(record.Transit || {}) },
+    StockTransit: { ...(record.StockTransit || {}) },
+    TransitSource: { ...(record.TransitSource || {}) },
+    StatusQuantity: { ...(record.StatusQuantity || {}) },
+  }));
+}
+
+function isExportInventoryRecord(record) {
+  if (isUnmatchedRecord(record) || isExcludedInventoryFamily(record.Family)) return false;
+  const wh = normalizeText(record.WH).toUpperCase();
+  if (isPvCategory(record.Category)) return PV_STOCK_COUNTRIES.includes(wh);
+  return wh !== DOMESTIC_WH && !isExcludedEssHpFamily(record.Family);
+}
+
+function applyAllocationDeductions(records, orders, dateKeys) {
+  const recordsByKey = new Map();
+  const initialAvailableByKey = new Map();
+  for (const record of records) {
+    if (!isExportInventoryRecord(record)) continue;
+    const key = recordKey(record.SKU, record.WH);
+    if (!recordsByKey.has(key)) recordsByKey.set(key, []);
+    recordsByKey.get(key).push(record);
+    const available = safeFloat(record.Stock)
+      + dateKeys.reduce((sum, dateKey) => sum + safeFloat(record.StockTransit?.[dateKey]), 0);
+    initialAvailableByKey.set(key, (initialAvailableByKey.get(key) || 0) + available);
+  }
+
+  const eligibleOrders = orders
+    .filter((order) => order.EligibleForDeduction && safeFloat(order["Ordered Qty"]) > 0)
+    .sort((a, b) => {
+      const aDate = partsToDateKey(parseDateParts(a.CRD));
+      const bDate = partsToDateKey(parseDateParts(b.CRD));
+      return aDate.localeCompare(bDate) || safeFloat(a.OrderIndex) - safeFloat(b.OrderIndex);
+    });
+  const results = [];
+  for (const order of eligibleOrders) {
+    const key = recordKey(order.SKU, order.WH);
+    if (safeFloat(initialAvailableByKey.get(key)) <= 0) continue;
+    const candidates = recordsByKey.get(key) || [];
+    let remaining = safeFloat(order["Ordered Qty"]);
+    let stockDeducted = 0;
+    let transitDeducted = 0;
+    const detail = [];
+
+    for (const record of candidates) {
+      if (remaining <= 0) break;
+      const available = Math.max(0, safeFloat(record.Stock));
+      const deducted = Math.min(available, remaining);
+      if (deducted <= 0) continue;
+      record.Stock = safeFloat(record.Stock) - deducted;
+      record.StatusQuantity.Inventory = Math.max(0, safeFloat(record.StatusQuantity.Inventory) - deducted);
+      stockDeducted += deducted;
+      remaining -= deducted;
+    }
+    if (stockDeducted > 0) detail.push(`Stock: ${Number(stockDeducted.toFixed(3))}`);
+
+    for (const dateKey of dateKeys) {
+      if (remaining <= 0) break;
+      let dateDeducted = 0;
+      for (const record of candidates) {
+        if (remaining <= 0) break;
+        const available = Math.max(0, safeFloat(record.StockTransit?.[dateKey]));
+        const deducted = Math.min(available, remaining);
+        if (deducted <= 0) continue;
+        record.StockTransit[dateKey] = safeFloat(record.StockTransit[dateKey]) - deducted;
+        record.StatusQuantity.DailySupplyPlan = Math.max(0, safeFloat(record.StatusQuantity.DailySupplyPlan) - deducted);
+        dateDeducted += deducted;
+        transitDeducted += deducted;
+        remaining -= deducted;
+      }
+      if (dateDeducted > 0) detail.push(`${dateKeyToHeader(dateKey)}: ${Number(dateDeducted.toFixed(3))}`);
+    }
+
+    results.push({
+      ...order,
+      StockDeducted: Number(stockDeducted.toFixed(3)),
+      TransitDeducted: Number(transitDeducted.toFixed(3)),
+      DeductedQty: Number((stockDeducted + transitDeducted).toFixed(3)),
+      RemainingQty: Number(Math.max(0, remaining).toFixed(3)),
+      DeductionDetail: detail.join(" / "),
+    });
+  }
+  return results;
+}
+
+function writeAllocationDeductionWorksheet(workbook, deductions) {
+  const old = workbook.getWorksheet(ALLOCATION_DEDUCTION_SHEET_NAME);
+  if (old) workbook.removeWorksheet(old.id);
+  const ws = workbook.addWorksheet(ALLOCATION_DEDUCTION_SHEET_NAME);
+  const headers = [
+    ...ALLOCATION_EXPORT_COLUMNS, "WH", "Stock Deducted", "Transit Deducted", "Deducted Qty", "Remaining Qty", "Deduction Detail",
+  ];
+  ws.addRow(headers);
+  for (const item of deductions) {
+    ws.addRow([
+      ...(item.RawRow || []), item.WH, item.StockDeducted, item.TransitDeducted, item.DeductedQty, item.RemainingQty, item.DeductionDetail,
+    ]);
+  }
+  ws.getRow(1).eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+  ws.autoFilter = `A1:T${Math.max(1, ws.rowCount)}`;
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.columns.forEach((column, index) => { column.width = index === 19 ? 36 : 16; });
+  return ws;
 }
 
 function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags, options = {}) {
@@ -870,16 +1016,14 @@ function writeMwWorksheet(workbook, records, dateKeys) {
       ...monthOrder.map((period) => Number((summary.Monthly.get(period) || 0).toFixed(3))),
     ]);
   }
-  writeMwSummaryWorksheet(workbook, grouped, monthOrder);
-  return ws;
+  return { ws, grouped, monthOrder };
 }
 
-function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
-  const old = workbook.getWorksheet(MW_SUMMARY_SHEET_NAME);
+function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetName) {
+  const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
 
   const detailGroups = new Map();
-  const simpleGroups = new Map();
   const addSummary = (target, key, fields, source) => {
     if (!target.has(key)) {
       target.set(key, { ...fields, StockMW: 0, TotalMW: 0, Monthly: new Map() });
@@ -894,7 +1038,7 @@ function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
   };
 
   for (const summary of mwGroups.values()) {
-    if (normalizeText(summary.Brand).toUpperCase() !== "TCL") continue;
+    if (normalizeText(summary.Brand).toUpperCase() !== brandName.toUpperCase()) continue;
     const totalMw = safeFloat(summary.StockMW)
       + [...summary.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
     if (Number(totalMw.toFixed(3)) === 0) continue;
@@ -910,18 +1054,10 @@ function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
       detailFields,
       summary,
     );
-    const simpleFields = { WH: summary.WH, Model: summary.Model };
-    addSummary(
-      simpleGroups,
-      [simpleFields.WH, simpleFields.Model].map(normalizeText).join("\u0000"),
-      simpleFields,
-      summary,
-    );
   }
 
-  const ws = workbook.addWorksheet(MW_SUMMARY_SHEET_NAME);
+  const ws = workbook.addWorksheet(sheetName);
   const detailHeaders = ["WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
-  const simpleHeaders = ["WH", "Model", "Stock MW", ...monthOrder, "Total MW"];
   const sortByFields = (fields) => (a, b) => fields
     .map((field) => normalizeText(a[field]).localeCompare(normalizeText(b[field])))
     .find((value) => value !== 0) || 0;
@@ -931,32 +1067,30 @@ function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
     Number(item.TotalMW.toFixed(3)),
   ];
 
-  ws.addRow(["TCL MW Detail"]);
+  ws.addRow([`${brandName} MW Detail`]);
   const detailHeaderRow = ws.addRow(detailHeaders);
-  for (const item of [...detailGroups.values()].sort(sortByFields(["WH", "Model", "Connector", "CableLength"]))) {
-    ws.addRow([item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
-  }
-
-  ws.addRow([]);
-  ws.addRow(["TCL MW by Warehouse and Model"]);
-  const simpleHeaderRow = ws.addRow(simpleHeaders);
   const subtotalRows = [];
   const byWarehouse = new Map();
-  for (const item of [...simpleGroups.values()].sort(sortByFields(["WH", "Model"]))) {
+  for (const item of [...detailGroups.values()].sort(sortByFields(["WH", "Model", "Connector", "CableLength"]))) {
     if (!byWarehouse.has(item.WH)) byWarehouse.set(item.WH, []);
     byWarehouse.get(item.WH).push(item);
   }
-  for (const [wh, items] of byWarehouse) {
+  const sortedWarehouses = [...byWarehouse.entries()].sort((a, b) => {
+    const totalA = a[1].reduce((sum, item) => sum + safeFloat(item.TotalMW), 0);
+    const totalB = b[1].reduce((sum, item) => sum + safeFloat(item.TotalMW), 0);
+    return totalB - totalA || a[0].localeCompare(b[0]);
+  });
+  for (const [wh, items] of sortedWarehouses) {
     const subtotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
     for (const item of items) {
-      ws.addRow([item.WH, item.Model, ...numericValues(item)]);
-      subtotal.StockMW += item.StockMW;
-      subtotal.TotalMW += item.TotalMW;
+      ws.addRow([item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
+      subtotal.StockMW += Number(item.StockMW.toFixed(3));
+      subtotal.TotalMW += Number(item.TotalMW.toFixed(3));
       for (const month of monthOrder) {
-        subtotal.Monthly.set(month, (subtotal.Monthly.get(month) || 0) + safeFloat(item.Monthly.get(month)));
+        subtotal.Monthly.set(month, (subtotal.Monthly.get(month) || 0) + Number(safeFloat(item.Monthly.get(month)).toFixed(3)));
       }
     }
-    subtotalRows.push(ws.addRow([`${wh} Total`, "", ...numericValues(subtotal)]));
+    subtotalRows.push(ws.addRow([`${wh} Total`, "", "", "", ...numericValues(subtotal)]));
   }
 
   const styleHeader = (row) => {
@@ -968,11 +1102,7 @@ function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
     });
   };
   styleHeader(detailHeaderRow);
-  styleHeader(simpleHeaderRow);
-  for (const rowNumber of [1, simpleHeaderRow.number - 1]) {
-    const cell = ws.getCell(rowNumber, 1);
-    cell.font = { bold: true, size: 13, color: { argb: "FF1F4E78" } };
-  }
+  ws.getCell(1, 1).font = { bold: true, size: 13, color: { argb: "FF1F4E78" } };
   for (const row of subtotalRows) {
     row.eachCell((cell) => {
       cell.font = { bold: true };
@@ -981,10 +1111,8 @@ function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
     });
   }
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
-    if (rowNumber === simpleHeaderRow.number || rowNumber === simpleHeaderRow.number - 1) continue;
     const row = ws.getRow(rowNumber);
-    const startColumn = rowNumber < simpleHeaderRow.number ? 5 : 3;
-    for (let column = startColumn; column <= row.cellCount; column += 1) {
+    for (let column = 5; column <= row.cellCount; column += 1) {
       row.getCell(column).numFmt = "0.000";
     }
   }
@@ -994,6 +1122,8 @@ function writeMwSummaryWorksheet(workbook, mwGroups, monthOrder) {
     else if (index === 2 || index === 3) column.width = 18;
     else column.width = 13;
   });
+  ws.autoFilter = `A2:${ws.getCell(ws.rowCount, detailHeaders.length).address}`;
+  ws.views = [{ state: "frozen", ySplit: 2 }];
   return ws;
 }
 
@@ -1083,7 +1213,7 @@ export async function buildStockOutputJs({
   const orderWorkbook = await loadSource(orderBytes, "Orderfile Base");
 
   const dateKeys = iterDateKeys(startDate, endDate);
-  const { lookup: skuLookup, sheetName: skuSheetName } = buildSkuLookup(templateWorkbook);
+  const { lookup: skuLookup, sheetName: skuSheetName, removedSkus } = buildSkuLookup(templateWorkbook);
   const normalizedStockMode = stockMode === "total" ? "total" : "available";
   const inventoryRows = extractInventoryRows(inventoryWorkbook, normalizedStockMode);
   const transitQty = new Map();
@@ -1111,7 +1241,6 @@ export async function buildStockOutputJs({
   const activeSkuKeys = new Set();
   for (const row of inventoryRows) if (safeFloat(row.Stock) !== 0) activeSkuKeys.add(normalizeSkuKey(row.SKU));
   for (const [key, qty] of transitQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitTransitRecordKey(key)[0]));
-  for (const [key, qty] of allocationData.need) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(splitKey2(key)[0]));
   for (const [sku, qty] of domesticQty) if (safeFloat(qty) !== 0) activeSkuKeys.add(normalizeSkuKey(sku));
 
   const records = [];
@@ -1119,8 +1248,10 @@ export async function buildStockOutputJs({
   const transitRowByKey = new Map();
   const markedRows = [];
   const resolve = (sku) => {
-    const mapped = skuLookup.get(normalizeSkuKey(sku));
-    return mapped ? { mapped, unmatched: false } : { mapped: makeUnmatchedMapping(), unmatched: true };
+    const skuKey = normalizeSkuKey(sku);
+    if (removedSkus.has(skuKey)) return { mapped: makeUnmatchedMapping(REMOVED_SKU_MARK), unmatched: true, reason: REMOVED_SKU_MARK };
+    const mapped = skuLookup.get(skuKey);
+    return mapped ? { mapped, unmatched: false, reason: "" } : { mapped: makeUnmatchedMapping(), unmatched: true, reason: UNMATCHED_SKU_MARK };
   };
   const appendRecord = (wh, sku, mapped, stock, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "") => {
     const record = createStockRecord(wh, sku, mapped, stock, domesticStock, virtualWarehouse, sourceCategory, sourceProductModel);
@@ -1134,26 +1265,17 @@ export async function buildStockOutputJs({
 
   for (const item of inventoryRows) {
     if (!activeSkuKeys.has(normalizeSkuKey(item.SKU))) continue;
-    const { mapped, unmatched } = resolve(item.SKU);
-    if (unmatched) markedRows.push({ SKU: item.SKU, WH: item.WH, Reason: UNMATCHED_SKU_MARK });
+    const { mapped, unmatched, reason } = resolve(item.SKU);
+    if (unmatched) markedRows.push({ SKU: item.SKU, WH: item.WH, Reason: reason });
     appendRecord(item.WH, item.SKU, mapped, item.Stock, 0, item.VirtualWarehouse, item.Category, item.ProductModel);
-  }
-  for (const [key, qty] of allocationData.need) {
-    if (!safeFloat(qty)) continue;
-    const [sku, wh] = splitKey2(key);
-    const rowKey = recordKey(sku, wh);
-    if (rowByKey.has(rowKey)) continue;
-    const { mapped, unmatched } = resolve(sku);
-    if (unmatched) markedRows.push({ SKU: sku, WH: wh, Reason: UNMATCHED_SKU_MARK });
-    appendRecord(wh, sku, mapped, 0);
   }
   for (const [sku, qty] of domesticQty) {
     if (!safeFloat(qty)) continue;
     const rowKey = recordKey(sku, DOMESTIC_WH);
     let record = rowByKey.get(rowKey);
     if (!record) {
-      const { mapped, unmatched } = resolve(sku);
-      if (unmatched) markedRows.push({ SKU: sku, WH: DOMESTIC_WH, Reason: UNMATCHED_SKU_MARK });
+      const { mapped, unmatched, reason } = resolve(sku);
+      if (unmatched) markedRows.push({ SKU: sku, WH: DOMESTIC_WH, Reason: reason });
       record = appendRecord(DOMESTIC_WH, sku, mapped, 0, 0);
     }
     record.DomesticStock += safeFloat(qty);
@@ -1162,13 +1284,13 @@ export async function buildStockOutputJs({
     if (!safeFloat(qty)) continue;
     const [sku, wh, virtualWarehouse, sourceCategory, sourceProductModel, dateKey] = splitTransitRecordKey(key);
     if (!activeSkuKeys.has(normalizeSkuKey(sku))) continue;
-    const { mapped, unmatched } = resolve(sku);
+    const { mapped, unmatched, reason } = resolve(sku);
     const category = sourceCategory || mapped.Category;
     const productModel = sourceProductModel || mapped.Model;
     const rowKey = [sku, wh, virtualWarehouse, category, productModel].join("\u0000");
     let record = transitRowByKey.get(rowKey);
     if (!record) {
-      if (unmatched) markedRows.push({ SKU: sku, WH: wh, Reason: UNMATCHED_SKU_MARK });
+      if (unmatched) markedRows.push({ SKU: sku, WH: wh, Reason: reason });
       record = appendRecord(wh, sku, mapped, 0, 0, virtualWarehouse, category, productModel);
       transitRowByKey.set(rowKey, record);
     }
@@ -1185,9 +1307,12 @@ export async function buildStockOutputJs({
       ? 0
       : safeFloat(allocationData.need.get(recordKey(record.SKU, record.WH)) || 0);
   }
+  const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode, domesticDetails);
+  const exportRecords = cloneStockRecords(records);
+  const allocationDeductions = applyAllocationDeductions(exportRecords, allocationData.orders, dateKeys);
 
   const dateSourceTags = {};
-  for (const record of records) {
+  for (const record of exportRecords) {
     for (const dateKey of dateKeys) {
       if (!safeFloat(record.Transit[dateKey])) continue;
       const source = record.TransitSource[dateKey] || SOURCE_INV_DSP;
@@ -1198,13 +1323,14 @@ export async function buildStockOutputJs({
 
   for (const obsoleteName of [
     "stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES,
-    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), MW_SHEET_NAME, MW_SUMMARY_SHEET_NAME,
+    ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), MW_SHEET_NAME, "MW Summary",
+    SUNPOWER_MW_SHEET_NAME, TCL_MW_SHEET_NAME, ALLOCATION_DEDUCTION_SHEET_NAME,
   ]) {
     const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
   }
-  const matchedRecords = records.filter((record) => !isUnmatchedRecord(record));
-  const unmatchedRecords = records.filter(isUnmatchedRecord);
+  const matchedRecords = exportRecords.filter((record) => !isUnmatchedRecord(record));
+  const unmatchedRecords = exportRecords.filter(isUnmatchedRecord);
   for (const country of PV_STOCK_COUNTRIES) {
     const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category)
       && normalizeText(record.WH).toUpperCase() === country
@@ -1221,20 +1347,22 @@ export async function buildStockOutputJs({
     dateSourceTags,
     { includeTechnicalFields: false },
   );
-  writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
+  const mwResult = writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
+  writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "SunPower", SUNPOWER_MW_SHEET_NAME);
+  writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "TCL", TCL_MW_SHEET_NAME);
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, { includeLocation: false });
   writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
+  writeAllocationDeductionWorksheet(templateWorkbook, allocationDeductions);
   writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
   const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");
   if (obsoleteDomestic) templateWorkbook.removeWorksheet(obsoleteDomestic.id);
   writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[0], []);
   writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[1], []);
-  for (const mappingSheetName of ["Legacy Mapping Product", "SKU", "SKU Mapping"]) {
+  for (const mappingSheetName of ["Legacy Mapping Product", "SKU", "SKU Mapping", "Remove-list"]) {
     const mappingSheet = getWorksheetByNameInsensitive(templateWorkbook, mappingSheetName);
     if (mappingSheet) templateWorkbook.removeWorksheet(mappingSheet.id);
   }
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
-  const visualization = buildVisualizationPayload(records, dateKeys, allocationData.orders, normalizedStockMode, domesticDetails);
 
   return {
     outputBytes,
