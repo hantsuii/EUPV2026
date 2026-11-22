@@ -271,6 +271,15 @@ function addCalendarMonths(parts, months) {
   };
 }
 
+function addCalendarDays(parts, days) {
+  const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
 function canonicalBrand(value) {
   const brand = normalizeText(value);
   return brand.toUpperCase() === "SUNPOWER" ? "SunPower" : brand;
@@ -836,6 +845,31 @@ function applyAllocationDeductions(records, orders, dateKeys) {
     let transitDeducted = 0;
     const detail = [];
 
+    const crdParts = parseDateParts(order.CRD);
+    const transitCutoff = partsToDateKey(addCalendarDays(crdParts, -10));
+    const preferredTransitDates = dateKeys.filter((dateKey) => dateKey <= transitCutoff).sort((a, b) => b.localeCompare(a));
+    const laterTransitDates = dateKeys.filter((dateKey) => dateKey > transitCutoff).sort((a, b) => a.localeCompare(b));
+    const deductTransit = (orderedDateKeys) => {
+      for (const dateKey of orderedDateKeys) {
+        if (remaining <= 0) break;
+        let dateDeducted = 0;
+        for (const record of candidates) {
+          if (remaining <= 0) break;
+          const available = Math.max(0, safeFloat(record.StockTransit?.[dateKey]));
+          const deducted = Math.min(available, remaining);
+          if (deducted <= 0) continue;
+          record.StockTransit[dateKey] = safeFloat(record.StockTransit[dateKey]) - deducted;
+          record.StatusQuantity.DailySupplyPlan = Math.max(0, safeFloat(record.StatusQuantity.DailySupplyPlan) - deducted);
+          dateDeducted += deducted;
+          transitDeducted += deducted;
+          remaining -= deducted;
+        }
+        if (dateDeducted > 0) detail.push(`${dateKeyToHeader(dateKey)}: ${Number(dateDeducted.toFixed(3))}`);
+      }
+    };
+
+    deductTransit(preferredTransitDates);
+
     for (const record of candidates) {
       if (remaining <= 0) break;
       const available = Math.max(0, safeFloat(record.Stock));
@@ -847,23 +881,7 @@ function applyAllocationDeductions(records, orders, dateKeys) {
       remaining -= deducted;
     }
     if (stockDeducted > 0) detail.push(`Stock: ${Number(stockDeducted.toFixed(3))}`);
-
-    for (const dateKey of dateKeys) {
-      if (remaining <= 0) break;
-      let dateDeducted = 0;
-      for (const record of candidates) {
-        if (remaining <= 0) break;
-        const available = Math.max(0, safeFloat(record.StockTransit?.[dateKey]));
-        const deducted = Math.min(available, remaining);
-        if (deducted <= 0) continue;
-        record.StockTransit[dateKey] = safeFloat(record.StockTransit[dateKey]) - deducted;
-        record.StatusQuantity.DailySupplyPlan = Math.max(0, safeFloat(record.StatusQuantity.DailySupplyPlan) - deducted);
-        dateDeducted += deducted;
-        transitDeducted += deducted;
-        remaining -= deducted;
-      }
-      if (dateDeducted > 0) detail.push(`${dateKeyToHeader(dateKey)}: ${Number(dateDeducted.toFixed(3))}`);
-    }
+    deductTransit(laterTransitDates);
 
     results.push({
       ...order,
@@ -912,8 +930,14 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
     "WH", ...locationHeaders, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
     "Available QTY", "MW", "Stock",
   ];
-  const dateHeaders = dateKeys.map(dateKeyToHeader);
-  const headers = [...baseHeaders, ...dateHeaders];
+  const compactTransit = options.compactTransit !== false;
+  const outputDateKeys = compactTransit
+    ? dateKeys.filter((dateKey) => records.some((record) => safeFloat(record.StockTransit?.[dateKey]) !== 0))
+    : dateKeys;
+  const dateHeaders = outputDateKeys.map(dateKeyToHeader);
+  const monthOrder = compactTransit ? [...new Set(outputDateKeys.map(monthLabel).filter(Boolean))] : [];
+  const monthHeaders = monthOrder.map((month) => `${month} Total`);
+  const headers = [...baseHeaders, ...dateHeaders, ...monthHeaders];
   ws.addRow(headers);
 
   for (const record of records) {
@@ -931,7 +955,15 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
       ? [record.WH, ...locationValues, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
       : [record.WH, ...locationValues, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
         record.MOQ, record.AvailableQTY, record.MW, record.Stock];
-    ws.addRow([...row, ...dateKeys.map((dateKey) => (stockTransit[dateKey] ? stockTransit[dateKey] : null))]);
+    const monthlyTotals = monthOrder.map((month) => Number(outputDateKeys
+      .filter((dateKey) => monthLabel(dateKey) === month)
+      .reduce((sum, dateKey) => sum + safeFloat(stockTransit[dateKey]), 0)
+      .toFixed(3)));
+    ws.addRow([
+      ...row,
+      ...outputDateKeys.map((dateKey) => (stockTransit[dateKey] ? stockTransit[dateKey] : null)),
+      ...monthlyTotals,
+    ]);
   }
   if (options.applyTableStyle !== false) {
     ws.getRow(1).eachCell((cell) => {
@@ -956,6 +988,7 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
       else if (header === "SKU") column.width = 20;
       else if (header === "Connector" || header === "Cable Length") column.width = 18;
       else if (dateHeaders.includes(header)) column.width = 12;
+      else if (monthHeaders.includes(header)) column.width = 14;
       else column.width = 14;
     });
   }
@@ -1391,6 +1424,7 @@ export async function buildStockOutputJs({
   writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, {
     includeLocation: false,
     applyTableStyle: false,
+    compactTransit: false,
   });
   writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
   writeAllocationDeductionWorksheet(templateWorkbook, allocationDeductions);

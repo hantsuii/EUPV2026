@@ -1399,6 +1399,34 @@ def write_output_sheet_v2(
         transit_deducted = 0.0
         deduction_detail: list[str] = []
 
+        crd_date = parse_supply_date(order.get("CRD"))
+        transit_cutoff = crd_date - timedelta(days=10)
+        preferred_transit_headers = [date_header(d) for d in sorted(
+            (d for d in transit_dates if d <= transit_cutoff), reverse=True,
+        )]
+        later_transit_headers = [date_header(d) for d in transit_dates if d > transit_cutoff]
+
+        for d_header in preferred_transit_headers:
+            if remaining <= 0:
+                break
+            date_deducted = 0.0
+            for record in candidates:
+                if remaining <= 0:
+                    break
+                available = max(0.0, safe_float(record.get("StockTransit", {}).get(d_header)))
+                deducted = min(available, remaining)
+                if deducted <= 0:
+                    continue
+                record["StockTransit"][d_header] = safe_float(record["StockTransit"].get(d_header)) - deducted
+                record["StatusQuantity"]["DailySupplyPlan"] = max(
+                    0.0, safe_float(record["StatusQuantity"].get("DailySupplyPlan")) - deducted
+                )
+                date_deducted += deducted
+                transit_deducted += deducted
+                remaining -= deducted
+            if date_deducted > 0:
+                deduction_detail.append(f"{d_header}: {round(date_deducted, 3)}")
+
         for record in candidates:
             if remaining <= 0:
                 break
@@ -1413,7 +1441,7 @@ def write_output_sheet_v2(
         if stock_deducted > 0:
             deduction_detail.append(f"Stock: {round(stock_deducted, 3)}")
 
-        for d_header in transit_headers:
+        for d_header in later_transit_headers:
             if remaining <= 0:
                 break
             date_deducted = 0.0
@@ -1450,11 +1478,25 @@ def write_output_sheet_v2(
 
     def write_stock_sheet(name: str, source_records: list[dict[str, Any]], include_technical_fields: bool = True, include_location: bool = True) -> None:
         ws = wb.create_sheet(name)
-        if name in {*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"}:
+        compact_transit = name in {*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"}
+        if compact_transit:
             stock_output_sheets.append(ws)
+        output_transit_headers = (
+            [d_header for d_header in transit_headers if any(
+                safe_float(record.get("StockTransit", {}).get(d_header)) != 0 for record in source_records
+            )]
+            if compact_transit else transit_headers
+        )
+        month_order_for_sheet: list[str] = []
+        for d_header in output_transit_headers:
+            parts = d_header.split(".")
+            month = f"{int(parts[0]):04d}-{int(parts[1]):02d}"
+            if month not in month_order_for_sheet:
+                month_order_for_sheet.append(month)
+        month_headers = [f"{month} Total" for month in month_order_for_sheet]
         location_headers = ["Location"] if include_location else []
-        sheet_headers = (["WH", *location_headers, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock", *transit_headers]
-                         if include_technical_fields else ["WH", *location_headers, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *transit_headers])
+        sheet_headers = (["WH", *location_headers, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock", *output_transit_headers, *month_headers]
+                         if include_technical_fields else ["WH", *location_headers, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *output_transit_headers, *month_headers])
         ws.append(sheet_headers)
         for record in source_records:
             stock_transit = record.get("StockTransit", {})
@@ -1473,7 +1515,18 @@ def write_output_sheet_v2(
                 record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Model"), record.get("SKU"),
                 record.get("MOQ"), round(available_qty, 3), record.get("Stock"),
             ]
-            ws.append([*row, *[stock_transit.get(d_header) or None for d_header in transit_headers]])
+            monthly_totals = []
+            for month in month_order_for_sheet:
+                monthly_totals.append(round(sum(
+                    safe_float(stock_transit.get(d_header))
+                    for d_header in output_transit_headers
+                    if f"{int(d_header.split('.')[0]):04d}-{int(d_header.split('.')[1]):02d}" == month
+                ), 3))
+            ws.append([
+                *row,
+                *[stock_transit.get(d_header) or None for d_header in output_transit_headers],
+                *monthly_totals,
+            ])
 
     matched = [record for record in records if not is_unmatched(record)]
     unmatched = [record for record in records if is_unmatched(record)]
