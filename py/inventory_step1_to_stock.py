@@ -1099,7 +1099,7 @@ def write_output_sheet(
                 source = normalize_source_tag(date_source_summary.get(header, SOURCE_INV_DSP))
                 output_ws.cell(output_row, header_col[header]).fill = CELL_FILL_BY_SOURCE.get(source, CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
             for col_num in range(10, len(headers) + 1):
-                output_ws.cell(output_row, col_num).number_format = "#,##0.###"
+                output_ws.cell(output_row, col_num).number_format = "#,##0.###;-#,##0.###;0"
 
     output_ws = wb.copy_worksheet(ws)
     output_ws.title = "ESS+HP Stock"
@@ -1833,7 +1833,7 @@ def write_output_sheet_v2(
             )
             if header in numeric_headers:
                 for row_number in range(2, ws_stock.max_row + 1):
-                    ws_stock.cell(row=row_number, column=column_number).number_format = "#,##0.###"
+                    ws_stock.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
 
     for ws_brand, subtotal_rows, grand_total_row in mw_summary_layouts:
         for cell in ws_brand[2]:
@@ -1853,7 +1853,7 @@ def write_output_sheet_v2(
             cell.border = Border(top=strong_blue_line)
         for row_number in range(3, ws_brand.max_row + 1):
             for column_number in range(5, ws_brand.max_column + 1):
-                ws_brand.cell(row=row_number, column=column_number).number_format = "#,##0.###"
+                ws_brand.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
         for column_letter, width in {"A": 30, "B": 18, "C": 18, "D": 18}.items():
             ws_brand.column_dimensions[column_letter].width = width
         for column_number in range(5, ws_brand.max_column + 1):
@@ -1874,7 +1874,7 @@ def write_output_sheet_v2(
         header = normalize_text(ws_deduction.cell(row=1, column=column_number).value)
         if header in {"Ordered Qty", "Total KW", "Stock Deducted", "Transit Deducted", "Deducted Qty", "Remaining Qty"}:
             for row_number in range(2, ws_deduction.max_row + 1):
-                ws_deduction.cell(row=row_number, column=column_number).number_format = "#,##0.###"
+                ws_deduction.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
 
     for cell in ws_alloc[1]:
         cell.fill = header_fill
@@ -1897,7 +1897,7 @@ def write_output_sheet_v2(
         ws_alloc.column_dimensions[column_letter].width = allocation_widths.get(header, 16)
         if header in allocation_numeric_headers:
             for row_number in range(2, ws_alloc.max_row + 1):
-                ws_alloc.cell(row=row_number, column=column_number).number_format = "#,##0.###"
+                ws_alloc.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
 
     visible_sheet_order = [
         *[f"{country}_PV" for country in PV_STOCK_COUNTRIES],

@@ -920,7 +920,7 @@ function writeAllocationDeductionWorksheet(workbook, deductions) {
   headers.forEach((header, index) => {
     if (!numericHeaders.has(header)) return;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###";
+      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###;-#,##0.###;0";
     }
   });
   ws.getRow(1).eachCell((cell) => {
@@ -987,7 +987,7 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
   headers.forEach((header, index) => {
     if (!numericHeaders.has(header)) return;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###";
+      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###;-#,##0.###;0";
     }
   });
   if (options.applyTableStyle !== false) {
@@ -1218,7 +1218,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
     const row = ws.getRow(rowNumber);
     for (let column = 5; column <= row.cellCount; column += 1) {
-      row.getCell(column).numFmt = "#,##0.###";
+      row.getCell(column).numFmt = "#,##0.###;-#,##0.###;0";
     }
   }
   ws.columns.forEach((column, index) => {
@@ -1258,7 +1258,7 @@ function writeAllocationWorksheet(workbook, headers, orders) {
     const columnNumber = headerIndex.get(header);
     if (!columnNumber) continue;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(columnNumber).numFmt = "#,##0.###";
+      ws.getRow(rowNumber).getCell(columnNumber).numFmt = "#,##0.###;-#,##0.###;0";
     }
   }
   ws.autoFilter = `A1:${ws.getCell(Math.max(1, ws.rowCount), outputHeaders.length).address}`;
