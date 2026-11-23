@@ -194,7 +194,8 @@ async function uploadGeneratedStock(bytes, fileName) {
 }
 function stockHistoryRows(bytes, date) {
   const workbook = XLSX.read(bytes, { type: "array", cellDates: true });
-  const stockSheetNames = ["NL_PV", "FR_PV", "UK_PV", "ES_PV", "IT_PV", "ESS+HP Stock", "Unmatched SKU"];
+  // Removed SKU is an audit copy of rows already present in the normal stock sheets.
+  const stockSheetNames = ["NL_PV", "FR_PV", "UK_PV", "ES_PV", "IT_PV", "ESS+HP Stock"];
   const sheets = stockSheetNames.map((name) => workbook.Sheets[name]).filter(Boolean);
   if (!sheets.length) {
     const fallback = workbook.Sheets.stock || workbook.Sheets[workbook.SheetNames[0]];
@@ -1675,7 +1676,7 @@ if is_new_contract:
             parts = hs.split('.')
             if len(parts) == 3 and all(p.isdigit() for p in parts) and hs not in date_headers:
                 date_headers.append(hs)
-    headers = ["WH", "Category", "Brand", "Product TCL Report", "Family", "Size", "SKU", "Model", "Connector", "Cable Length", "Bin", "MOQ", "Available QTY", "Stock", "To be allocated", "MW", "Domestic Stock", *date_headers]
+    headers = ["Source", "WH", "Category", "Brand", "Product TCL Report", "Family", "Size", "SKU", "Model", "Connector", "Cable Length", "Bin", "MOQ", "Available QTY", "Stock", "To be allocated", "MW", "Domestic Stock", *date_headers]
     header_to_idx = {h: i for i, h in enumerate(headers)}
     for stock_sheet_name in stock_sheet_names:
         stock_ws = wb[stock_sheet_name]
@@ -1684,6 +1685,7 @@ if is_new_contract:
         inferred_category = "PV" if stock_sheet_name.upper().endswith("_PV") or stock_sheet_name.upper().startswith("PV STOCK") else "ESS"
         for raw_row in stock_ws.iter_rows(min_row=2, values_only=True):
             row = [None] * len(headers)
+            row[header_to_idx["Source"]] = raw_row[stock_idx["Source"]] if "Source" in stock_idx else ""
             row[header_to_idx["WH"]] = raw_row[stock_idx["WH"]] if "WH" in stock_idx else ""
             row[header_to_idx["Category"]] = inferred_category
             row[header_to_idx["Brand"]] = raw_row[stock_idx["Brand"]] if "Brand" in stock_idx else ""
@@ -1721,7 +1723,9 @@ else:
             raise ValueError(f'Stock sheet columns do not match: {stock_sheet_name}')
         stock_rows.extend(stock_ws.iter_rows(min_row=2, values_only=True))
 domestic_details = []
-domestic_sheet_names = [name for name in ('Domestic Stock PV', 'Domestic Stock ESS') if name in wb.sheetnames]
+domestic_sheet_names = [name for name in ('PV Stock in CN', 'ESS Stock in CN') if name in wb.sheetnames]
+if not domestic_sheet_names:
+    domestic_sheet_names = [name for name in ('Domestic Stock PV', 'Domestic Stock ESS') if name in wb.sheetnames]
 if not domestic_sheet_names and 'Domestic Stock' in wb.sheetnames:
     domestic_sheet_names = ['Domestic Stock']
 for domestic_sheet_name in domestic_sheet_names:
@@ -1769,10 +1773,6 @@ for row in stock_rows:
     model = _text(row[header_to_idx['Model']])
     connector = _text(row[header_to_idx['Connector']])
 
-    marker = "sku not matched"
-    if any(v.lower() == marker for v in (category, brand, product_report, family, model)):
-        continue
-
     transit = {}
     transit_source = {}
     for d in date_headers:
@@ -1798,6 +1798,7 @@ for row in stock_rows:
     domestic_stock_value = _num(row[header_to_idx['Domestic Stock']]) if 'Domestic Stock' in header_to_idx else 0
 
     item = {
+            "Source": _text(row[header_to_idx["Source"]]) if "Source" in header_to_idx else "",
         "WH": wh,
         "VirtualWarehouse": virtual_warehouse,
         "Category": category,

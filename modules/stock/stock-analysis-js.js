@@ -2,15 +2,16 @@ const SOURCE_INV_DSP = "INV_DSP";
 const SOURCE_ODP = "ODP";
 const SOURCE_MIXED = "MIXED";
 const UNMATCHED_SKU_MARK = "SKU not matched";
-const REMOVED_SKU_MARK = "Remove-list";
+const REMOVED_SKU_MARK = "Removed list";
 const DOMESTIC_WH = "CN";
 const ALLOC_SHEET_NAME = "To be allocated";
 const ALLOCATION_DEDUCTION_SHEET_NAME = "Allocation Deduction";
 const TRANSIT_SOURCE_SHEET_NAME = "_Transit Source Map";
-const UNMATCHED_SHEET_NAME = "Unmatched SKU";
+const UNMATCHED_SHEET_NAME = "Removed SKU";
 const PV_STOCK_COUNTRIES = ["NL", "FR", "UK", "ES", "IT"];
 const STOCK_SHEET_NAMES = [...PV_STOCK_COUNTRIES.map((country) => `${country}_PV`), "ESS+HP Stock"];
-const DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
+const DOMESTIC_DETAIL_SHEET_NAMES = ["PV Stock in CN", "ESS Stock in CN"];
+const LEGACY_DOMESTIC_DETAIL_SHEET_NAMES = ["Domestic Stock PV", "Domestic Stock ESS"];
 const MW_SHEET_NAME = "MW";
 const SUNPOWER_MW_SHEET_NAME = "SunPower MW";
 const TCL_MW_SHEET_NAME = "TCL MW";
@@ -606,8 +607,9 @@ function makeUnmatchedMapping(reason = UNMATCHED_SKU_MARK) {
   };
 }
 
-function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "") {
+function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "", source = "") {
   return {
+    Source: source,
     WH: wh,
     VirtualWarehouse: virtualWarehouse,
     SKU: sku,
@@ -663,7 +665,6 @@ function columnName(number) {
 }
 
 function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, keyMeta) {
-  if (isUnmatchedRecord(record)) return null;
   const productKey = `${record.SKU}||${record.Model || ""}`;
   const accessory = [record.Connector, record.CableLength].map(normalizeText).filter(Boolean).join(" + ");
   const productLabel = [record.Model, accessory].map(normalizeText).filter(Boolean).join(" | ") || record.SKU;
@@ -679,6 +680,7 @@ function normalizeRecordForVisualization(record, dateHeaders, dateSourceTags, ke
     dateSourceTags[header] = mergeSourceTag(dateSourceTags[header], source);
   }
   const item = {
+    Source: record.Source || "",
     WH: record.WH,
     VirtualWarehouse: record.VirtualWarehouse,
     Category: record.Category,
@@ -765,6 +767,7 @@ function aggregateRecordsBySku(records) {
       virtualWarehouses.set(key, new Set());
     } else {
       const target = grouped.get(key);
+      if (!target.Source && source.Source) target.Source = source.Source;
       target.Stock += safeFloat(source.Stock);
       target.DomesticStock += safeFloat(source.DomesticStock);
       target.ToBeAllocated += safeFloat(source.ToBeAllocated);
@@ -794,6 +797,7 @@ function aggregateRecordsBySku(records) {
 
 function isUnmatchedRecord(record) {
   const markers = new Set([UNMATCHED_SKU_MARK.toLowerCase(), REMOVED_SKU_MARK.toLowerCase()]);
+  if (markers.has(normalizeLower(record.Source))) return true;
   return [record.Category, record.Brand, record.Family, record.Size, record.Model]
     .some((value) => markers.has(normalizeLower(value)));
 }
@@ -809,7 +813,7 @@ function cloneStockRecords(records) {
 }
 
 function isExportInventoryRecord(record) {
-  if (isUnmatchedRecord(record) || isExcludedInventoryFamily(record.Family)) return false;
+  if (isExcludedInventoryFamily(record.Family)) return false;
   const wh = normalizeText(record.WH).toUpperCase();
   if (isPvCategory(record.Category)) return PV_STOCK_COUNTRIES.includes(wh);
   return wh !== DOMESTIC_WH && !isExcludedEssHpFamily(record.Family);
@@ -925,9 +929,9 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
   const ws = workbook.addWorksheet(sheetName);
   const locationHeaders = options.includeLocation === false ? [] : ["Location"];
   const baseHeaders = options.includeTechnicalFields === false ? [
-    "WH", ...locationHeaders, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
+    "Source", "WH", ...locationHeaders, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
   ] : [
-    "WH", ...locationHeaders, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
+    "Source", "WH", ...locationHeaders, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
     "Available QTY", "MW", "Stock",
   ];
   const compactTransit = options.compactTransit !== false;
@@ -952,8 +956,8 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
 
     const locationValues = options.includeLocation === false ? [] : [record.VirtualWarehouse || ""];
     const row = options.includeTechnicalFields === false
-      ? [record.WH, ...locationValues, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
-      : [record.WH, ...locationValues, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
+      ? [record.Source || "", record.WH, ...locationValues, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
+      : [record.Source || "", record.WH, ...locationValues, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
         record.MOQ, record.AvailableQTY, record.MW, record.Stock];
     const monthlyTotals = monthOrder.map((month) => Number(outputDateKeys
       .filter((dateKey) => monthLabel(dateKey) === month)
@@ -965,6 +969,13 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
       ...monthlyTotals,
     ]);
   }
+  const numericHeaders = new Set(["Bin", "MOQ", "Available QTY", "MW", "Stock", ...dateHeaders, ...monthHeaders]);
+  headers.forEach((header, index) => {
+    if (!numericHeaders.has(header)) return;
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      ws.getRow(rowNumber).getCell(index + 1).numFmt = "0.000";
+    }
+  });
   if (options.applyTableStyle !== false) {
     ws.getRow(1).eachCell((cell) => {
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
@@ -980,18 +991,19 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
     }
     ws.autoFilter = `A1:${ws.getCell(Math.max(1, ws.rowCount), headers.length).address}`;
     ws.views = [{ state: "frozen", ySplit: 1 }];
-    ws.columns.forEach((column, index) => {
-      const header = headers[index];
-      if (header === "WH") column.width = 10;
-      else if (header === "Location") column.width = 26;
-      else if (header === "Model") column.width = 30;
-      else if (header === "SKU") column.width = 20;
-      else if (header === "Connector" || header === "Cable Length") column.width = 18;
-      else if (dateHeaders.includes(header)) column.width = 12;
-      else if (monthHeaders.includes(header)) column.width = 14;
-      else column.width = 14;
-    });
   }
+  ws.columns.forEach((column, index) => {
+    const header = headers[index];
+    if (header === "Source") column.width = 18;
+    else if (header === "WH") column.width = 10;
+    else if (header === "Location") column.width = 26;
+    else if (header === "Model") column.width = 30;
+    else if (header === "SKU") column.width = 20;
+    else if (header === "Connector" || header === "Cable Length") column.width = 18;
+    else if (dateHeaders.includes(header)) column.width = 12;
+    else if (monthHeaders.includes(header)) column.width = 14;
+    else column.width = 14;
+  });
   return ws;
 }
 
@@ -1008,9 +1020,10 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   for (const record of records) {
     const wh = normalizeText(record.WH).toUpperCase();
     if (!wh || !isPvCategory(record.Category) || isExcludedInventoryFamily(record.Family)) continue;
-    const key = `${wh}||${normalizeSkuKey(record.SKU)}`;
+    const key = `${wh}||${normalizeSkuKey(record.SKU)}||${normalizeText(record.Source)}`;
     if (!grouped.has(key)) {
       grouped.set(key, {
+        Source: record.Source || "",
         WH: wh,
         Brand: record.Brand,
         Family: record.Family,
@@ -1055,7 +1068,7 @@ function writeMwWorksheet(workbook, records, dateKeys) {
   monthOrder.sort();
   const ws = workbook.addWorksheet(MW_SHEET_NAME);
   const headers = [
-    "WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
+    "Source", "WH", "Location", "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Total MW", "Stock MW",
     ...dateKeys.map(dateKeyToHeader),
     ...weekOrder,
     ...monthOrder,
@@ -1067,7 +1080,7 @@ function writeMwWorksheet(workbook, records, dateKeys) {
     const displayedTotalMw = Number(totalMw.toFixed(3));
     if (displayedTotalMw === 0) continue;
     ws.addRow([
-      summary.WH, [...summary.Locations].sort((a, b) => a.localeCompare(b)).join(" / "), summary.Brand, summary.Family, summary.Bin, summary.Model, summary.SKU, summary.Connector, summary.CableLength, summary.MOQ,
+      summary.Source || "", summary.WH, [...summary.Locations].sort((a, b) => a.localeCompare(b)).join(" / "), summary.Brand, summary.Family, summary.Bin, summary.Model, summary.SKU, summary.Connector, summary.CableLength, summary.MOQ,
       displayedTotalMw,
       Number(summary.StockMW.toFixed(3)),
       ...dateKeys.map((dateKey) => Number((summary.Daily.get(dateKeyToHeader(dateKey)) || 0).toFixed(3))),
@@ -1102,6 +1115,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       + [...summary.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
     if (Number(totalMw.toFixed(3)) === 0) continue;
     const detailFields = {
+      Source: summary.Source || "",
       WH: summary.WH,
       Model: summary.Model,
       Connector: summary.Connector,
@@ -1109,14 +1123,14 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
     };
     addSummary(
       detailGroups,
-      [detailFields.WH, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
+      [detailFields.Source, detailFields.WH, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
       detailFields,
       summary,
     );
   }
 
   const ws = workbook.addWorksheet(sheetName);
-  const detailHeaders = ["WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
+  const detailHeaders = ["Source", "WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
   const sortByFields = (fields) => (a, b) => fields
     .map((field) => normalizeText(a[field]).localeCompare(normalizeText(b[field])))
     .find((value) => value !== 0) || 0;
@@ -1130,7 +1144,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   const detailHeaderRow = ws.addRow(detailHeaders);
   const subtotalRows = [];
   const byWarehouse = new Map();
-  for (const item of [...detailGroups.values()].sort(sortByFields(["WH", "Model", "Connector", "CableLength"]))) {
+  for (const item of [...detailGroups.values()].sort(sortByFields(["Source", "WH", "Model", "Connector", "CableLength"]))) {
     if (!byWarehouse.has(item.WH)) byWarehouse.set(item.WH, []);
     byWarehouse.get(item.WH).push(item);
   }
@@ -1139,25 +1153,32 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
     const totalB = b[1].reduce((sum, item) => sum + safeFloat(item.TotalMW), 0);
     return totalB - totalA || a[0].localeCompare(b[0]);
   });
-  const grandTotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
-  for (const [wh, items] of sortedWarehouses) {
+  const warehouseSummaries = sortedWarehouses.map(([wh, items]) => {
     const subtotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
     for (const item of items) {
-      ws.addRow([item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
       subtotal.StockMW += Number(item.StockMW.toFixed(3));
       subtotal.TotalMW += Number(item.TotalMW.toFixed(3));
       for (const month of monthOrder) {
         subtotal.Monthly.set(month, (subtotal.Monthly.get(month) || 0) + Number(safeFloat(item.Monthly.get(month)).toFixed(3)));
       }
     }
-    subtotalRows.push(ws.addRow([`${wh} Total`, "", "", "", ...numericValues(subtotal)]));
+    return { wh, items, subtotal };
+  });
+  const grandTotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
+  for (const { subtotal } of warehouseSummaries) {
     grandTotal.StockMW += Number(subtotal.StockMW.toFixed(3));
     grandTotal.TotalMW += Number(subtotal.TotalMW.toFixed(3));
     for (const month of monthOrder) {
       grandTotal.Monthly.set(month, (grandTotal.Monthly.get(month) || 0) + Number(safeFloat(subtotal.Monthly.get(month)).toFixed(3)));
     }
   }
-  const grandTotalRow = ws.addRow(["All WH Total", "", "", "", ...numericValues(grandTotal)]);
+  const grandTotalRow = ws.addRow(["", "All WH Total", "", "", "", ...numericValues(grandTotal)]);
+  for (const { wh, items, subtotal } of warehouseSummaries) {
+    subtotalRows.push(ws.addRow(["", `${wh} Total`, "", "", "", ...numericValues(subtotal)]));
+    for (const item of items) {
+      ws.addRow([item.Source || "", item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
+    }
+  }
 
   const styleHeader = (row) => {
     row.eachCell((cell) => {
@@ -1183,7 +1204,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   });
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
     const row = ws.getRow(rowNumber);
-    for (let column = 5; column <= row.cellCount; column += 1) {
+    for (let column = 6; column <= row.cellCount; column += 1) {
       row.getCell(column).numFmt = "0.000";
     }
   }
@@ -1202,11 +1223,41 @@ function writeAllocationWorksheet(workbook, headers, orders) {
   const old = workbook.getWorksheet(ALLOC_SHEET_NAME);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(ALLOC_SHEET_NAME);
-  ws.addRow(headers?.length ? headers : ["No order source"]);
+  const outputHeaders = headers?.length ? headers : ["No order source"];
+  ws.addRow(outputHeaders);
   for (const order of orders) {
     if (safeFloat(order["Ordered Qty"]) === 0) continue;
     ws.addRow(order.RawRow || []);
   }
+  const headerIndex = new Map(outputHeaders.map((header, index) => [normalizeText(header), index + 1]));
+  ws.getRow(1).eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+    cell.font = { bold: true, color: { argb: "FF000000" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = { bottom: { style: "thin", color: { argb: "FF5B9BD5" } } };
+  });
+  for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+    if (rowNumber % 2 !== 0) continue;
+    ws.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5FAFD" } };
+    });
+  }
+  for (const header of ["Ordered Qty", "Total KW"]) {
+    const columnNumber = headerIndex.get(header);
+    if (!columnNumber) continue;
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      ws.getRow(rowNumber).getCell(columnNumber).numFmt = "0.000";
+    }
+  }
+  ws.autoFilter = `A1:${ws.getCell(Math.max(1, ws.rowCount), outputHeaders.length).address}`;
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.columns.forEach((column, index) => {
+    const header = normalizeText(outputHeaders[index]);
+    if (["Customer Level 6 Name", "Warehouse Name"].includes(header)) column.width = 28;
+    else if (["SO Create Date", "CRD"].includes(header)) column.width = 14;
+    else if (["Ordered Qty", "Total KW"].includes(header)) column.width = 14;
+    else column.width = 16;
+  });
   return ws;
 }
 
@@ -1244,6 +1295,42 @@ function writeDomesticStockWorksheet(workbook, sheetName, domesticDetails) {
     ws.addRow([item.SKU, item.Model, item.Factory, item.Quantity, item.MW]);
   }
   return ws;
+}
+
+function orderAndHideOutputWorksheets(workbook) {
+  const visibleOrder = [
+    ...STOCK_SHEET_NAMES.slice(0, PV_STOCK_COUNTRIES.length),
+    TCL_MW_SHEET_NAME,
+    SUNPOWER_MW_SHEET_NAME,
+    "ESS+HP Stock",
+    ...DOMESTIC_DETAIL_SHEET_NAMES,
+    ALLOCATION_DEDUCTION_SHEET_NAME,
+    ALLOC_SHEET_NAME,
+    UNMATCHED_SHEET_NAME,
+  ];
+  const hiddenOrder = [MW_SHEET_NAME, TRANSIT_SOURCE_SHEET_NAME];
+  const byName = new Map(workbook.worksheets.map((worksheet) => [worksheet.name, worksheet]));
+  const ordered = [...visibleOrder, ...hiddenOrder]
+    .map((name) => byName.get(name))
+    .filter(Boolean);
+  const remaining = workbook.worksheets.filter((worksheet) => !ordered.includes(worksheet));
+
+  for (const name of visibleOrder) {
+    const worksheet = byName.get(name);
+    if (worksheet) worksheet.state = "visible";
+  }
+  for (const name of hiddenOrder) {
+    const worksheet = byName.get(name);
+    if (worksheet) worksheet.state = "hidden";
+  }
+
+  // ExcelJS does not expose a public worksheet reorder method. At this point
+  // all output sheets are complete, so reordering its worksheet collection is safe.
+  if (Array.isArray(workbook._worksheets)) {
+    const firstSlot = workbook._worksheets[0];
+    workbook._worksheets.length = 0;
+    workbook._worksheets.push(firstSlot, ...ordered, ...remaining);
+  }
 }
 
 export async function buildStockOutputJs({
@@ -1320,12 +1407,22 @@ export async function buildStockOutputJs({
   const markedRows = [];
   const resolve = (sku) => {
     const skuKey = normalizeSkuKey(sku);
-    if (removedSkus.has(skuKey)) return { mapped: makeUnmatchedMapping(REMOVED_SKU_MARK), unmatched: true, reason: REMOVED_SKU_MARK };
+    if (removedSkus.has(skuKey)) {
+      const mapped = skuLookup.get(skuKey);
+      return {
+        mapped: mapped || makeUnmatchedMapping(REMOVED_SKU_MARK),
+        unmatched: !mapped,
+        reason: REMOVED_SKU_MARK,
+        source: REMOVED_SKU_MARK,
+      };
+    }
     const mapped = skuLookup.get(skuKey);
-    return mapped ? { mapped, unmatched: false, reason: "" } : { mapped: makeUnmatchedMapping(), unmatched: true, reason: UNMATCHED_SKU_MARK };
+    return mapped
+      ? { mapped, unmatched: false, reason: "", source: "" }
+      : { mapped: makeUnmatchedMapping(), unmatched: true, reason: UNMATCHED_SKU_MARK, source: UNMATCHED_SKU_MARK };
   };
-  const appendRecord = (wh, sku, mapped, stock, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "") => {
-    const record = createStockRecord(wh, sku, mapped, stock, domesticStock, virtualWarehouse, sourceCategory, sourceProductModel);
+  const appendRecord = (wh, sku, mapped, stock, domesticStock = 0, virtualWarehouse = "", sourceCategory = "", sourceProductModel = "", source = "") => {
+    const record = createStockRecord(wh, sku, mapped, stock, domesticStock, virtualWarehouse, sourceCategory, sourceProductModel, source);
     records.push(record);
     if (!normalizeText(virtualWarehouse)) {
       const key = recordKey(sku, wh);
@@ -1336,18 +1433,18 @@ export async function buildStockOutputJs({
 
   for (const item of inventoryRows) {
     if (!activeSkuKeys.has(normalizeSkuKey(item.SKU))) continue;
-    const { mapped, unmatched, reason } = resolve(item.SKU);
-    if (unmatched) markedRows.push({ SKU: item.SKU, WH: item.WH, Reason: reason });
-    appendRecord(item.WH, item.SKU, mapped, item.Stock, 0, item.VirtualWarehouse, item.Category, item.ProductModel);
+    const { mapped, reason, source } = resolve(item.SKU);
+    if (source) markedRows.push({ SKU: item.SKU, WH: item.WH, Reason: reason });
+    appendRecord(item.WH, item.SKU, mapped, item.Stock, 0, item.VirtualWarehouse, item.Category, item.ProductModel, source);
   }
   for (const [sku, qty] of domesticQty) {
     if (!safeFloat(qty)) continue;
     const rowKey = recordKey(sku, DOMESTIC_WH);
     let record = rowByKey.get(rowKey);
     if (!record) {
-      const { mapped, unmatched, reason } = resolve(sku);
-      if (unmatched) markedRows.push({ SKU: sku, WH: DOMESTIC_WH, Reason: reason });
-      record = appendRecord(DOMESTIC_WH, sku, mapped, 0, 0);
+      const { mapped, reason, source } = resolve(sku);
+      if (source) markedRows.push({ SKU: sku, WH: DOMESTIC_WH, Reason: reason });
+      record = appendRecord(DOMESTIC_WH, sku, mapped, 0, 0, "", "", "", source);
     }
     record.DomesticStock += safeFloat(qty);
   }
@@ -1355,14 +1452,14 @@ export async function buildStockOutputJs({
     if (!safeFloat(qty)) continue;
     const [sku, wh, virtualWarehouse, sourceCategory, sourceProductModel, dateKey] = splitTransitRecordKey(key);
     if (!activeSkuKeys.has(normalizeSkuKey(sku))) continue;
-    const { mapped, unmatched, reason } = resolve(sku);
+    const { mapped, reason, source } = resolve(sku);
     const category = sourceCategory || mapped.Category;
     const productModel = sourceProductModel || mapped.Model;
     const rowKey = [sku, wh, virtualWarehouse, category, productModel].join("\u0000");
     let record = transitRowByKey.get(rowKey);
     if (!record) {
-      if (unmatched) markedRows.push({ SKU: sku, WH: wh, Reason: reason });
-      record = appendRecord(wh, sku, mapped, 0, 0, virtualWarehouse, category, productModel);
+      if (source) markedRows.push({ SKU: sku, WH: wh, Reason: reason });
+      record = appendRecord(wh, sku, mapped, 0, 0, virtualWarehouse, category, productModel, source);
       transitRowByKey.set(rowKey, record);
     }
     record.Transit[dateKey] = (record.Transit[dateKey] || 0) + qty;
@@ -1396,47 +1493,60 @@ export async function buildStockOutputJs({
     "stock", "PV Stock", UNMATCHED_SHEET_NAME, ...STOCK_SHEET_NAMES,
     ...PV_STOCK_COUNTRIES.map((country) => `PV Stock ${country}`), MW_SHEET_NAME, "MW Summary",
     SUNPOWER_MW_SHEET_NAME, TCL_MW_SHEET_NAME, ALLOCATION_DEDUCTION_SHEET_NAME,
+    ...DOMESTIC_DETAIL_SHEET_NAMES, ...LEGACY_DOMESTIC_DETAIL_SHEET_NAMES,
   ]) {
     const obsoleteStock = templateWorkbook.getWorksheet(obsoleteName);
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
   }
-  const matchedRecords = exportRecords.filter((record) => !isUnmatchedRecord(record));
-  const unmatchedRecords = exportRecords.filter(isUnmatchedRecord);
+  const matchedRecords = exportRecords;
+  const unmatchedRecords = exportRecords.filter((record) => normalizeText(record.Source));
+  const compareText = (left, right) => normalizeText(left).localeCompare(normalizeText(right), undefined, { numeric: true, sensitivity: "base" });
   for (const country of PV_STOCK_COUNTRIES) {
     const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category)
       && normalizeText(record.WH).toUpperCase() === country
       && !isExcludedInventoryFamily(record.Family));
-    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregateRecordsBySku(countryRecords), dateKeys, dateSourceTags);
+    const aggregatedCountryRecords = aggregateRecordsBySku(countryRecords).sort((a, b) => (
+      compareText(a.Model, b.Model)
+      || compareText(a.SKU, b.SKU)
+      || compareText(a.Source, b.Source)
+    ));
+    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregatedCountryRecords, dateKeys, dateSourceTags);
   }
+  const essRecords = matchedRecords.filter((record) => !isPvCategory(record.Category)
+    && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH
+    && !isExcludedEssHpFamily(record.Family));
   writeStockWorksheet(
     templateWorkbook,
     "ESS+HP Stock",
-    matchedRecords.filter((record) => !isPvCategory(record.Category)
-      && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH
-      && !isExcludedEssHpFamily(record.Family)),
+    essRecords.sort((a, b) => (
+      compareText(a.WH, b.WH)
+      || compareText(a.Model, b.Model)
+      || compareText(a.SKU, b.SKU)
+      || compareText(a.Source, b.Source)
+    )),
     dateKeys,
     dateSourceTags,
     { includeTechnicalFields: false },
   );
   const mwResult = writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
-  writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "SunPower", SUNPOWER_MW_SHEET_NAME);
   writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "TCL", TCL_MW_SHEET_NAME);
-  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, {
-    includeLocation: false,
-    applyTableStyle: false,
-    compactTransit: false,
-  });
-  writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
-  writeAllocationDeductionWorksheet(templateWorkbook, allocationDeductions);
-  writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
+  writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "SunPower", SUNPOWER_MW_SHEET_NAME);
   const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");
   if (obsoleteDomestic) templateWorkbook.removeWorksheet(obsoleteDomestic.id);
   writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[0], []);
   writeDomesticStockWorksheet(templateWorkbook, DOMESTIC_DETAIL_SHEET_NAMES[1], []);
+  writeAllocationDeductionWorksheet(templateWorkbook, allocationDeductions);
+  writeAllocationWorksheet(templateWorkbook, allocationData.headers, allocationData.orders);
+  writeStockWorksheet(templateWorkbook, UNMATCHED_SHEET_NAME, unmatchedRecords, dateKeys, dateSourceTags, {
+    includeLocation: false,
+    compactTransit: false,
+  });
+  writeTransitSourceWorksheet(templateWorkbook, transitSourceTag, dailyTransitQty, odpTransitQty, skuLookup);
   for (const mappingSheetName of ["Legacy Mapping Product", "SKU", "SKU Mapping", "Remove-list"]) {
     const mappingSheet = getWorksheetByNameInsensitive(templateWorkbook, mappingSheetName);
     if (mappingSheet) templateWorkbook.removeWorksheet(mappingSheet.id);
   }
+  orderAndHideOutputWorksheets(templateWorkbook);
   const outputBytes = await templateWorkbook.xlsx.writeBuffer();
 
   return {

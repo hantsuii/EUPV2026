@@ -41,7 +41,7 @@ Priority: `SKU` → `SKU Mapping` → `Legacy Mapping Product` (case-insensitive
 
 **Product display label:** `Model | SKU | Connector` (omit empty segments).
 
-Unmatched SKU rows are kept in the workbook (marked `SKU not matched`) but excluded from visualization.
+Rows from the Remove-list and SKUs missing from master data are kept in the workbook and included in normal stock outputs. The exported audit sheet is named `Removed SKU`; its `Source` column is placed before `WH` and uses `SKU not matched` or `Removed list`. Remove-list SKUs use normal master-data matching whenever a master-data row exists.
 
 ## 3. Source-Specific Extraction
 
@@ -110,7 +110,7 @@ activeSKU = set of SKUs where ANY of:
 
 Base columns (fixed order):
 ```
-WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock
+Source | WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock
 ```
 
 After base columns: daily transit columns for each date in range, header format `YYYY.M.D`.
@@ -129,8 +129,10 @@ Total MW = Total QTY × Bin / 1,000,000 (PV only)
 - To be allocated is NOT subtracted from Total QTY or Total MW.
 
 ### Other Sheets
-- `To be allocated`: order-level detail with Connector added
-- `_Transit Source Map`: provenance for each cell (source tag, DSP qty, ODP qty)
+- Visible output order: country PV sheets, `TCL MW`, `SunPower MW`, `ESS+HP Stock`, `PV Stock in CN`, `ESS Stock in CN`, `Allocation Deduction`, `To be allocated`, `Removed SKU`
+- `To be allocated`: order-level detail with Connector added; header styling, filter and frozen first row
+- `Removed SKU`: audit rows marked by `Source` as `SKU not matched` or `Removed list`
+- `MW` and `_Transit Source Map`: internal sheets retained as hidden sheets; `_Transit Source Map` stores provenance for each cell (source tag, DSP qty, ODP qty)
 - Template's original master-data sheets are preserved.
 
 ## 7. Visualization
