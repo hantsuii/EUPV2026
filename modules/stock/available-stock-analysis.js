@@ -322,13 +322,13 @@ function addMonthsISO(startDateISO, months) {
 }
 
 /**
- * Sets the transit start date to today and end date to today + 6 months.
+ * Sets the transit start date to today and end date to today + 4 months.
  */
 function setDefaultTransitDates() {
   const today = todayISO();
-  const sixMonthsLater = addMonthsISO(today, 6);
+  const fourMonthsLater = addMonthsISO(today, 4);
   if (transitStartInput) transitStartInput.value = today;
-  if (transitEndInput) transitEndInput.value = sixMonthsLater;
+  if (transitEndInput) transitEndInput.value = fourMonthsLater;
 }
 
 function getRowValueByLevel(row, def) {
@@ -966,7 +966,7 @@ function hasAnyActivityInRange(row, inRangeHeaders) {
 /**
  * Finds the index of the last date header that has any transit/arrival activity
  * across all rows. Used to truncate the display: we calculate the full range
- * (e.g. 6 months) but only show up to the last date with actual arrivals.
+ * (e.g. 4 months) but only show up to the last date with actual arrivals.
  * Returns -1 if no activity is found.
  */
 function findLastActivityDateIndex(dateHeaders) {
@@ -1124,7 +1124,7 @@ function renderChartAndTable() {
   }
 
   // --- Truncate display to last arrival date ---
-  // The analysis range may extend 6 months, but we only display up to the
+  // The analysis range may extend 4 months, but we only display up to the
   // last date that has any real transit/arrival activity. After that point
   // the available-stock curve is flat (no new arrivals), so those trailing
   // dates carry no information and should be hidden.
@@ -1937,7 +1937,7 @@ async function runPythonAnalysis() {
     });
 
     const startDate = transitStartInput.value || todayISO();
-    const endDate = transitEndInput.value || addMonthsISO(startDate, 6);
+    const endDate = transitEndInput.value || addMonthsISO(startDate, 4);
 
     const dailySupplyPy = dailySupplyPath ? `'${dailySupplyPath}'` : "None";
     const odpMasterPy = odpMasterPath ? `'${odpMasterPath}'` : "None";
@@ -2046,7 +2046,7 @@ async function runJavascriptAnalysis() {
       odpBytes,
       orderBytes,
       startDate: transitStartInput.value || todayISO(),
-      endDate: transitEndInput.value || addMonthsISO(transitStartInput.value || todayISO(), 6),
+      endDate: transitEndInput.value || addMonthsISO(transitStartInput.value || todayISO(), 4),
     };
     const result = await buildStockOutputJs({ ...buildOptions, stockMode: "available" });
     const totalResult = await buildStockOutputJs({ ...buildOptions, stockMode: "total" });
@@ -2107,7 +2107,7 @@ function resetForm() {
   if (useRepoOdpMasterEl) useRepoOdpMasterEl.checked = false;
   if (useRepoOrderfileEl) useRepoOrderfileEl.checked = false;
   transitStartInput.value = todayISO();
-  transitEndInput.value = addMonthsISO(todayISO(), 6);
+  transitEndInput.value = addMonthsISO(todayISO(), 4);
   resetDownloadLink();
   vizPanelEl.style.display = "none";
   detailTableEl.innerHTML = "";
@@ -2215,7 +2215,7 @@ if (savedGithub.token) githubTokenEl.value = savedGithub.token;
 saveGithubBtn.addEventListener("click", () => { saveGithubConfig(); setGithubStatus("githubSaved"); });
 loadHistoryBtn.addEventListener("click", loadStockHistory);
 
-// Auto-fill transit dates: start = today, end = today + 6 months
+// Auto-fill transit dates: start = today, end = today + 4 months
 setDefaultTransitDates();
 
 window.addEventListener("app-language-change", () => {

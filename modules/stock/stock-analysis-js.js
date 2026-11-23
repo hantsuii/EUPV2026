@@ -802,6 +802,10 @@ function isUnmatchedRecord(record) {
     .some((value) => markers.has(normalizeLower(value)));
 }
 
+function isRemovedListRecord(record) {
+  return normalizeLower(record.Source) === REMOVED_SKU_MARK.toLowerCase();
+}
+
 function cloneStockRecords(records) {
   return records.map((record) => ({
     ...record,
@@ -912,6 +916,13 @@ function writeAllocationDeductionWorksheet(workbook, deductions) {
       ...(item.RawRow || []), item.WH, item.StockDeducted, item.TransitDeducted, item.DeductedQty, item.RemainingQty, item.DeductionDetail,
     ]);
   }
+  const numericHeaders = new Set(["Ordered Qty", "Total KW", "Stock Deducted", "Transit Deducted", "Deducted Qty", "Remaining Qty"]);
+  headers.forEach((header, index) => {
+    if (!numericHeaders.has(header)) return;
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###";
+    }
+  });
   ws.getRow(1).eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
     cell.font = { bold: true };
@@ -927,11 +938,13 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
   const old = workbook.getWorksheet(sheetName);
   if (old) workbook.removeWorksheet(old.id);
   const ws = workbook.addWorksheet(sheetName);
+  const includeSource = options.includeSource !== false;
+  const sourceHeaders = includeSource ? ["Source"] : [];
   const locationHeaders = options.includeLocation === false ? [] : ["Location"];
   const baseHeaders = options.includeTechnicalFields === false ? [
-    "Source", "WH", ...locationHeaders, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
+    ...sourceHeaders, "WH", ...locationHeaders, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock",
   ] : [
-    "Source", "WH", ...locationHeaders, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
+    ...sourceHeaders, "WH", ...locationHeaders, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ",
     "Available QTY", "MW", "Stock",
   ];
   const compactTransit = options.compactTransit !== false;
@@ -955,9 +968,10 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
     if (record.AvailableQTY === 0) continue;
 
     const locationValues = options.includeLocation === false ? [] : [record.VirtualWarehouse || ""];
+    const sourceValues = includeSource ? [record.Source || ""] : [];
     const row = options.includeTechnicalFields === false
-      ? [record.Source || "", record.WH, ...locationValues, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
-      : [record.Source || "", record.WH, ...locationValues, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
+      ? [...sourceValues, record.WH, ...locationValues, record.Brand, record.Family, record.Model, record.SKU, record.MOQ, record.AvailableQTY, record.Stock]
+      : [...sourceValues, record.WH, ...locationValues, record.Brand, record.Family, record.Bin, record.Model, record.SKU, record.Connector, record.CableLength,
         record.MOQ, record.AvailableQTY, record.MW, record.Stock];
     const monthlyTotals = monthOrder.map((month) => Number(outputDateKeys
       .filter((dateKey) => monthLabel(dateKey) === month)
@@ -973,7 +987,7 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
   headers.forEach((header, index) => {
     if (!numericHeaders.has(header)) return;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(index + 1).numFmt = "0.000";
+      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###";
     }
   });
   if (options.applyTableStyle !== false) {
@@ -1115,7 +1129,6 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       + [...summary.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
     if (Number(totalMw.toFixed(3)) === 0) continue;
     const detailFields = {
-      Source: summary.Source || "",
       WH: summary.WH,
       Model: summary.Model,
       Connector: summary.Connector,
@@ -1123,14 +1136,14 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
     };
     addSummary(
       detailGroups,
-      [detailFields.Source, detailFields.WH, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
+      [detailFields.WH, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
       detailFields,
       summary,
     );
   }
 
   const ws = workbook.addWorksheet(sheetName);
-  const detailHeaders = ["Source", "WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
+  const detailHeaders = ["WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
   const sortByFields = (fields) => (a, b) => fields
     .map((field) => normalizeText(a[field]).localeCompare(normalizeText(b[field])))
     .find((value) => value !== 0) || 0;
@@ -1144,7 +1157,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   const detailHeaderRow = ws.addRow(detailHeaders);
   const subtotalRows = [];
   const byWarehouse = new Map();
-  for (const item of [...detailGroups.values()].sort(sortByFields(["Source", "WH", "Model", "Connector", "CableLength"]))) {
+  for (const item of [...detailGroups.values()].sort(sortByFields(["WH", "Model", "Connector", "CableLength"]))) {
     if (!byWarehouse.has(item.WH)) byWarehouse.set(item.WH, []);
     byWarehouse.get(item.WH).push(item);
   }
@@ -1172,11 +1185,11 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       grandTotal.Monthly.set(month, (grandTotal.Monthly.get(month) || 0) + Number(safeFloat(subtotal.Monthly.get(month)).toFixed(3)));
     }
   }
-  const grandTotalRow = ws.addRow(["", "All WH Total", "", "", "", ...numericValues(grandTotal)]);
+  const grandTotalRow = ws.addRow(["All WH Total", "", "", "", ...numericValues(grandTotal)]);
   for (const { wh, items, subtotal } of warehouseSummaries) {
-    subtotalRows.push(ws.addRow(["", `${wh} Total`, "", "", "", ...numericValues(subtotal)]));
+    subtotalRows.push(ws.addRow([`${wh} Total`, "", "", "", ...numericValues(subtotal)]));
     for (const item of items) {
-      ws.addRow([item.Source || "", item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
+      ws.addRow([item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
     }
   }
 
@@ -1204,14 +1217,13 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   });
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
     const row = ws.getRow(rowNumber);
-    for (let column = 6; column <= row.cellCount; column += 1) {
-      row.getCell(column).numFmt = "0.000";
+    for (let column = 5; column <= row.cellCount; column += 1) {
+      row.getCell(column).numFmt = "#,##0.###";
     }
   }
   ws.columns.forEach((column, index) => {
-    if (index === 0) column.width = 14;
-    else if (index === 1) column.width = 30;
-    else if (index === 2 || index === 3) column.width = 18;
+    if (index === 0) column.width = 30;
+    else if (index === 1 || index === 2 || index === 3) column.width = 18;
     else column.width = 13;
   });
   ws.autoFilter = `A2:${ws.getCell(ws.rowCount, detailHeaders.length).address}`;
@@ -1246,7 +1258,7 @@ function writeAllocationWorksheet(workbook, headers, orders) {
     const columnNumber = headerIndex.get(header);
     if (!columnNumber) continue;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(columnNumber).numFmt = "0.000";
+      ws.getRow(rowNumber).getCell(columnNumber).numFmt = "#,##0.###";
     }
   }
   ws.autoFilter = `A1:${ws.getCell(Math.max(1, ws.rowCount), outputHeaders.length).address}`;
@@ -1499,10 +1511,11 @@ export async function buildStockOutputJs({
     if (obsoleteStock) templateWorkbook.removeWorksheet(obsoleteStock.id);
   }
   const matchedRecords = exportRecords;
+  const visibleRecords = matchedRecords.filter((record) => !isRemovedListRecord(record));
   const unmatchedRecords = exportRecords.filter((record) => normalizeText(record.Source));
   const compareText = (left, right) => normalizeText(left).localeCompare(normalizeText(right), undefined, { numeric: true, sensitivity: "base" });
   for (const country of PV_STOCK_COUNTRIES) {
-    const countryRecords = matchedRecords.filter((record) => isPvCategory(record.Category)
+    const countryRecords = visibleRecords.filter((record) => isPvCategory(record.Category)
       && normalizeText(record.WH).toUpperCase() === country
       && !isExcludedInventoryFamily(record.Family));
     const aggregatedCountryRecords = aggregateRecordsBySku(countryRecords).sort((a, b) => (
@@ -1510,9 +1523,9 @@ export async function buildStockOutputJs({
       || compareText(a.SKU, b.SKU)
       || compareText(a.Source, b.Source)
     ));
-    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregatedCountryRecords, dateKeys, dateSourceTags);
+    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregatedCountryRecords, dateKeys, dateSourceTags, { includeSource: false });
   }
-  const essRecords = matchedRecords.filter((record) => !isPvCategory(record.Category)
+  const essRecords = visibleRecords.filter((record) => !isPvCategory(record.Category)
     && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH
     && !isExcludedEssHpFamily(record.Family));
   writeStockWorksheet(
@@ -1526,9 +1539,9 @@ export async function buildStockOutputJs({
     )),
     dateKeys,
     dateSourceTags,
-    { includeTechnicalFields: false },
+    { includeTechnicalFields: false, includeSource: false },
   );
-  const mwResult = writeMwWorksheet(templateWorkbook, matchedRecords, dateKeys);
+  const mwResult = writeMwWorksheet(templateWorkbook, visibleRecords, dateKeys);
   writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "TCL", TCL_MW_SHEET_NAME);
   writeBrandMwWorksheet(templateWorkbook, mwResult.grouped, mwResult.monthOrder, "SunPower", SUNPOWER_MW_SHEET_NAME);
   const obsoleteDomestic = templateWorkbook.getWorksheet("Domestic Stock");

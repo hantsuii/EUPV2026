@@ -7,15 +7,15 @@ from collections import defaultdict
 from copy import copy, deepcopy
 from datetime import date, datetime, timedelta
 
-# Default: start = today, end = today + 6 months (used only if no explicit dates passed)
+# Default: start = today, end = today + 4 months (used only if no explicit dates passed)
 
 def _default_start():
     return date.today()
 
 def _default_end():
     today = date.today()
-    # add 6 months
-    m = today.month + 6
+    # add 4 months
+    m = today.month + 4
     y = today.year + (m - 1) // 12
     m = ((m - 1) % 12) + 1
     return date(y, m, today.day)
@@ -1485,7 +1485,13 @@ def write_output_sheet_v2(
 
     stock_output_sheets: list[Any] = []
 
-    def write_stock_sheet(name: str, source_records: list[dict[str, Any]], include_technical_fields: bool = True, include_location: bool = True) -> None:
+    def write_stock_sheet(
+        name: str,
+        source_records: list[dict[str, Any]],
+        include_technical_fields: bool = True,
+        include_location: bool = True,
+        include_source: bool = True,
+    ) -> None:
         ws = wb.create_sheet(name)
         compact_transit = name in {*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"}
         stock_output_sheets.append(ws)
@@ -1503,8 +1509,9 @@ def write_output_sheet_v2(
                 month_order_for_sheet.append(month)
         month_headers = [f"{month} Total" for month in month_order_for_sheet]
         location_headers = ["Location"] if include_location else []
-        sheet_headers = (["Source", "WH", *location_headers, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock", *output_transit_headers, *month_headers]
-                         if include_technical_fields else ["Source", "WH", *location_headers, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *output_transit_headers, *month_headers])
+        source_headers = ["Source"] if include_source else []
+        sheet_headers = ([*source_headers, "WH", *location_headers, "Brand", "Family", "Bin", "Model", "SKU", "Connector", "Cable Length", "MOQ", "Available QTY", "MW", "Stock", *output_transit_headers, *month_headers]
+                         if include_technical_fields else [*source_headers, "WH", *location_headers, "Brand", "Family", "Model", "SKU", "MOQ", "Available QTY", "Stock", *output_transit_headers, *month_headers])
         ws.append(sheet_headers)
         for column_number, header in enumerate(sheet_headers, start=1):
             if header == "Source":
@@ -1535,12 +1542,13 @@ def write_output_sheet_v2(
             is_pv = normalize_upper_category(record.get("Category")).startswith("PV")
             total_mw = (available_qty * safe_float(record.get("Bin"))) / 1_000_000 if is_pv else None
             location_values = [record.get("VirtualWarehouse", "")] if include_location else []
+            source_values = [record.get("Source", "")] if include_source else []
             row = [
-                record.get("Source", ""), record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Bin"), record.get("Model"),
+                *source_values, record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Bin"), record.get("Model"),
                 record.get("SKU"), record.get("Connector"), record.get("CableLength"), record.get("MOQ"),
                 round(available_qty, 3), round(total_mw, 3) if total_mw is not None else None, record.get("Stock"),
             ] if include_technical_fields else [
-                record.get("Source", ""), record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Model"), record.get("SKU"),
+                *source_values, record.get("WH"), *location_values, record.get("Brand"), record.get("Family"), record.get("Model"), record.get("SKU"),
                 record.get("MOQ"), round(available_qty, 3), record.get("Stock"),
             ]
             monthly_totals = []
@@ -1557,10 +1565,14 @@ def write_output_sheet_v2(
             ])
 
     matched = records
+    visible_records = [
+        record for record in matched
+        if normalize_lower(record.get("Source")) != REMOVED_SKU_MARK.lower()
+    ]
     unmatched = [record for record in records if normalize_text(record.get("Source"))]
     for country in PV_STOCK_COUNTRIES:
         country_records = aggregate_pv([
-            record for record in matched
+            record for record in visible_records
             if normalize_upper_category(record.get("Category")).startswith("PV")
             and normalize_text(record.get("WH")).upper() == country
             and not is_excluded_inventory_family(record.get("Family"))
@@ -1570,9 +1582,9 @@ def write_output_sheet_v2(
             normalize_sku_key(record.get("SKU")),
             normalize_text(record.get("Source")).casefold(),
         ))
-        write_stock_sheet(f"{country}_PV", country_records)
+        write_stock_sheet(f"{country}_PV", country_records, include_source=False)
     ess_records = [
-        record for record in matched
+        record for record in visible_records
         if not normalize_upper_category(record.get("Category")).startswith("PV")
         and normalize_text(record.get("WH")).upper() != DOMESTIC_WH
         and not is_excluded_ess_hp_family(record.get("Family"))
@@ -1583,14 +1595,14 @@ def write_output_sheet_v2(
         normalize_sku_key(record.get("SKU")),
         normalize_text(record.get("Source")).casefold(),
     ))
-    write_stock_sheet("ESS+HP Stock", ess_records, include_technical_fields=False)
+    write_stock_sheet("ESS+HP Stock", ess_records, include_technical_fields=False, include_source=False)
 
     mw_groups: dict[tuple[str, str], dict[str, Any]] = {}
     week_order: list[str] = []
     month_order: list[str] = []
     seen_weeks: set[str] = set()
     seen_months: set[str] = set()
-    for record in matched:
+    for record in visible_records:
         country = normalize_text(record.get("WH")).upper()
         if not country or not normalize_upper_category(record.get("Category")).startswith("PV"):
             continue
@@ -1675,7 +1687,7 @@ def write_output_sheet_v2(
             total_mw = safe_float(source.get("StockMW")) + sum(safe_float(value) for value in source["Daily"].values())
             if round(total_mw, 3) == 0:
                 continue
-            key_fields = ("Source", "WH", "Model", "Connector", "CableLength")
+            key_fields = ("WH", "Model", "Connector", "CableLength")
             key = tuple(normalize_text(source.get(field)) for field in key_fields)
             if key not in grouped_summary:
                 grouped_summary[key] = {
@@ -1695,7 +1707,7 @@ def write_output_sheet_v2(
     for brand_name, sheet_name in (("TCL", TCL_MW_SHEET_NAME), ("SunPower", SUNPOWER_MW_SHEET_NAME)):
         ws_brand = wb.create_sheet(sheet_name)
         ws_brand.append([f"{brand_name} MW Detail"])
-        ws_brand.append(["Source", "WH", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
+        ws_brand.append(["WH", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
         subtotal_rows: list[int] = []
         by_warehouse: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for item in aggregate_mw_summary(brand_name):
@@ -1723,19 +1735,19 @@ def write_output_sheet_v2(
             for month in month_order:
                 grand_monthly[month] += round(subtotal_monthly.get(month, 0.0), 3)
         ws_brand.append([
-            "", "All WH Total", "", "", "", round(grand_stock, 3),
+                "All WH Total", "", "", "", round(grand_stock, 3),
             *[round(grand_monthly.get(month, 0.0), 3) for month in month_order], round(grand_total, 3),
         ])
         grand_total_row = ws_brand.max_row
         for warehouse, items, subtotal_stock, subtotal_total, subtotal_monthly in warehouse_summaries:
             ws_brand.append([
-                "", f"{warehouse} Total", "", "", "", round(subtotal_stock, 3),
+                f"{warehouse} Total", "", "", "", round(subtotal_stock, 3),
                 *[round(subtotal_monthly.get(month, 0.0), 3) for month in month_order], round(subtotal_total, 3),
             ])
             subtotal_rows.append(ws_brand.max_row)
             for item in items:
                 ws_brand.append([
-                    item.get("Source", ""), item["WH"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
+                    item["WH"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
                     *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
                 ])
         mw_summary_layouts.append((ws_brand, subtotal_rows, grand_total_row))
@@ -1821,7 +1833,7 @@ def write_output_sheet_v2(
             )
             if header in numeric_headers:
                 for row_number in range(2, ws_stock.max_row + 1):
-                    ws_stock.cell(row=row_number, column=column_number).number_format = "0.000"
+                    ws_stock.cell(row=row_number, column=column_number).number_format = "#,##0.###"
 
     for ws_brand, subtotal_rows, grand_total_row in mw_summary_layouts:
         for cell in ws_brand[2]:
@@ -1840,11 +1852,11 @@ def write_output_sheet_v2(
             cell.font = Font(bold=True, color="1F1F1F")
             cell.border = Border(top=strong_blue_line)
         for row_number in range(3, ws_brand.max_row + 1):
-            for column_number in range(6, ws_brand.max_column + 1):
-                ws_brand.cell(row=row_number, column=column_number).number_format = "0.000"
-        for column_letter, width in {"A": 14, "B": 30, "C": 18, "D": 18}.items():
+            for column_number in range(5, ws_brand.max_column + 1):
+                ws_brand.cell(row=row_number, column=column_number).number_format = "#,##0.###"
+        for column_letter, width in {"A": 30, "B": 18, "C": 18, "D": 18}.items():
             ws_brand.column_dimensions[column_letter].width = width
-        for column_number in range(6, ws_brand.max_column + 1):
+        for column_number in range(5, ws_brand.max_column + 1):
             column_letter = ws_brand.cell(row=2, column=column_number).column_letter
             ws_brand.column_dimensions[column_letter].width = 13
         ws_brand.auto_filter.ref = f"A2:{ws_brand.cell(row=ws_brand.max_row, column=ws_brand.max_column).coordinate}"
@@ -1859,6 +1871,10 @@ def write_output_sheet_v2(
     for column_number in range(1, ws_deduction.max_column + 1):
         column_letter = ws_deduction.cell(row=1, column=column_number).column_letter
         ws_deduction.column_dimensions[column_letter].width = 36 if column_number == ws_deduction.max_column else 16
+        header = normalize_text(ws_deduction.cell(row=1, column=column_number).value)
+        if header in {"Ordered Qty", "Total KW", "Stock Deducted", "Transit Deducted", "Deducted Qty", "Remaining Qty"}:
+            for row_number in range(2, ws_deduction.max_row + 1):
+                ws_deduction.cell(row=row_number, column=column_number).number_format = "#,##0.###"
 
     for cell in ws_alloc[1]:
         cell.fill = header_fill
@@ -1881,7 +1897,7 @@ def write_output_sheet_v2(
         ws_alloc.column_dimensions[column_letter].width = allocation_widths.get(header, 16)
         if header in allocation_numeric_headers:
             for row_number in range(2, ws_alloc.max_row + 1):
-                ws_alloc.cell(row=row_number, column=column_number).number_format = "0.000"
+                ws_alloc.cell(row=row_number, column=column_number).number_format = "#,##0.###"
 
     visible_sheet_order = [
         *[f"{country}_PV" for country in PV_STOCK_COUNTRIES],
@@ -2136,7 +2152,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--odp-master", default=None, type=Path, help="EUPV_ODP_MASTER path (optional)")
     parser.add_argument("--order-file", default=None, type=Path, help="Orderfile_Base_Realtime path (optional)")
     parser.add_argument("--transit-start", default=None, help="Transit start date YYYY-MM-DD (default: today)")
-    parser.add_argument("--transit-end", default=None, help="Transit end date YYYY-MM-DD (default: today + 6 months)")
+    parser.add_argument("--transit-end", default=None, help="Transit end date YYYY-MM-DD (default: today + 4 months)")
     parser.add_argument("--stock-mode", choices=("available", "total"), default="available", help="Stock calculation mode")
     return parser.parse_args()
 

@@ -17,7 +17,7 @@ description: Available stock analysis module that merges inventory, daily supply
 
 Upload files take priority; if not uploaded and "use default warehouse files" is checked, read from `templates/` directory.
 
-**Default date range:** 2026-08-01 to 2026-12-31 (configurable).
+**Default date range:** today through four months later (configurable).
 
 ## 2. SKU Master Data
 
@@ -41,7 +41,7 @@ Priority: `SKU` → `SKU Mapping` → `Legacy Mapping Product` (case-insensitive
 
 **Product display label:** `Model | SKU | Connector` (omit empty segments).
 
-Rows from the Remove-list and SKUs missing from master data are kept in the workbook and included in normal stock outputs. The exported audit sheet is named `Removed SKU`; its `Source` column is placed before `WH` and uses `SKU not matched` or `Removed list`. Remove-list SKUs use normal master-data matching whenever a master-data row exists.
+SKUs missing from master data remain in normal stock outputs. Remove-list rows are kept only in the `Removed SKU` audit sheet, whose `Source` column is placed before `WH` and uses `SKU not matched` or `Removed list`. Remove-list SKUs use normal master-data matching whenever a master-data row exists.
 
 ## 3. Source-Specific Extraction
 
@@ -110,7 +110,7 @@ activeSKU = set of SKUs where ANY of:
 
 Base columns (fixed order):
 ```
-Source | WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock
+WH | Category | Brand | Product TCL Report | Family | SKU | Model | Connector | Bin | MOQ | To be allocated | Total QTY | Total MW | MW | Stock
 ```
 
 After base columns: daily transit columns for each date in range, header format `YYYY.M.D`.
@@ -131,7 +131,7 @@ Total MW = Total QTY × Bin / 1,000,000 (PV only)
 ### Other Sheets
 - Visible output order: country PV sheets, `TCL MW`, `SunPower MW`, `ESS+HP Stock`, `PV Stock in CN`, `ESS Stock in CN`, `Allocation Deduction`, `To be allocated`, `Removed SKU`
 - `To be allocated`: order-level detail with Connector added; header styling, filter and frozen first row
-- `Removed SKU`: audit rows marked by `Source` as `SKU not matched` or `Removed list`
+- `Removed SKU`: audit rows marked by `Source` as `SKU not matched` or `Removed list`; `Removed list` rows are excluded from the country PV, `ESS+HP Stock`, `TCL MW`, and `SunPower MW` sheets
 - `MW` and `_Transit Source Map`: internal sheets retained as hidden sheets; `_Transit Source Map` stores provenance for each cell (source tag, DSP qty, ODP qty)
 - Template's original master-data sheets are preserved.
 

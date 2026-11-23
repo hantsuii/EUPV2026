@@ -46,7 +46,7 @@ Legacy Mapping Product 字段映射：
 | Bin | Bins |
 | MOQ | Container Loading |
 
-如果使用 Legacy Mapping Product 匹配，Connector 和 Cable Length 均为空。如果两个主数据表都匹配不到，记录仍按来源数据写入正常库存 Sheet 和网页可视化，并在 `Source` 列标记为 `SKU not matched`。模板 `Remove-list` 中的 SKU 输出到 `Source` 列标记为 `Removed list`；如果该 SKU 在主数据中存在，Brand、Family、Model、Connector、Cable Length、Bin、MOQ 等字段正常匹配，否则按未匹配逻辑保留。导出追溯页名称改为 `Removed SKU`，并不再把这两类记录从国家库存、ESS/HP、MW、品牌 MW 或网页数据中排除。
+如果使用 Legacy Mapping Product 匹配，Connector 和 Cable Length 均为空。如果两个主数据表都匹配不到，记录仍按来源数据写入正常库存 Sheet 和网页可视化，并标记为 `SKU not matched`。模板 `Remove-list` 中的 SKU 输出到 `Removed SKU`，标记为 `Removed list`；如果该 SKU 在主数据中存在，Brand、Family、Model、Connector、Cable Length、Bin、MOQ 等字段正常匹配，否则按未匹配逻辑保留。`Removed list` 记录不进入国家库存、ESS/HP 或品牌 MW Sheet。
 
 Brand 不区分大小写；`SunPower`、`SUNPOWER` 等写法统一输出为 `SunPower`。
 
@@ -172,14 +172,15 @@ Removed SKU
 
 `MW` 和 `_Transit Source Map` 为系统内部 Sheet，保留但隐藏；前者用于品牌 MW 汇总，后者用于网页恢复 DSP、ODP 和 MIXED 来源。
 
-国家 PV Sheet 按 `Model` 升序显示；`ESS+HP Stock` 先按 `WH` 升序，再按每个 `WH` 内的 `Model` 升序显示。
+国家 PV Sheet 按 `Model` 升序显示；`ESS+HP Stock` 先按 `WH` 升序，再按每个 `WH` 内的 `Model` 升序显示。国家 PV、`ESS+HP Stock`、`TCL MW` 和 `SunPower MW` 不保留 `Removed list` 记录，也不显示 `Source` 列；`Removed SKU` 审计页仍保留这些记录及来源标记。
 
 `To be allocated` 和 `Removed SKU` 使用统一的表头样式、筛选、首行冻结、列宽和数量格式。
+
+导出数量最多保留三位小数；整数不显示尾随小数。
 
 库存 Sheet 基础列顺序为：
 
 ```text
-Source
 WH
 Location
 Brand
@@ -198,7 +199,7 @@ Stock
 `ESS+HP Stock` 单独使用精简列，不导出 `Bin`、`Connector`、`Cable Length`、`MW`：
 
 ```text
-Source | WH | Location | Brand | Family | Model | SKU | MOQ | Available QTY | Stock
+WH | Location | Brand | Family | Model | SKU | MOQ | Available QTY | Stock
 ```
 
 后面追加生成日期范围内的每日 DSP 在途列，表头格式为 `YYYY.M.D`。
@@ -242,10 +243,10 @@ Total MW = Stock MW + 全部 DSP 到货 MW
 
 ## 10. 品牌 MW 汇总 Sheet
 
-分别生成 `TCL MW` 和 `SunPower MW`，基于扣减后的 `MW` 数据生成。每个 Sheet 仅保留对应品牌，并按 `Source + WH + Model + Connector + Cable Length` 汇总：
+分别生成 `TCL MW` 和 `SunPower MW`，基于扣减后的 `MW` 数据生成。每个 Sheet 仅保留对应品牌，并按 `WH + Model + Connector + Cable Length` 汇总：
 
 ```text
-Source | WH | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
+WH | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
 ```
 
 月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。`All WH Total` 放在所有明细最上方；各仓库区块的 `WH Total` 放在对应仓库明细之前，仓库区块仍按照各仓库 `Total MW` 合计从高到低排列。`Total MW` 等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
