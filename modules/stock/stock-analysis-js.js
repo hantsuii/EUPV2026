@@ -98,6 +98,17 @@ function safeFloat(value) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function formatNumericCell(cell) {
+  const raw = unwrapValue(cell.value);
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const numericText = raw.trim().replace(/,/g, "");
+    const numericValue = Number(numericText);
+    if (Number.isFinite(numericValue)) cell.value = numericValue;
+  }
+  const numericValue = typeof cell.value === "number" ? cell.value : safeFloat(cell.value);
+  cell.numFmt = Number.isInteger(numericValue) ? "#,##0" : "#,##0.###";
+}
+
 function buildHeaderIndex(headers) {
   const out = {};
   headers.forEach((header, index) => {
@@ -920,7 +931,7 @@ function writeAllocationDeductionWorksheet(workbook, deductions) {
   headers.forEach((header, index) => {
     if (!numericHeaders.has(header)) return;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###;-#,##0.###;0";
+      formatNumericCell(ws.getRow(rowNumber).getCell(index + 1));
     }
   });
   ws.getRow(1).eachCell((cell) => {
@@ -987,7 +998,7 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
   headers.forEach((header, index) => {
     if (!numericHeaders.has(header)) return;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(index + 1).numFmt = "#,##0.###;-#,##0.###;0";
+      formatNumericCell(ws.getRow(rowNumber).getCell(index + 1));
     }
   });
   if (options.applyTableStyle !== false) {
@@ -1102,6 +1113,13 @@ function writeMwWorksheet(workbook, records, dateKeys) {
       ...monthOrder.map((period) => Number((summary.Monthly.get(period) || 0).toFixed(3))),
     ]);
   }
+  const numericHeaders = new Set(["Bin", "MOQ", "Total MW", "Stock MW", ...dateKeys.map(dateKeyToHeader), ...weekOrder, ...monthOrder]);
+  headers.forEach((header, index) => {
+    if (!numericHeaders.has(header)) return;
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      formatNumericCell(ws.getRow(rowNumber).getCell(index + 1));
+    }
+  });
   return { ws, grouped, monthOrder };
 }
 
@@ -1218,7 +1236,7 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
     const row = ws.getRow(rowNumber);
     for (let column = 5; column <= row.cellCount; column += 1) {
-      row.getCell(column).numFmt = "#,##0.###;-#,##0.###;0";
+      formatNumericCell(row.getCell(column));
     }
   }
   ws.columns.forEach((column, index) => {
@@ -1258,7 +1276,7 @@ function writeAllocationWorksheet(workbook, headers, orders) {
     const columnNumber = headerIndex.get(header);
     if (!columnNumber) continue;
     for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
-      ws.getRow(rowNumber).getCell(columnNumber).numFmt = "#,##0.###;-#,##0.###;0";
+      formatNumericCell(ws.getRow(rowNumber).getCell(columnNumber));
     }
   }
   ws.autoFilter = `A1:${ws.getCell(Math.max(1, ws.rowCount), outputHeaders.length).address}`;
@@ -1295,6 +1313,13 @@ function writeTransitSourceWorksheet(workbook, transitSourceTag, dailyTransitQty
       safeFloat(odpTransitQty.get(key)),
     ]);
   }
+  for (const header of ["Daily Supply Plan Qty", "ODP Qty"]) {
+    const columnNumber = ws.getRow(1).values.indexOf(header);
+    if (columnNumber < 1) continue;
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      formatNumericCell(ws.getRow(rowNumber).getCell(columnNumber));
+    }
+  }
   return ws;
 }
 
@@ -1305,6 +1330,11 @@ function writeDomesticStockWorksheet(workbook, sheetName, domesticDetails) {
   ws.addRow(["SKU", "Model", "Factory", "Quantity", "MW"]);
   for (const item of domesticDetails.filter((row) => safeFloat(row.Quantity) !== 0)) {
     ws.addRow([item.SKU, item.Model, item.Factory, item.Quantity, item.MW]);
+  }
+  for (const columnNumber of [4, 5]) {
+    for (let rowNumber = 2; rowNumber <= ws.rowCount; rowNumber += 1) {
+      formatNumericCell(ws.getRow(rowNumber).getCell(columnNumber));
+    }
   }
   return ws;
 }

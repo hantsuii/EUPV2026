@@ -6,6 +6,7 @@ from calendar import monthrange
 from collections import defaultdict
 from copy import copy, deepcopy
 from datetime import date, datetime, timedelta
+from math import isfinite
 
 # Default: start = today, end = today + 4 months (used only if no explicit dates passed)
 
@@ -139,6 +140,20 @@ def safe_float(value: Any) -> float:
         return float(text)
     except ValueError:
         return 0.0
+
+
+def format_numeric_cell(cell: Any) -> None:
+    raw = cell.value
+    if isinstance(raw, str) and raw.strip():
+        numeric_text = raw.strip().replace(",", "")
+        try:
+            numeric_value = float(numeric_text)
+        except ValueError:
+            numeric_value = None
+        if numeric_value is not None and isfinite(numeric_value):
+            cell.value = int(numeric_value) if numeric_value.is_integer() else numeric_value
+    numeric_value = cell.value if isinstance(cell.value, (int, float)) else safe_float(cell.value)
+    cell.number_format = "#,##0" if isinstance(numeric_value, (int, float)) and isfinite(numeric_value) and float(numeric_value).is_integer() else "#,##0.###"
 
 
 def build_header_index(headers: list[Any]) -> dict[str, int]:
@@ -1099,7 +1114,7 @@ def write_output_sheet(
                 source = normalize_source_tag(date_source_summary.get(header, SOURCE_INV_DSP))
                 output_ws.cell(output_row, header_col[header]).fill = CELL_FILL_BY_SOURCE.get(source, CELL_FILL_BY_SOURCE[SOURCE_INV_DSP])
             for col_num in range(10, len(headers) + 1):
-                output_ws.cell(output_row, col_num).number_format = "#,##0.###;-#,##0.###;0"
+                format_numeric_cell(output_ws.cell(output_row, col_num))
 
     output_ws = wb.copy_worksheet(ws)
     output_ws.title = "ESS+HP Stock"
@@ -1678,6 +1693,12 @@ def write_output_sheet_v2(
             *[round(summary["Weekly"].get(period, 0.0), 3) for period in week_order],
             *[round(summary["Monthly"].get(period, 0.0), 3) for period in month_order],
         ])
+    mw_numeric_headers = {"Bin", "MOQ", "Total MW", "Stock MW", *transit_headers, *week_order, *month_order}
+    for column_number in range(1, ws_mw.max_column + 1):
+        if normalize_text(ws_mw.cell(row=1, column=column_number).value) not in mw_numeric_headers:
+            continue
+        for row_number in range(2, ws_mw.max_row + 1):
+            format_numeric_cell(ws_mw.cell(row=row_number, column=column_number))
 
     def aggregate_mw_summary(brand_name: str) -> list[dict[str, Any]]:
         grouped_summary: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -1782,6 +1803,11 @@ def write_output_sheet_v2(
             normalize_source_tag(transit_source_tag.get(key, SOURCE_INV_DSP)),
             round(safe_float(daily_transit_qty.get(key)), 3), round(safe_float(odp_transit_qty.get(key)), 3),
         ])
+    for column_number in range(1, ws_source.max_column + 1):
+        if normalize_text(ws_source.cell(row=1, column=column_number).value) not in {"Daily Supply Plan Qty", "ODP Qty"}:
+            continue
+        for row_number in range(2, ws_source.max_row + 1):
+            format_numeric_cell(ws_source.cell(row=row_number, column=column_number))
 
     for sheet_name in DOMESTIC_DETAIL_SHEET_NAMES:
         ws_domestic = wb.create_sheet(sheet_name)
@@ -1833,7 +1859,7 @@ def write_output_sheet_v2(
             )
             if header in numeric_headers:
                 for row_number in range(2, ws_stock.max_row + 1):
-                    ws_stock.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
+                    format_numeric_cell(ws_stock.cell(row=row_number, column=column_number))
 
     for ws_brand, subtotal_rows, grand_total_row in mw_summary_layouts:
         for cell in ws_brand[2]:
@@ -1853,7 +1879,7 @@ def write_output_sheet_v2(
             cell.border = Border(top=strong_blue_line)
         for row_number in range(3, ws_brand.max_row + 1):
             for column_number in range(5, ws_brand.max_column + 1):
-                ws_brand.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
+                format_numeric_cell(ws_brand.cell(row=row_number, column=column_number))
         for column_letter, width in {"A": 30, "B": 18, "C": 18, "D": 18}.items():
             ws_brand.column_dimensions[column_letter].width = width
         for column_number in range(5, ws_brand.max_column + 1):
@@ -1874,7 +1900,7 @@ def write_output_sheet_v2(
         header = normalize_text(ws_deduction.cell(row=1, column=column_number).value)
         if header in {"Ordered Qty", "Total KW", "Stock Deducted", "Transit Deducted", "Deducted Qty", "Remaining Qty"}:
             for row_number in range(2, ws_deduction.max_row + 1):
-                ws_deduction.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
+                format_numeric_cell(ws_deduction.cell(row=row_number, column=column_number))
 
     for cell in ws_alloc[1]:
         cell.fill = header_fill
@@ -1897,7 +1923,7 @@ def write_output_sheet_v2(
         ws_alloc.column_dimensions[column_letter].width = allocation_widths.get(header, 16)
         if header in allocation_numeric_headers:
             for row_number in range(2, ws_alloc.max_row + 1):
-                ws_alloc.cell(row=row_number, column=column_number).number_format = "#,##0.###;-#,##0.###;0"
+                format_numeric_cell(ws_alloc.cell(row=row_number, column=column_number))
 
     visible_sheet_order = [
         *[f"{country}_PV" for country in PV_STOCK_COUNTRIES],
