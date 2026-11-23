@@ -1236,7 +1236,7 @@ def write_output_sheet_v2(
             "Brand": mapped.get("Brand", ""),
             "Family": mapped.get("Family", ""),
             "Size": mapped.get("Size", ""),
-            "Model": model or mapped.get("Model", ""),
+            "Model": mapped.get("Model", ""),
             "Connector": mapped.get("Connector", ""),
             "CableLength": mapped.get("CableLength", ""),
             "Bin": safe_float(mapped.get("Bin")),

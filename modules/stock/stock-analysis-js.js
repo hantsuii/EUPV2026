@@ -615,7 +615,7 @@ function createStockRecord(wh, sku, mapped, stock = 0, domesticStock = 0, virtua
     Brand: mapped.Brand,
     Family: mapped.Family,
     Size: mapped.Size,
-    Model: sourceProductModel || mapped.Model,
+    Model: mapped.Model,
     Connector: mapped.Connector,
     CableLength: mapped.CableLength,
     Bin: mapped.Bin,
