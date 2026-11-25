@@ -165,8 +165,11 @@ def build_header_index(headers: list[Any]) -> dict[str, int]:
     return out
 
 
-def map_country_code(sales_org_name: str) -> str:
-    name = normalize_lower(sales_org_name)
+def map_country_code(sales_org_name: str, physical_warehouse_name: Any = "") -> str:
+    name = " ".join(normalize_lower(sales_org_name).split())
+    physical_warehouse = " ".join(normalize_lower(physical_warehouse_name).split())
+    if name == "distributors" and physical_warehouse == "gca marseille fos w31":
+        return "FR"
     if "netherland" in name or "netherlands" in name:
         return "NL"
     if "france" in name:
@@ -379,7 +382,7 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
         raise ValueError(f"Inventory Detail missing columns: {missing}")
 
     stock_column = "actual stock" if stock_mode == "total" else "available stock"
-    grouped: dict[tuple[str, str, str, str, str], float] = defaultdict(float)
+    grouped: dict[tuple[str, str, str, str, str, str], float] = defaultdict(float)
     for row in ws.iter_rows(min_row=2, values_only=True):
         sales_org_name = row[idx["sales organization name"]]
         virtual_warehouse_name = row[idx["virtual warehouse name"]]
@@ -396,12 +399,13 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
             continue
 
         stock = safe_float(row[idx[stock_column]])
-        grouped[(sales_org, virtual_warehouse, category, sku, product_model)] += stock
+        mapped_wh = map_country_code(sales_org_name, physical_warehouse_name)
+        grouped[(sales_org, virtual_warehouse, category, sku, product_model, mapped_wh)] += stock
 
     wb.close()
 
     out: list[dict[str, Any]] = []
-    for (sales_org, virtual_warehouse, category, sku, product_model), stock in sorted(grouped.items()):
+    for (sales_org, virtual_warehouse, category, sku, product_model, mapped_wh), stock in sorted(grouped.items()):
         out.append(
             {
                 "SKU": sku,
@@ -409,7 +413,7 @@ def extract_inventory_rows(inventory_path: Path, stock_mode: str = "available") 
                 "ProductModel": product_model,
                 "VirtualWarehouse": virtual_warehouse,
                 "Stock": round(stock, 3),
-                "WH": map_country_code(sales_org),
+                "WH": mapped_wh,
             }
         )
     return out
@@ -1592,11 +1596,11 @@ def write_output_sheet_v2(
             and normalize_text(record.get("WH")).upper() == country
             and not is_excluded_inventory_family(record.get("Family"))
         ])
-        country_records.sort(key=lambda record: (
-            normalize_text(record.get("Model")).casefold(),
-            normalize_sku_key(record.get("SKU")),
-            normalize_text(record.get("Source")).casefold(),
-        ))
+        country_records.sort(key=lambda record: normalize_text(record.get("Source")).casefold())
+        country_records.sort(key=lambda record: normalize_sku_key(record.get("SKU")))
+        country_records.sort(key=lambda record: normalize_text(record.get("Model")).casefold())
+        country_records.sort(key=lambda record: normalize_text(record.get("Brand")).casefold(), reverse=True)
+        country_records.sort(key=lambda record: safe_float(record.get("Bin")))
         write_stock_sheet(f"{country}_PV", country_records, include_source=False)
     ess_records = [
         record for record in visible_records
@@ -1604,6 +1608,30 @@ def write_output_sheet_v2(
         and normalize_text(record.get("WH")).upper() != DOMESTIC_WH
         and not is_excluded_ess_hp_family(record.get("Family"))
     ]
+    ess_grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for source in ess_records:
+        key = (normalize_text(source.get("WH")).upper(), normalize_sku_key(source.get("SKU")))
+        if key not in ess_grouped:
+            target = dict(source)
+            target["Stock"] = safe_float(source.get("Stock"))
+            target["StockTransit"] = defaultdict(float, source.get("StockTransit", {}))
+            target["Locations"] = set()
+            ess_grouped[key] = target
+        else:
+            target = ess_grouped[key]
+            target["Stock"] += safe_float(source.get("Stock"))
+            for d_header, qty in source.get("StockTransit", {}).items():
+                target["StockTransit"][d_header] += safe_float(qty)
+        has_inventory_or_dsp = safe_float(source.get("Stock")) != 0 or any(
+            safe_float(qty) != 0 for qty in source.get("StockTransit", {}).values()
+        )
+        if has_inventory_or_dsp:
+            for location in normalize_text(source.get("VirtualWarehouse")).split(" / "):
+                if location.strip():
+                    ess_grouped[key]["Locations"].add(location.strip())
+    for target in ess_grouped.values():
+        target["VirtualWarehouse"] = " / ".join(sorted(target["Locations"]))
+    ess_records = list(ess_grouped.values())
     ess_records.sort(key=lambda record: (
         normalize_text(record.get("WH")).casefold(),
         normalize_text(record.get("Model")).casefold(),
@@ -1708,34 +1736,48 @@ def write_output_sheet_v2(
             total_mw = safe_float(source.get("StockMW")) + sum(safe_float(value) for value in source["Daily"].values())
             if round(total_mw, 3) == 0:
                 continue
-            key_fields = ("WH", "Model", "Connector", "CableLength")
+            key_fields = ("WH", "Family", "Model", "Connector", "CableLength")
             key = tuple(normalize_text(source.get(field)) for field in key_fields)
             if key not in grouped_summary:
                 grouped_summary[key] = {
                     **{field: source.get(field, "") for field in key_fields},
+                    "Bin": safe_float(source.get("Bin")),
                     "StockMW": 0.0,
                     "TotalMW": 0.0,
                     "Monthly": defaultdict(float),
                 }
             target = grouped_summary[key]
+            source_bin = safe_float(source.get("Bin"))
+            if source_bin and (not safe_float(target.get("Bin")) or source_bin < safe_float(target.get("Bin"))):
+                target["Bin"] = source_bin
             target["StockMW"] += safe_float(source.get("StockMW"))
             target["TotalMW"] += total_mw
             for month in month_order:
                 target["Monthly"][month] += safe_float(source["Monthly"].get(month))
-        return sorted(grouped_summary.values(), key=lambda item: tuple(normalize_text(item.get(field)) for field in key_fields))
+        return sorted(
+            grouped_summary.values(),
+            key=lambda item: (
+                safe_float(item.get("Bin")),
+                *(normalize_text(item.get(field)) for field in key_fields),
+            ),
+        )
 
     mw_summary_layouts: list[tuple[Any, list[int], int]] = []
     for brand_name, sheet_name in (("TCL", TCL_MW_SHEET_NAME), ("SunPower", SUNPOWER_MW_SHEET_NAME)):
         ws_brand = wb.create_sheet(sheet_name)
         ws_brand.append([f"{brand_name} MW Detail"])
-        ws_brand.append(["WH", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
+        ws_brand.append(["WH", "Family", "Model", "Connector", "Cable Length", "Stock MW", *month_order, "Total MW"])
         subtotal_rows: list[int] = []
         by_warehouse: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for item in aggregate_mw_summary(brand_name):
             by_warehouse[normalize_text(item["WH"])].append(item)
         sorted_warehouses = sorted(
             by_warehouse.items(),
-            key=lambda pair: (-sum(safe_float(item.get("TotalMW")) for item in pair[1]), pair[0]),
+            key=lambda pair: (
+                min((safe_float(item.get("Bin")) for item in pair[1] if safe_float(item.get("Bin")) > 0), default=0),
+                -sum(safe_float(item.get("TotalMW")) for item in pair[1]),
+                pair[0],
+            ),
         )
         warehouse_summaries: list[tuple[str, list[dict[str, Any]], float, float, dict[str, float]]] = []
         grand_stock = 0.0
@@ -1756,19 +1798,19 @@ def write_output_sheet_v2(
             for month in month_order:
                 grand_monthly[month] += round(subtotal_monthly.get(month, 0.0), 3)
         ws_brand.append([
-                "All WH Total", "", "", "", round(grand_stock, 3),
+                "All WH Total", "", "", "", "", round(grand_stock, 3),
             *[round(grand_monthly.get(month, 0.0), 3) for month in month_order], round(grand_total, 3),
         ])
         grand_total_row = ws_brand.max_row
         for warehouse, items, subtotal_stock, subtotal_total, subtotal_monthly in warehouse_summaries:
             ws_brand.append([
-                f"{warehouse} Total", "", "", "", round(subtotal_stock, 3),
+                f"{warehouse} Total", "", "", "", "", round(subtotal_stock, 3),
                 *[round(subtotal_monthly.get(month, 0.0), 3) for month in month_order], round(subtotal_total, 3),
             ])
             subtotal_rows.append(ws_brand.max_row)
             for item in items:
                 ws_brand.append([
-                    item["WH"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
+                    item["WH"], item["Family"], item["Model"], item["Connector"], item["CableLength"], round(item["StockMW"], 3),
                     *[round(item["Monthly"].get(month, 0.0), 3) for month in month_order], round(item["TotalMW"], 3),
                 ])
         mw_summary_layouts.append((ws_brand, subtotal_rows, grand_total_row))
@@ -1878,11 +1920,11 @@ def write_output_sheet_v2(
             cell.font = Font(bold=True, color="1F1F1F")
             cell.border = Border(top=strong_blue_line)
         for row_number in range(3, ws_brand.max_row + 1):
-            for column_number in range(5, ws_brand.max_column + 1):
+            for column_number in range(6, ws_brand.max_column + 1):
                 format_numeric_cell(ws_brand.cell(row=row_number, column=column_number))
-        for column_letter, width in {"A": 30, "B": 18, "C": 18, "D": 18}.items():
+        for column_letter, width in {"A": 30, "B": 18, "C": 30, "D": 18, "E": 18}.items():
             ws_brand.column_dimensions[column_letter].width = width
-        for column_number in range(5, ws_brand.max_column + 1):
+        for column_number in range(6, ws_brand.max_column + 1):
             column_letter = ws_brand.cell(row=2, column=column_number).column_letter
             ws_brand.column_dimensions[column_letter].width = 13
         ws_brand.auto_filter.ref = f"A2:{ws_brand.cell(row=ws_brand.max_row, column=ws_brand.max_column).coordinate}"

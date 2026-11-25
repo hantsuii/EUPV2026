@@ -161,8 +161,10 @@ function getWorksheetByNameInsensitive(workbook, name) {
   return workbook.getWorksheet ? workbook.getWorksheet(actualName) : workbook.Sheets[actualName];
 }
 
-function mapCountryCode(salesOrgName) {
-  const name = normalizeLower(salesOrgName);
+function mapCountryCode(salesOrgName, physicalWarehouseName = "") {
+  const name = normalizeLower(salesOrgName).replace(/\s+/g, " ");
+  const physicalWarehouse = normalizeLower(physicalWarehouseName).replace(/\s+/g, " ");
+  if (name === "distributors" && physicalWarehouse === "gca marseille fos w31") return "FR";
   if (name.includes("netherland")) return "NL";
   if (name.includes("france")) return "FR";
   if (name.includes("united kingdom") || name === "uk" || name.endsWith(" uk")) return "UK";
@@ -453,19 +455,20 @@ function extractInventoryRows(workbook, stockMode = "available") {
     const productModel = normalizeText(row[index["product model"]]);
     const salesOrg = normalizeText(salesOrgName);
     const virtualWarehouse = normalizeText(virtualWarehouseName);
-    const key = `${salesOrg}\u0000${virtualWarehouse}\u0000${category}\u0000${sku}\u0000${productModel}`;
+    const mappedWh = mapCountryCode(salesOrgName, physicalWarehouseName);
+    const key = `${salesOrg}\u0000${virtualWarehouse}\u0000${category}\u0000${sku}\u0000${productModel}\u0000${mappedWh}`;
     grouped.set(key, (grouped.get(key) || 0) + safeFloat(row[index[stockColumn]]));
   }
 
   return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, stock]) => {
-    const [salesOrg, virtualWarehouse, category, sku, productModel] = key.split("\u0000");
+    const [salesOrg, virtualWarehouse, category, sku, productModel, mappedWh] = key.split("\u0000");
     return {
       SKU: sku,
       Category: category,
       ProductModel: productModel,
       VirtualWarehouse: virtualWarehouse,
       Stock: Number(stock.toFixed(3)),
-      WH: mapCountryCode(salesOrg),
+      WH: mappedWh,
     };
   });
 }
@@ -754,11 +757,11 @@ function buildVisualizationPayload(records, dateKeys, orders, stockMode, domesti
   };
 }
 
-function aggregateRecordsBySku(records) {
+function aggregateRecords(records, keyOf) {
   const grouped = new Map();
   const virtualWarehouses = new Map();
   for (const source of records) {
-    const key = normalizeSkuKey(source.SKU);
+    const key = keyOf(source);
     if (!key) continue;
     if (!grouped.has(key)) {
       grouped.set(key, {
@@ -804,6 +807,14 @@ function aggregateRecordsBySku(records) {
     record.VirtualWarehouse = [...virtualWarehouses.get(key)].sort((a, b) => a.localeCompare(b)).join(" / ");
   }
   return [...grouped.values()];
+}
+
+function aggregateRecordsBySku(records) {
+  return aggregateRecords(records, (source) => normalizeSkuKey(source.SKU));
+}
+
+function aggregateRecordsByWarehouseAndSku(records) {
+  return aggregateRecords(records, (source) => `${normalizeText(source.WH).toUpperCase()}||${normalizeSkuKey(source.SKU)}`);
 }
 
 function isUnmatchedRecord(record) {
@@ -1133,6 +1144,9 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       target.set(key, { ...fields, StockMW: 0, TotalMW: 0, Monthly: new Map() });
     }
     const item = target.get(key);
+    const sourceBin = safeFloat(source.Bin);
+    const currentBin = safeFloat(item.Bin);
+    if (sourceBin && (!currentBin || sourceBin < currentBin)) item.Bin = sourceBin;
     item.StockMW += safeFloat(source.StockMW);
     item.TotalMW += safeFloat(source.StockMW)
       + [...source.Daily.values()].reduce((sum, value) => sum + safeFloat(value), 0);
@@ -1148,20 +1162,22 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
     if (Number(totalMw.toFixed(3)) === 0) continue;
     const detailFields = {
       WH: summary.WH,
+      Bin: summary.Bin,
+      Family: summary.Family,
       Model: summary.Model,
       Connector: summary.Connector,
       CableLength: summary.CableLength,
     };
     addSummary(
       detailGroups,
-      [detailFields.WH, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
+      [detailFields.WH, detailFields.Family, detailFields.Model, detailFields.Connector, detailFields.CableLength].map(normalizeText).join("\u0000"),
       detailFields,
       summary,
     );
   }
 
   const ws = workbook.addWorksheet(sheetName);
-  const detailHeaders = ["WH", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
+  const detailHeaders = ["WH", "Family", "Model", "Connector", "Cable Length", "Stock MW", ...monthOrder, "Total MW"];
   const sortByFields = (fields) => (a, b) => fields
     .map((field) => normalizeText(a[field]).localeCompare(normalizeText(b[field])))
     .find((value) => value !== 0) || 0;
@@ -1175,14 +1191,20 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   const detailHeaderRow = ws.addRow(detailHeaders);
   const subtotalRows = [];
   const byWarehouse = new Map();
-  for (const item of [...detailGroups.values()].sort(sortByFields(["WH", "Model", "Connector", "CableLength"]))) {
+  const itemSort = (a, b) => safeFloat(a.Bin) - safeFloat(b.Bin)
+    || sortByFields(["Family", "WH", "Model", "Connector", "CableLength"])(a, b);
+  for (const item of [...detailGroups.values()].sort(itemSort)) {
     if (!byWarehouse.has(item.WH)) byWarehouse.set(item.WH, []);
     byWarehouse.get(item.WH).push(item);
   }
   const sortedWarehouses = [...byWarehouse.entries()].sort((a, b) => {
+    const binsA = a[1].map((item) => safeFloat(item.Bin)).filter((value) => value > 0);
+    const binsB = b[1].map((item) => safeFloat(item.Bin)).filter((value) => value > 0);
+    const minBinA = binsA.length ? Math.min(...binsA) : 0;
+    const minBinB = binsB.length ? Math.min(...binsB) : 0;
     const totalA = a[1].reduce((sum, item) => sum + safeFloat(item.TotalMW), 0);
     const totalB = b[1].reduce((sum, item) => sum + safeFloat(item.TotalMW), 0);
-    return totalB - totalA || a[0].localeCompare(b[0]);
+    return minBinA - minBinB || totalB - totalA || a[0].localeCompare(b[0]);
   });
   const warehouseSummaries = sortedWarehouses.map(([wh, items]) => {
     const subtotal = { StockMW: 0, TotalMW: 0, Monthly: new Map() };
@@ -1203,11 +1225,11 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
       grandTotal.Monthly.set(month, (grandTotal.Monthly.get(month) || 0) + Number(safeFloat(subtotal.Monthly.get(month)).toFixed(3)));
     }
   }
-  const grandTotalRow = ws.addRow(["All WH Total", "", "", "", ...numericValues(grandTotal)]);
+  const grandTotalRow = ws.addRow(["All WH Total", "", "", "", "", ...numericValues(grandTotal)]);
   for (const { wh, items, subtotal } of warehouseSummaries) {
-    subtotalRows.push(ws.addRow([`${wh} Total`, "", "", "", ...numericValues(subtotal)]));
+    subtotalRows.push(ws.addRow([`${wh} Total`, "", "", "", "", ...numericValues(subtotal)]));
     for (const item of items) {
-      ws.addRow([item.WH, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
+      ws.addRow([item.WH, item.Family, item.Model, item.Connector, item.CableLength, ...numericValues(item)]);
     }
   }
 
@@ -1235,13 +1257,14 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   });
   for (let rowNumber = 3; rowNumber <= ws.rowCount; rowNumber += 1) {
     const row = ws.getRow(rowNumber);
-    for (let column = 5; column <= row.cellCount; column += 1) {
+    for (let column = 6; column <= row.cellCount; column += 1) {
       formatNumericCell(row.getCell(column));
     }
   }
   ws.columns.forEach((column, index) => {
     if (index === 0) column.width = 30;
-    else if (index === 1 || index === 2 || index === 3) column.width = 18;
+    else if (index === 1 || index === 3 || index === 4) column.width = 18;
+    else if (index === 2) column.width = 30;
     else column.width = 13;
   });
   ws.autoFilter = `A2:${ws.getCell(ws.rowCount, detailHeaders.length).address}`;
@@ -1549,7 +1572,9 @@ export async function buildStockOutputJs({
       && normalizeText(record.WH).toUpperCase() === country
       && !isExcludedInventoryFamily(record.Family));
     const aggregatedCountryRecords = aggregateRecordsBySku(countryRecords).sort((a, b) => (
-      compareText(a.Model, b.Model)
+      safeFloat(a.Bin) - safeFloat(b.Bin)
+      || compareText(b.Brand, a.Brand)
+      || compareText(a.Model, b.Model)
       || compareText(a.SKU, b.SKU)
       || compareText(a.Source, b.Source)
     ));
@@ -1558,10 +1583,11 @@ export async function buildStockOutputJs({
   const essRecords = visibleRecords.filter((record) => !isPvCategory(record.Category)
     && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH
     && !isExcludedEssHpFamily(record.Family));
+  const aggregatedEssRecords = aggregateRecordsByWarehouseAndSku(essRecords);
   writeStockWorksheet(
     templateWorkbook,
     "ESS+HP Stock",
-    essRecords.sort((a, b) => (
+    aggregatedEssRecords.sort((a, b) => (
       compareText(a.WH, b.WH)
       || compareText(a.Model, b.Model)
       || compareText(a.SKU, b.SKU)

@@ -72,6 +72,7 @@ WH → Category → Family → Size → Product
 
 - Sales Organization = `China`。
 - Sales Organization 包含 `Business Planning Department`。
+- 当 `Sales Organization Name = Distributors` 且 `Physical warehouse name = GCA MARSEILLE FOS W31` 时，仓库强制映射为 `FR`。
 - Physical Warehouse = `SPTN China FTZ(W73)`。
 - Virtual Warehouse 以 `FRU`、`HOLD`、`Market Material`、`SCRAP`、`SPEC` 开头。
 - Virtual Warehouse = `Natec Sunenergy B.V. Consignment WH`。
@@ -172,7 +173,7 @@ Removed SKU
 
 `MW` 和 `_Transit Source Map` 为系统内部 Sheet，保留但隐藏；前者用于品牌 MW 汇总，后者用于网页恢复 DSP、ODP 和 MIXED 来源。
 
-国家 PV Sheet 按 `Model` 升序显示；`ESS+HP Stock` 先按 `WH` 升序，再按每个 `WH` 内的 `Model` 升序显示。国家 PV、`ESS+HP Stock`、`TCL MW` 和 `SunPower MW` 不保留 `Removed list` 记录，也不显示 `Source` 列；`Removed SKU` 审计页仍保留这些记录及来源标记。
+国家 PV Sheet 先按 `Bin` 升序、再按 `Brand` 降序显示；`ESS+HP Stock` 按国家 `WH` 和 `SKU` 合并为一行，并在 `Location` 中合并标记来源。国家 PV、`ESS+HP Stock`、`TCL MW` 和 `SunPower MW` 不保留 `Removed list` 记录，也不显示 `Source` 列；`Removed SKU` 审计页仍保留这些记录及来源标记。
 
 `To be allocated` 和 `Removed SKU` 使用统一的表头样式、筛选、首行冻结、列宽和数量格式。
 
@@ -204,7 +205,7 @@ WH | Location | Brand | Family | Model | SKU | MOQ | Available QTY | Stock
 
 后面追加生成日期范围内的每日 DSP 在途列，表头格式为 `YYYY.M.D`。
 
-`Location` 规则：Inventory 数量使用 Inventory 文件的 `Virtual warehouse name` 原值；DSP 数量使用 `In-transit Warehouse(Code)` 归一化后的 Arrival Plan 名称，例如 `Arrival Plan-SPUK(PVLFR027)` 输出为 `Arrival Plan-SPUK`。同一 `WH + SKU` 有多个 Location 时使用 ` / ` 合并；仅有 ODP 或待分配活动的 Location 不进入库存结果 Sheet。
+`Location` 规则：Inventory 数量使用 Inventory 文件的 `Virtual warehouse name` 原值；DSP 数量使用 `In-transit Warehouse(Code)` 归一化后的 Arrival Plan 名称，例如 `Arrival Plan-SPUK(PVLFR027)` 输出为 `Arrival Plan-SPUK`。同一 `WH + SKU` 有多个 Location 时使用 ` / ` 合并；仅有 ODP 或待分配活动的 Location 不进入库存结果 Sheet。ESS+HP Stock 按每个国家的 `WH + SKU` 合并后使用该规则。
 
 其中：
 
@@ -243,13 +244,13 @@ Total MW = Stock MW + 全部 DSP 到货 MW
 
 ## 10. 品牌 MW 汇总 Sheet
 
-分别生成 `TCL MW` 和 `SunPower MW`，基于扣减后的 `MW` 数据生成。每个 Sheet 仅保留对应品牌，并按 `WH + Model + Connector + Cable Length` 汇总：
+分别生成 `TCL MW` 和 `SunPower MW`，基于扣减后的 `MW` 数据生成。每个 Sheet 仅保留对应品牌，并按 `WH + Family + Model + Connector + Cable Length` 汇总：
 
 ```text
-WH | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
+WH | Family | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
 ```
 
-月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。`All WH Total` 放在所有明细最上方；各仓库区块的 `WH Total` 放在对应仓库明细之前，仓库区块仍按照各仓库 `Total MW` 合计从高到低排列。`Total MW` 等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
+月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。`All WH Total` 放在所有明细最上方；各仓库区块的 `WH Total` 放在对应仓库明细之前，明细按 `Bin` 升序、再按 `Family` 升序排列。`Bin` 仅用于排序，不在 `TCL MW` 和 `SunPower MW` 中显示。`Total MW` 等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
 
 ## 11. 网页可视化
 
