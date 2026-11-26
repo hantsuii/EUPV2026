@@ -1034,7 +1034,10 @@ function writeStockWorksheet(workbook, sheetName, records, dateKeys, sourceTags,
     const header = headers[index];
     if (header === "Source") column.width = 18;
     else if (header === "WH") column.width = 10;
-    else if (header === "Location") column.width = 26;
+    else if (header === "Location") {
+      column.width = 26;
+      column.hidden = options.hideLocation === true;
+    }
     else if (header === "Model") column.width = 30;
     else if (header === "SKU") column.width = 20;
     else if (header === "Connector" || header === "Cable Length") column.width = 18;
@@ -1575,13 +1578,13 @@ export async function buildStockOutputJs({
       && normalizeText(record.WH).toUpperCase() === country
       && !isExcludedInventoryFamily(record.Family));
     const aggregatedCountryRecords = aggregateRecordsBySku(countryRecords).sort((a, b) => (
-      safeFloat(a.Bin) - safeFloat(b.Bin)
-      || compareText(b.Brand, a.Brand)
+      compareText(b.Brand, a.Brand)
+      || safeFloat(a.Bin) - safeFloat(b.Bin)
       || compareText(a.Model, b.Model)
       || compareText(a.SKU, b.SKU)
       || compareText(a.Source, b.Source)
     ));
-    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregatedCountryRecords, dateKeys, dateSourceTags, { includeSource: false });
+    writeStockWorksheet(templateWorkbook, `${country}_PV`, aggregatedCountryRecords, dateKeys, dateSourceTags, { includeSource: false, hideLocation: true });
   }
   const essRecords = visibleRecords.filter((record) => !isPvCategory(record.Category)
     && normalizeText(record.WH).toUpperCase() !== DOMESTIC_WH

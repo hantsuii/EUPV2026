@@ -173,7 +173,7 @@ Removed SKU
 
 `MW` 和 `_Transit Source Map` 为系统内部 Sheet，保留但隐藏；前者用于品牌 MW 汇总，后者用于网页恢复 DSP、ODP 和 MIXED 来源。
 
-国家 PV Sheet 先按 `Bin` 升序、再按 `Brand` 降序显示；`ESS+HP Stock` 按国家 `WH` 和 `SKU` 合并为一行，并在 `Location` 中合并标记来源。国家 PV、`ESS+HP Stock`、`TCL MW` 和 `SunPower MW` 不保留 `Removed list` 记录，也不显示 `Source` 列；`Removed SKU` 审计页仍保留这些记录及来源标记。
+国家 PV Sheet 先按 `Brand` 降序、再在同一品牌内部按 `Bin` 数值升序显示；`Location` 列保留数据但默认隐藏。`ESS+HP Stock` 按国家 `WH` 和 `SKU` 合并为一行，并在 `Location` 中合并标记来源。国家 PV、`ESS+HP Stock`、`TCL MW` 和 `SunPower MW` 不保留 `Removed list` 记录，也不显示 `Source` 列；`Removed SKU` 审计页仍保留这些记录及来源标记。
 
 `To be allocated` 和 `Removed SKU` 使用统一的表头样式、筛选、首行冻结、列宽和数量格式。
 

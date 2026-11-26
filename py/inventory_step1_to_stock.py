@@ -1512,6 +1512,7 @@ def write_output_sheet_v2(
         include_technical_fields: bool = True,
         include_location: bool = True,
         include_source: bool = True,
+        hide_location: bool = False,
     ) -> None:
         ws = wb.create_sheet(name)
         compact_transit = name in {*[f"{country}_PV" for country in PV_STOCK_COUNTRIES], "ESS+HP Stock"}
@@ -1554,6 +1555,8 @@ def write_output_sheet_v2(
             else:
                 width = 14
             ws.column_dimensions[ws.cell(row=1, column=column_number).column_letter].width = width
+            if header == "Location" and hide_location:
+                ws.column_dimensions[ws.cell(row=1, column=column_number).column_letter].hidden = True
         for record in source_records:
             stock_transit = record.get("StockTransit", {})
             transit_total = sum(safe_float(stock_transit.get(d_header)) for d_header in transit_headers)
@@ -1601,9 +1604,9 @@ def write_output_sheet_v2(
         country_records.sort(key=lambda record: normalize_text(record.get("Source")).casefold())
         country_records.sort(key=lambda record: normalize_sku_key(record.get("SKU")))
         country_records.sort(key=lambda record: normalize_text(record.get("Model")).casefold())
-        country_records.sort(key=lambda record: normalize_text(record.get("Brand")).casefold(), reverse=True)
         country_records.sort(key=lambda record: safe_float(record.get("Bin")))
-        write_stock_sheet(f"{country}_PV", country_records, include_source=False)
+        country_records.sort(key=lambda record: normalize_text(record.get("Brand")).casefold(), reverse=True)
+        write_stock_sheet(f"{country}_PV", country_records, include_source=False, hide_location=True)
     ess_records = [
         record for record in visible_records
         if not normalize_upper_category(record.get("Category")).startswith("PV")
