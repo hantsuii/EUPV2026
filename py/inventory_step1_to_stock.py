@@ -87,6 +87,7 @@ ORDER_WAREHOUSE_NAME_MAP = {
     "store-uk(w80)-worldex": "UK",
     "felixstowe port direct delivery wh": "UK",
     "valencia port direct delivery wh": "ES",
+    "w79 store mgc btp": "ES",
 }
 
 
