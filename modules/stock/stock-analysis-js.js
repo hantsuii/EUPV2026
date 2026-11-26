@@ -51,6 +51,7 @@ const ORDER_WAREHOUSE_NAME_MAP = {
   "felixstowe port direct delivery wh": "UK",
   "valencia port direct delivery wh": "ES",
   "w79 store mgc btp": "ES",
+  "store-es(w79)": "ES",
 };
 
 function unwrapValue(value) {

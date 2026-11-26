@@ -135,7 +135,7 @@ Family 为 `AC Charger`、`Cells`、`Marketing` 的数据既不导出到库存�
 
 Orderfile Base 使用第 2 行作为表头，只保留 `Allocation Status = to be allocated`，并排除 `Sub Type = Offshore`。
 
-`To be allocated` Sheet 只输出：`Category`、`Month`、`SO Create Date`、`CRD`、`Customer Level 6 Name`、`Sub Type`、`SO No.`、`SO Line`、`Brand`、`Material`、`Model`、`Ordered Qty`、`Total KW`、`Warehouse Name`。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；`W79 Store MGC BTP` 映射为 `ES`。遇到未配置的新仓库名称时停止生成并报告该名称。数量为 0 的订单不输出。
+`To be allocated` Sheet 只输出：`Category`、`Month`、`SO Create Date`、`CRD`、`Customer Level 6 Name`、`Sub Type`、`SO No.`、`SO Line`、`Brand`、`Material`、`Model`、`Ordered Qty`、`Total KW`、`Warehouse Name`。用于库存分配计算的仓库不再根据 Factory 判断，而是根据 `Warehouse Name` 的明确映射归入 NL、FR、UK、ES、IT；`W79 Store MGC BTP` 和 `STORE-ES(W79)` 均映射为 `ES`。遇到未配置的新仓库名称时停止生成并报告该名称。数量为 0 的订单不输出。
 
 库存扣减只处理 `CRD <= 今天 + 3 个自然月` 的订单，包括 CRD 已逾期但仍为 To be allocated 的订单。只有相同 `SKU + WH` 的 `Inventory Stock + DSP Available` 大于 0，并且该 SKU 会进入对应国家 PV 或 ESS+HP Sheet 时才参与扣减。扣减按订单 CRD 从早到晚执行：先减 Inventory Stock，不足部分再按 DSP 到货日期从近到远扣减；最多扣到可用数量为 0，不产生负库存。
 
