@@ -250,7 +250,7 @@ Total MW = Stock MW + 全部 DSP 到货 MW
 WH | Family | Model | Connector | Cable Length | Stock MW | 每月到货 MW | Total MW
 ```
 
-月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。`All WH Total` 放在所有明细最上方；各仓库区块的 `WH Total` 放在对应仓库明细之前，明细按 `Bin` 升序、再按 `Family` 升序排列。`Bin` 仅用于排序，不在 `TCL MW` 和 `SunPower MW` 中显示。`Total MW` 等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
+月份直接使用 `MW` 中的月度到货 MW，不重复累计每日或每周列。`All WH Total` 放在所有明细最上方；各仓库区块的 `WH Total` 放在对应仓库明细之前，每个仓库内部先按 `Family` 升序，再在同一 `Family` 内按 `Bin` 数值升序排列。`Bin` 仅用于排序，不在 `TCL MW` 和 `SunPower MW` 中显示。`Total MW` 等于对应明细的 `Stock MW + 全部 DSP 到货 MW`，与 `MW` Sheet 的 `Total MW` 口径一致。
 
 ## 11. 网页可视化
 

@@ -1757,8 +1757,9 @@ def write_output_sheet_v2(
         return sorted(
             grouped_summary.values(),
             key=lambda item: (
+                normalize_text(item.get("Family")),
                 safe_float(item.get("Bin")),
-                *(normalize_text(item.get(field)) for field in key_fields),
+                *(normalize_text(item.get(field)) for field in ("WH", "Model", "Connector", "CableLength")),
             ),
         )
 

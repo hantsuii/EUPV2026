@@ -1191,8 +1191,9 @@ function writeBrandMwWorksheet(workbook, mwGroups, monthOrder, brandName, sheetN
   const detailHeaderRow = ws.addRow(detailHeaders);
   const subtotalRows = [];
   const byWarehouse = new Map();
-  const itemSort = (a, b) => safeFloat(a.Bin) - safeFloat(b.Bin)
-    || sortByFields(["Family", "WH", "Model", "Connector", "CableLength"])(a, b);
+  const itemSort = (a, b) => sortByFields(["Family"])(a, b)
+    || safeFloat(a.Bin) - safeFloat(b.Bin)
+    || sortByFields(["WH", "Model", "Connector", "CableLength"])(a, b);
   for (const item of [...detailGroups.values()].sort(itemSort)) {
     if (!byWarehouse.has(item.WH)) byWarehouse.set(item.WH, []);
     byWarehouse.get(item.WH).push(item);
